@@ -5,7 +5,7 @@ from sqlalchemy.future import select
 from app.core.database import get_db
 from app.models.habitacion import Habitacion
 from app.models.turno import Turno
-from app.schemas.habitacion import HabitacionResponse
+from app.schemas.habitacion import HabitacionEstadoUpdate, HabitacionResponse
 
 router = APIRouter()
 
@@ -41,7 +41,7 @@ async def liberar_habitacion(habitacion_id: int, db: AsyncSession = Depends(get_
     await db.commit()
     return {"status": "ok"}
 
-from app.schemas.habitacion import HabitacionEstadoUpdate
+
 
 @router.patch("/{habitacion_id}/estado")
 async def update_estado(habitacion_id: int, estado_in: HabitacionEstadoUpdate, db: AsyncSession = Depends(get_db)):

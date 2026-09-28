@@ -128,7 +128,7 @@ const RoomCard: React.FC<RoomCardProps> = ({ room, onClick, onAddConsumo, onChan
           {hasConsumos && (
             <div className="flex items-center px-2 py-0.5 rounded bg-blue-50 border border-blue-100 text-blue-700">
               <ShoppingBag className="w-3 h-3 mr-1" />
-              <span className="text-[10px] font-bold">${room.turno_activo.total_consumos}</span>
+              <span className="text-[10px] font-bold">${room.turno_activo?.total_consumos}</span>
             </div>
           )}
         </div>
