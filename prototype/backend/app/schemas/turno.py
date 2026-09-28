@@ -8,6 +8,7 @@ from app.schemas.articulo import ConsumoResponse
 class TurnoBase(BaseModel):
     habitacion_id: int
     identificador_vehicular: str
+    tipo_cliente: str = "Auto"
 
 class TurnoCreate(TurnoBase):
     pass

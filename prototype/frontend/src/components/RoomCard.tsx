@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { ChevronRight, Timer, Car, Bike, Footprints, ShoppingBag, Settings, Wrench, Sparkles, CheckCircle2 } from 'lucide-react';
+import { ChevronRight, Timer, Car, Bike, Footprints, ShoppingBag, MoreVertical, Wrench, Sparkles, CheckCircle2 } from 'lucide-react';
 import { HabitacionConDetalles } from '../types';
 
 interface RoomCardProps {
@@ -166,7 +166,7 @@ const RoomCard: React.FC<RoomCardProps> = ({ room, onClick, onAddConsumo, onChan
                 onClick={(e) => { e.stopPropagation(); setShowSettings(!showSettings); }}
                 className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center border border-gray-100 hover:bg-gray-200 transition-colors text-slate-500"
               >
-                <Settings className="w-4 h-4" />
+                <MoreVertical className="w-4 h-4" />
               </button>
               
               {showSettings && (

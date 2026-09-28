@@ -31,6 +31,7 @@ async def create_turno(turno_in: TurnoCreate, db: AsyncSession = Depends(get_db)
     nuevo_turno = Turno(
         habitacion_id=turno_in.habitacion_id,
         identificador_vehicular=turno_in.identificador_vehicular,
+        tipo_cliente=turno_in.tipo_cliente,
         hora_inicio=datetime.now(timezone.utc),
         estado="En Curso",
         tarifa_base=12000,

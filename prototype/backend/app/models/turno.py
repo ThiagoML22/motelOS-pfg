@@ -13,6 +13,7 @@ class Turno(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     habitacion_id = Column(Integer, ForeignKey("habitaciones.id"), nullable=False)
     identificador_vehicular = Column(String(50), nullable=False)
+    tipo_cliente = Column(String(20), nullable=False, default="Auto")
     hora_inicio = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     hora_fin = Column(DateTime(timezone=True), nullable=True)
     tarifa_base = Column(Numeric(10, 2), nullable=False, default=12000)

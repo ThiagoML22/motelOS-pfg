@@ -1,4 +1,5 @@
 export type RoomStatus = 'Libre' | 'Ocupada' | 'En Limpieza' | 'Mantenimiento';
+export type TipoCliente = 'Auto' | 'Moto' | 'Peaton';
 
 export interface Habitacion {
   id: number;
@@ -10,6 +11,7 @@ export interface Turno {
   id?: string;
   habitacion_id: number;
   identificador_vehicular: string;
+  tipo_cliente: TipoCliente;
   hora_inicio?: string;
   hora_fin?: string;
   estado?: string;
