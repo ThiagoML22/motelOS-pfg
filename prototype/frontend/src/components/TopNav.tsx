@@ -66,7 +66,12 @@ const TopNav: React.FC<TopNavProps> = ({ activeView, setActiveView }) => {
       {/* Right section: Status & Time */}
       <div className="flex items-center space-x-5">
         <div className="hidden xl:flex bg-gray-100 px-3 py-1.5 rounded-full text-xs font-medium text-gray-600 border border-gray-200">
-          Turno: Noche (22:00-06:00)
+          Turno: {(() => {
+            const h = time.getHours();
+            if (h >= 6 && h < 14) return 'Mañana (06:00–14:00)';
+            if (h >= 14 && h < 22) return 'Tarde (14:00–22:00)';
+            return 'Noche (22:00–06:00)';
+          })()}
         </div>
         
         <div className="flex items-center space-x-3 text-gray-500">
