@@ -89,45 +89,44 @@ function App() {
     }
   };
 
-  // Resumen stats
   const total = habitaciones.length;
   const libres = habitaciones.filter(h => h.estado === 'Libre').length;
   const ocupadas = habitaciones.filter(h => h.estado === 'Ocupada').length;
   const limpieza = habitaciones.filter(h => h.estado === 'En Limpieza').length;
   const mantenimiento = habitaciones.filter(h => h.estado === 'Mantenimiento').length;
 
+  const stats = [
+    { label: 'Disponibles', count: libres, dot: 'bg-emerald-500', bg: 'bg-emerald-50', border: 'border-emerald-100', text: 'text-emerald-700' },
+    { label: 'Ocupadas', count: ocupadas, dot: 'bg-rose-500', bg: 'bg-rose-50', border: 'border-rose-100', text: 'text-rose-700' },
+    { label: 'Limpieza', count: limpieza, dot: 'bg-amber-500', bg: 'bg-amber-50', border: 'border-amber-100', text: 'text-amber-700' },
+    { label: 'Mantenimiento', count: mantenimiento, dot: 'bg-slate-400', bg: 'bg-slate-50', border: 'border-slate-100', text: 'text-slate-600' },
+  ];
+
   return (
-    <div className="min-h-screen bg-slate-50 font-sans text-slate-900 flex flex-col">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-gray-100 font-sans text-slate-900 flex flex-col">
       <TopNav activeView={activeView} setActiveView={setActiveView} />
 
       <main className="flex-1 max-w-[1600px] mx-auto w-full px-8 py-8 flex flex-col">
         {activeView === 'dashboard' && (
           <>
-            {/* Header Title */}
-            <div className="flex justify-between items-center mb-8">
+            {/* Header */}
+            <div className="flex justify-between items-end mb-8">
               <div>
-                <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Estado de Habitaciones</h1>
-                <p className="text-slate-500 mt-1 font-medium">Filtro y monitoreo en tiempo real</p>
+                <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Estado de Habitaciones</h1>
+                <p className="text-slate-400 mt-0.5 text-sm font-medium">Monitoreo en tiempo real · {total} habitaciones</p>
               </div>
               
-              {/* Legend */}
-              <div className="hidden sm:flex space-x-3">
-                <div className="flex items-center px-3 py-1 rounded-full border border-emerald-200 bg-white">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 mr-2"></span>
-                  <span className="text-xs font-bold uppercase tracking-wider text-emerald-500">Disponible</span>
-                </div>
-                <div className="flex items-center px-3 py-1 rounded-full border border-rose-200 bg-white">
-                  <span className="w-2 h-2 rounded-full bg-rose-500 mr-2"></span>
-                  <span className="text-xs font-bold uppercase tracking-wider text-rose-500">Ocupada</span>
-                </div>
-                <div className="flex items-center px-3 py-1 rounded-full border border-amber-200 bg-white">
-                  <span className="w-2 h-2 rounded-full bg-amber-500 mr-2"></span>
-                  <span className="text-xs font-bold uppercase tracking-wider text-amber-500">Limpieza</span>
-                </div>
-                <div className="flex items-center px-3 py-1 rounded-full border border-slate-300 bg-white">
-                  <span className="w-2 h-2 rounded-full bg-slate-500 mr-2"></span>
-                  <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Mantenimiento</span>
-                </div>
+              {/* Stats Mini Cards */}
+              <div className="hidden md:flex items-center gap-3">
+                {stats.map(s => (
+                  <div key={s.label} className={`flex items-center gap-2.5 px-4 py-2 rounded-xl border ${s.bg} ${s.border}`}>
+                    <span className={`w-2 h-2 rounded-full ${s.dot}`}></span>
+                    <div className="flex items-baseline gap-1.5">
+                      <span className={`text-xl font-extrabold ${s.text} tabular-nums`}>{s.count}</span>
+                      <span className="text-[11px] font-medium text-gray-500">{s.label}</span>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
 
@@ -140,29 +139,6 @@ function App() {
                 onChangeEstado={handleEstadoChange}
               />
             </div>
-
-            {/* Bottom Resumen Bar */}
-            <div className="mt-8 bg-white border border-gray-200 rounded-xl p-4 flex items-center justify-between shadow-sm">
-              <div className="flex items-center space-x-6">
-                <span className="text-sm font-bold text-slate-900 mr-2">Resumen General</span>
-                
-                <div className="flex items-center text-sm font-semibold text-slate-700">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 mr-2"></span> Disponibles: {libres}
-                </div>
-                <div className="flex items-center text-sm font-semibold text-slate-700">
-                  <span className="w-2 h-2 rounded-full bg-rose-500 mr-2"></span> Ocupadas: {ocupadas}
-                </div>
-                <div className="flex items-center text-sm font-semibold text-slate-700">
-                  <span className="w-2 h-2 rounded-full bg-amber-500 mr-2"></span> Limpieza: {limpieza}
-                </div>
-                <div className="flex items-center text-sm font-semibold text-slate-700">
-                  <span className="w-2 h-2 rounded-full bg-slate-500 mr-2"></span> Mantenimiento: {mantenimiento}
-                </div>
-              </div>
-              <div className="text-xs text-slate-400 font-medium uppercase tracking-wider">
-                Total Capacidad: {total} Habitaciones
-              </div>
-            </div>
           </>
         )}
 
@@ -171,9 +147,12 @@ function App() {
         )}
 
         {activeView === 'caja' && (
-           <div className="flex-1 flex flex-col items-center justify-center p-8 bg-white rounded-xl border border-gray-200">
-              <span className="text-xl font-bold text-slate-900 mb-2">Cierre de Caja Ciego</span>
-              <p className="text-slate-500">Módulo en desarrollo (Sprint 4)</p>
+           <div className="flex-1 flex flex-col items-center justify-center p-12 bg-white rounded-2xl border border-gray-200">
+              <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center mb-4">
+                <span className="text-2xl">🔒</span>
+              </div>
+              <span className="text-xl font-bold text-slate-900 mb-1">Cierre de Caja Ciego</span>
+              <p className="text-sm text-slate-400">Módulo en desarrollo · Sprint 4</p>
            </div>
         )}
       </main>
