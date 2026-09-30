@@ -1,7 +1,31 @@
+# Secrets / entorno
+.env
+
+# Python
+.venv/
 __pycache__/
 *.pyc
-venv/
-.env
-node_modules/
-dist/
 .pytest_cache/
+.ruff_cache/
+
+# Node / build
+node_modules/
+frontend/dist/
+*.tsbuildinfo
+frontend/vite.config.js
+frontend/vite.config.d.ts
+
+# Esqueleto de tests obsoleto (la suite vigente está en backend/app/tests)
+backend/tests/
+
+# SO / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+.venv/
+.ruff_cache/
+*.tsbuildinfo
+vite.config.js
+vite.config.d.ts
