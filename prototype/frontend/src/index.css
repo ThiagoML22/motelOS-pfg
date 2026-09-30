@@ -1,3 +1,48 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/*
+ * Tokens semánticos (canales RGB para poder usar opacidad en Tailwind).
+ * El modo noche (azul oscuro) se resolverá redefiniendo estas mismas variables
+ * bajo [data-theme='dark'], sin tocar los componentes.
+ */
+:root {
+  --bg: 242 244 247;
+  --surface: 255 255 255;
+  --surface-2: 247 248 250;
+  --line: 224 228 234;
+  --line-strong: 199 205 214;
+  --ink: 20 27 38;
+  --muted: 84 94 110;
+  --subtle: 110 119 133;
+
+  --accent: 36 68 115;
+  --accent-hover: 28 55 95;
+  --accent-soft: 230 237 247;
+  --accent-fg: 255 255 255;
+
+  --libre: 23 115 84;
+  --libre-soft: 231 243 238;
+  --ocupada: 48 82 140;
+  --ocupada-soft: 232 238 248;
+  --limpieza: 146 90 8;
+  --limpieza-soft: 252 243 224;
+  --mant: 88 98 112;
+  --mant-soft: 236 239 243;
+  --warn: 146 90 8;
+  --warn-soft: 252 243 224;
+  --danger: 176 42 42;
+  --danger-soft: 251 233 233;
+}
+
+@layer base {
+  body {
+    @apply bg-bg font-sans text-ink antialiased;
+  }
+
+  :focus-visible {
+    outline: 2px solid rgb(var(--accent));
+    outline-offset: 2px;
+  }
+}

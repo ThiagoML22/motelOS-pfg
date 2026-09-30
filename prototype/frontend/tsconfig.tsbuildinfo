@@ -1,1 +1,0 @@
-{"root":["./src/app.tsx","./src/main.tsx","./src/vite-env.d.ts","./src/components/inventarioview.tsx","./src/components/roomcard.tsx","./src/components/roomsgrid.tsx","./src/components/slideoverpanel.tsx","./src/components/topnav.tsx","./src/services/api.ts","./src/types/index.ts"],"version":"5.9.3"}

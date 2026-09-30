@@ -1,352 +1,482 @@
-import React, { useState, useEffect } from 'react';
-import { X, Plus, Minus, CreditCard, Banknote, Receipt, Car, Bike, Footprints } from 'lucide-react';
-import { HabitacionConDetalles, Articulo, TurnoResumen, TipoCliente } from '../types';
-import { api } from '../services/api';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Banknote, Bike, Car, CreditCard, Footprints, Minus, Plus, Receipt } from 'lucide-react';
+import { Articulo, HabitacionConDetalles, MedioPago, TipoCliente, TurnoResumen } from '../types';
+import { api, getErrorMessage } from '../services/api';
+import { formatDuration, formatMoney, formatRoomNumber } from '../utils/format';
+import { ESTADIA_BASE_MIN, TOLERANCIA_MIN, elapsedMinutes, elapsedMs, faseEstadia } from '../utils/turno';
+import Button from './ui/Button';
+import Drawer from './ui/Drawer';
+import Field, { inputClass } from './ui/Field';
+import { FASE_META } from './ui/status';
+import { useToast } from './ui/Toast';
 
 interface SlideOverPanelProps {
   room: HabitacionConDetalles;
+  now: number;
   onClose: () => void;
-  onAperturaTurno?: (patente: string, tipoCliente: TipoCliente) => void;
-  onRefreshRooms?: () => void;
+  onAperturaTurno: (patente: string | undefined, tipoCliente: TipoCliente) => Promise<void>;
+  onRefreshRooms: () => Promise<void>;
   initialAddProduct?: boolean;
 }
 
-const getHeaderStyle = (estado: string) => {
-  switch (estado) {
-    case 'Libre': return 'bg-gradient-to-r from-emerald-50 to-white border-emerald-100';
-    case 'Ocupada': return 'bg-gradient-to-r from-rose-50 to-white border-rose-100';
-    case 'En Limpieza': return 'bg-gradient-to-r from-amber-50 to-white border-amber-100';
-    default: return 'bg-slate-50 border-gray-100';
-  }
-};
+type Vista = 'cuenta' | 'productos' | 'cobro';
 
-const SlideOverPanel: React.FC<SlideOverPanelProps> = ({ room, onClose, onAperturaTurno, onRefreshRooms, initialAddProduct = false }) => {
+const TIPOS: { value: TipoCliente; label: string; icon: React.ElementType }[] = [
+  { value: 'Auto', label: 'Auto', icon: Car },
+  { value: 'Moto', label: 'Moto', icon: Bike },
+  { value: 'Peaton', label: 'Peatón', icon: Footprints },
+];
+
+const MEDIOS: { value: MedioPago; label: string; icon: React.ElementType }[] = [
+  { value: 'EFECTIVO', label: 'Efectivo', icon: Banknote },
+  { value: 'POSNET', label: 'Posnet', icon: CreditCard },
+  { value: 'MERCADO_PAGO', label: 'Mercado Pago', icon: Receipt },
+];
+
+const SectionTitle: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-subtle">{children}</h3>
+);
+
+const SlideOverPanel: React.FC<SlideOverPanelProps> = ({
+  room,
+  now,
+  onClose,
+  onAperturaTurno,
+  onRefreshRooms,
+  initialAddProduct = false,
+}) => {
+  const { toast } = useToast();
+  const turnoId = room.turno_activo?.id;
   const isOcupada = room.estado === 'Ocupada';
-  const isLibre = room.estado === 'Libre';
-  const isLimpieza = room.estado === 'En Limpieza';
-  
+
   const [patente, setPatente] = useState('');
   const [tipoCliente, setTipoCliente] = useState<TipoCliente>('Auto');
-  
+
+  const [vista, setVista] = useState<Vista>(initialAddProduct ? 'productos' : 'cuenta');
   const [resumen, setResumen] = useState<TurnoResumen | null>(null);
   const [articulos, setArticulos] = useState<Articulo[]>([]);
-  const [addingProduct, setAddingProduct] = useState(initialAddProduct);
   const [quantities, setQuantities] = useState<Record<number, number>>({});
-  
-  const [isCheckout, setIsCheckout] = useState(false);
-  const [medioPago, setMedioPago] = useState('EFECTIVO');
+  const [cargando, setCargando] = useState(false);
+
+  const [medioPago, setMedioPago] = useState<MedioPago>('EFECTIVO');
   const [comprobante, setComprobante] = useState('');
+  const [errorComprobante, setErrorComprobante] = useState('');
+  const [enviando, setEnviando] = useState(false);
+
+  const loadData = useCallback(
+    async (id: string) => {
+      try {
+        const [res, arts] = await Promise.all([api.getResumen(id), api.getArticulos()]);
+        setResumen(res);
+        setArticulos(arts);
+      } catch (e) {
+        toast(getErrorMessage(e, 'No se pudo cargar la cuenta del turno.'), 'error');
+      }
+    },
+    [toast],
+  );
 
   useEffect(() => {
-    if (isOcupada && room.turno_activo?.id) {
-      loadResumenAndArticulos(room.turno_activo.id);
-    }
-  }, [isOcupada, room]);
+    if (!isOcupada || !turnoId) return;
+    setCargando(true);
+    void loadData(turnoId).finally(() => setCargando(false));
+  }, [isOcupada, turnoId, loadData]);
 
-  const loadResumenAndArticulos = async (turnoId: string) => {
-    try {
-      const [res, arts] = await Promise.all([
-        api.getResumen(turnoId),
-        api.getArticulos()
-      ]);
-      setResumen(res);
-      setArticulos(arts);
-    } catch (e) {
-      console.error(e);
-    }
+  const changeQty = (art: Articulo, delta: number) => {
+    const next = (quantities[art.id] ?? 0) + delta;
+    if (next >= 0 && next <= art.stock_actual) setQuantities({ ...quantities, [art.id]: next });
   };
 
-  const handleQtyChange = (artId: number, delta: number) => {
-    const art = articulos.find(a => a.id === artId);
-    if (!art) return;
-    const current = quantities[artId] || 0;
-    const next = current + delta;
-    if (next >= 0 && next <= art.stock_actual) {
-      setQuantities({ ...quantities, [artId]: next });
-    }
-  };
+  const seleccion = articulos.filter((a) => (quantities[a.id] ?? 0) > 0);
+  const subtotalSeleccion = seleccion.reduce((sum, a) => sum + a.precio_unitario * (quantities[a.id] ?? 0), 0);
 
-  const handleAddConsumo = async () => {
-    if (!resumen?.id) return;
+  const guardarConsumos = async () => {
+    if (!resumen || seleccion.length === 0) return;
+    setEnviando(true);
     try {
-      for (const artId in quantities) {
-        const qty = quantities[artId];
-        if (qty > 0) {
-          await api.addConsumo(resumen.id, parseInt(artId), qty);
-        }
+      for (const art of seleccion) {
+        await api.addConsumo(resumen.id, art.id, quantities[art.id]);
       }
+      toast('Productos agregados a la cuenta.', 'success');
       setQuantities({});
-      
+      await onRefreshRooms();
       if (initialAddProduct) {
-        if (onRefreshRooms) onRefreshRooms();
         onClose();
       } else {
-        setAddingProduct(false);
-        await loadResumenAndArticulos(resumen.id);
+        setVista('cuenta');
+        await loadData(resumen.id);
       }
-    } catch (e: any) {
-      alert(e.response?.data?.detail || "Error al agregar consumo");
+    } catch (e) {
+      toast(getErrorMessage(e, 'No se pudieron agregar los productos.'), 'error');
+      await loadData(resumen.id);
+    } finally {
+      setEnviando(false);
     }
   };
 
-  const handleCobrar = async () => {
-    if (!resumen?.id) return;
-    if ((medioPago === 'POSNET' || medioPago === 'MERCADO_PAGO') && !comprobante) {
-      alert("Ingrese el número de comprobante");
+  const cobrar = async () => {
+    if (!resumen) return;
+    if (medioPago !== 'EFECTIVO' && !comprobante.trim()) {
+      setErrorComprobante('Ingrese el número de comprobante.');
       return;
     }
+    setEnviando(true);
     try {
-      await api.cerrarTurno(resumen.id, resumen.total_general, medioPago, comprobante);
-      if (onRefreshRooms) onRefreshRooms();
+      // El total crece con el tiempo: se vuelve a consultar antes de cobrar para no liquidar un monto viejo.
+      const actual = await api.getResumen(resumen.id);
+      if (actual.total_general !== resumen.total_general) {
+        setResumen(actual);
+        toast(`El total cambió a ${formatMoney(actual.total_general)}. Revise el monto y confirme nuevamente.`, 'info');
+        return;
+      }
+      await api.cerrarTurno(resumen.id, actual.total_general, medioPago, comprobante.trim());
+      toast(`Cobro de ${formatMoney(actual.total_general)} registrado. ${formatRoomNumber(room.numero)} pasa a limpieza.`, 'success');
+      await onRefreshRooms();
       onClose();
-    } catch (e: any) {
-      alert(e.response?.data?.detail || "Error al cobrar");
+    } catch (e) {
+      toast(getErrorMessage(e, 'No se pudo registrar el cobro.'), 'error');
+    } finally {
+      setEnviando(false);
     }
   };
-  
-  const handleLiberar = async () => {
-      try {
-          await api.liberarHabitacion(room.id);
-          if (onRefreshRooms) onRefreshRooms();
-          onClose();
-      } catch(e: any) {
-          alert("Error al liberar");
-      }
+
+  const accionSimple = async (accion: () => Promise<unknown>, ok: string, fallo: string) => {
+    setEnviando(true);
+    try {
+      await accion();
+      toast(ok, 'success');
+      await onRefreshRooms();
+      onClose();
+    } catch (e) {
+      toast(getErrorMessage(e, fallo), 'error');
+    } finally {
+      setEnviando(false);
+    }
   };
 
-  const handleApertura = () => {
-    if (!onAperturaTurno) return;
-    const identificador = tipoCliente === 'Peaton' ? 'S/V' : patente.trim();
-    if (tipoCliente !== 'Peaton' && !identificador) return;
-    onAperturaTurno(identificador, tipoCliente);
-  };
+  const titulo = formatRoomNumber(room.numero);
+  let subtitulo = 'Apertura de turno';
+  if (isOcupada) subtitulo = vista === 'productos' ? 'Agregar productos' : vista === 'cobro' ? 'Cobro y cierre' : 'Cuenta del turno';
+  if (room.estado === 'En Limpieza') subtitulo = 'En limpieza';
+  if (room.estado === 'Mantenimiento') subtitulo = 'En mantenimiento';
 
-  return (
-    <>
-      <div className="fixed inset-0 bg-slate-900/20 backdrop-blur-sm z-50 transition-opacity" onClick={onClose} />
+  let body: React.ReactNode = null;
+  let footer: React.ReactNode = null;
 
-      <div className="fixed inset-y-0 right-0 z-50 w-full max-w-md bg-white shadow-2xl border-l border-gray-100 flex flex-col">
-        
-        {/* Header with contextual gradient */}
-        <div className={`flex items-center justify-between px-6 py-5 border-b ${getHeaderStyle(room.estado)}`}>
-          <div className="flex items-center space-x-3">
-            <h2 className="text-xl font-extrabold text-slate-900">
-              HAB {room.numero.toString().padStart(2, '0')}
-            </h2>
-            <span className="text-gray-400 text-sm font-medium">— {isOcupada ? 'Cuenta Corriente' : isLibre ? 'Apertura' : 'Limpieza'}</span>
+  if (room.estado === 'Libre') {
+    body = (
+      <form
+        id="form-apertura"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void onAperturaTurno(tipoCliente === 'Peaton' ? undefined : patente.trim() || undefined, tipoCliente);
+        }}
+        className="space-y-6"
+      >
+        <div>
+          <SectionTitle>Tipo de cliente</SectionTitle>
+          <div role="radiogroup" aria-label="Tipo de cliente" className="grid grid-cols-3 gap-2">
+            {TIPOS.map(({ value, label, icon: Icon }) => (
+              <button
+                key={value}
+                type="button"
+                role="radio"
+                aria-checked={tipoCliente === value}
+                onClick={() => setTipoCliente(value)}
+                className={`flex flex-col items-center gap-1.5 rounded-md border px-3 py-3 text-sm transition-colors ${
+                  tipoCliente === value
+                    ? 'border-accent bg-accent-soft font-medium text-accent'
+                    : 'border-line-strong bg-surface text-muted hover:text-ink'
+                }`}
+              >
+                <Icon className="h-5 w-5" aria-hidden="true" />
+                {label}
+              </button>
+            ))}
           </div>
-          <button onClick={onClose} className="p-2 rounded-xl hover:bg-white/80 text-gray-400 hover:text-gray-600 transition-colors">
-            <X className="w-5 h-5" />
-          </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto">
-          {/* APERTURA */}
-          {isLibre && (
-            <div className="p-6">
-               <form onSubmit={(e) => { e.preventDefault(); handleApertura(); }}>
-                  <div className="mb-6">
-                    <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-3">Tipo de Cliente</label>
-                    <div className="grid grid-cols-3 gap-3">
-                      {([
-                        { value: 'Auto' as TipoCliente, icon: Car, label: 'Auto' },
-                        { value: 'Moto' as TipoCliente, icon: Bike, label: 'Moto' },
-                        { value: 'Peaton' as TipoCliente, icon: Footprints, label: 'Peatón' },
-                      ]).map(opt => (
-                        <button key={opt.value} type="button" onClick={() => setTipoCliente(opt.value)}
-                          className={`p-3.5 rounded-xl border flex flex-col items-center justify-center transition-all ${
-                            tipoCliente === opt.value 
-                              ? 'border-slate-900 bg-slate-50 text-slate-900 shadow-sm' 
-                              : 'border-gray-200 text-gray-400 hover:border-gray-300 hover:text-gray-500'
-                          }`}>
-                          <opt.icon className="w-5 h-5 mb-1.5" />
-                          <span className="text-xs font-bold">{opt.label}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+        {tipoCliente !== 'Peaton' && (
+          <Field
+            label="Identificación vehicular (opcional)"
+            htmlFor="patente"
+            hint="No se registran datos personales del cliente."
+          >
+            <input
+              id="patente"
+              data-autofocus
+              type="text"
+              maxLength={12}
+              autoComplete="off"
+              placeholder="AB 123 CD"
+              className={`${inputClass} font-mono uppercase`}
+              value={patente}
+              onChange={(e) => setPatente(e.target.value.toUpperCase())}
+            />
+          </Field>
+        )}
 
-                  {tipoCliente !== 'Peaton' && (
-                    <div className="mb-6">
-                      <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Identificador Vehicular</label>
-                      <input 
-                        type="text" autoFocus required
-                        className="w-full border border-gray-200 rounded-xl px-4 py-3 text-lg uppercase focus:border-slate-900 focus:ring-0 outline-none transition-colors"
-                        placeholder="AB 123 CD"
-                        value={patente}
-                        onChange={(e) => setPatente(e.target.value.toUpperCase())}
-                      />
-                    </div>
-                  )}
+        <p className="rounded-md bg-surface-2 px-3 py-2.5 text-sm text-muted">
+          Estadía base de {ESTADIA_BASE_MIN / 60} horas, con {TOLERANCIA_MIN} minutos de tolerancia. Luego se liquida por
+          fracciones.
+        </p>
+      </form>
+    );
+    footer = (
+      <Button type="submit" form="form-apertura" className="w-full">
+        Ocupar habitación
+      </Button>
+    );
+  } else if (room.estado === 'En Limpieza') {
+    body = (
+      <p className="text-sm text-muted">
+        La habitación está pendiente de limpieza. Al marcarla como disponible volverá a estar lista para ocupar.
+      </p>
+    );
+    footer = (
+      <Button
+        className="w-full"
+        disabled={enviando}
+        onClick={() =>
+          void accionSimple(
+            () => api.liberarHabitacion(room.id),
+            `${titulo} disponible.`,
+            'No se pudo liberar la habitación.',
+          )
+        }
+      >
+        Marcar como disponible
+      </Button>
+    );
+  } else if (room.estado === 'Mantenimiento') {
+    body = (
+      <p className="text-sm text-muted">
+        La habitación está fuera de servicio. Al habilitarla volverá a estar disponible para ocupar.
+      </p>
+    );
+    footer = (
+      <Button
+        className="w-full"
+        disabled={enviando}
+        onClick={() =>
+          void accionSimple(
+            () => api.updateHabitacionEstado(room.id, 'Libre'),
+            `${titulo} habilitada.`,
+            'No se pudo habilitar la habitación.',
+          )
+        }
+      >
+        Habilitar habitación
+      </Button>
+    );
+  } else if (!resumen) {
+    body = <p className="text-sm text-muted">{cargando ? 'Cargando cuenta…' : 'No se pudo cargar la cuenta.'}</p>;
+  } else if (vista === 'cuenta') {
+    const minutos = elapsedMinutes(resumen, now);
+    const fase = faseEstadia(minutos);
+    const nombreArticulo = (id: number) => articulos.find((a) => a.id === id)?.descripcion ?? 'Producto';
 
-                  <button type="submit" disabled={tipoCliente !== 'Peaton' && !patente.trim()} className="w-full bg-slate-900 text-white font-bold py-3.5 rounded-xl hover:bg-slate-800 disabled:opacity-40 transition-colors shadow-sm">
-                    Ocupar Habitación
-                  </button>
-               </form>
-            </div>
-          )}
+    body = (
+      <div className="space-y-6">
+        <div className="flex items-baseline justify-between rounded-md bg-surface-2 px-4 py-3">
+          <span className="text-sm text-muted">Tiempo transcurrido</span>
+          <span className="text-right">
+            <span className={`font-mono text-lg font-semibold tabular-nums ${FASE_META[fase].text}`}>
+              {formatDuration(elapsedMs(resumen, now))}
+            </span>
+            {fase === 'tolerancia' && <span className="block text-xs font-medium text-warn">En tolerancia</span>}
+            {fase === 'excedido' && (
+              <span className="block text-xs font-medium text-danger">Excedido +{minutos - ESTADIA_BASE_MIN} min</span>
+            )}
+          </span>
+        </div>
 
-          {/* LIMPIEZA */}
-          {isLimpieza && (
-            <div className="p-6 flex flex-col items-center justify-center h-full space-y-4">
-               <div className="w-16 h-16 rounded-2xl bg-amber-50 flex items-center justify-center border border-amber-100">
-                 <span className="text-3xl">🧹</span>
-               </div>
-               <h3 className="text-lg font-bold text-slate-900">Habitación en Limpieza</h3>
-               <p className="text-sm text-gray-400 text-center max-w-xs">Marque como lista cuando finalice el reacondicionamiento.</p>
-               <button onClick={handleLiberar} className="mt-2 w-full bg-emerald-500 text-white font-bold py-3.5 rounded-xl hover:bg-emerald-600 transition-colors shadow-sm">
-                  Marcar como Disponible
-               </button>
-            </div>
-          )}
+        <div>
+          <SectionTitle>Detalle</SectionTitle>
+          <table className="w-full text-sm">
+            <tbody className="divide-y divide-line">
+              <tr>
+                <td className="py-2 text-muted">Estadía base ({ESTADIA_BASE_MIN / 60} h)</td>
+                <td className="py-2 text-right tabular-nums text-ink">{formatMoney(resumen.tarifa_base)}</td>
+              </tr>
+              <tr>
+                <td className="py-2 text-muted">Sobreturno</td>
+                <td className="py-2 text-right tabular-nums text-ink">{formatMoney(resumen.total_sobreturno)}</td>
+              </tr>
+              {resumen.consumos.map((c) => (
+                <tr key={c.id}>
+                  <td className="py-2 text-muted">
+                    {nombreArticulo(c.articulo_id)} <span className="text-subtle">× {c.cantidad}</span>
+                  </td>
+                  <td className="py-2 text-right tabular-nums text-ink">{formatMoney(c.subtotal)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {resumen.consumos.length === 0 && <p className="mt-2 text-xs text-subtle">Sin consumos registrados.</p>}
+        </div>
 
-          {/* CUENTA CORRIENTE */}
-          {isOcupada && resumen && !addingProduct && !isCheckout && (
-            <div className="p-6 flex flex-col h-full">
-              <div className="mb-6">
-                <h3 className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-3">Detalle de Estadía</h3>
-                <div className="space-y-2.5 text-sm bg-gradient-to-br from-gray-50 to-white p-4 rounded-xl border border-gray-100">
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Tarifa Base (2 hs)</span>
-                    <span className="font-semibold text-slate-800 tabular-nums">${resumen.tarifa_base}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Sobreturno ({Math.max(0, resumen.minutos_transcurridos - 120)} min)</span>
-                    <span className="font-semibold text-rose-500 tabular-nums">${resumen.total_sobreturno}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Tiempo Transcurrido</span>
-                    <span className="font-mono font-bold text-slate-800">{room.tiempo_transcurrido}</span>
-                  </div>
-                  <div className="pt-2.5 border-t border-gray-100 flex justify-between mt-1">
-                    <span className="font-bold text-slate-800">Subtotal Estadía</span>
-                    <span className="font-bold text-slate-800 tabular-nums">${resumen.tarifa_base + resumen.total_sobreturno}</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="mb-6 flex-1">
-                <h3 className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-3">Consumos</h3>
-                <div className="space-y-2">
-                  {resumen.consumos.length === 0 ? (
-                      <p className="text-sm text-gray-400 italic">Sin consumos registrados.</p>
-                  ) : (
-                      resumen.consumos.map((c, i) => {
-                          const art = articulos.find(a => a.id === c.articulo_id);
-                          return (
-                            <div key={i} className="flex justify-between text-sm items-center py-2 border-b border-gray-50">
-                                <span className="text-slate-700">{art?.descripcion || 'Producto'} <span className="text-gray-400">×{c.cantidad}</span></span>
-                                <span className="font-semibold text-slate-800 tabular-nums">${c.subtotal}</span>
-                            </div>
-                          );
-                      })
-                  )}
-                </div>
-              </div>
-
-              <div className="border-t border-gray-100 pt-6 mt-auto">
-                <div className="space-y-2 mb-6">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-400">Subtotal Productos</span>
-                    <span className="font-semibold text-slate-800 tabular-nums">${resumen.total_consumos}</span>
-                  </div>
-                  <div className="flex justify-between items-center pt-2">
-                    <span className="font-bold text-slate-800 uppercase tracking-wide text-sm">Total a Cobrar</span>
-                    <span className="font-extrabold text-3xl text-slate-900 tabular-nums">${resumen.total_general}</span>
-                  </div>
-                </div>
-                
-                <div className="space-y-2.5">
-                  <button onClick={() => setAddingProduct(true)} className="w-full bg-white text-slate-700 font-semibold py-3 rounded-xl border border-gray-200 hover:bg-gray-50 hover:border-gray-300 transition-colors">
-                    + Agregar Producto
-                  </button>
-                  <button onClick={() => setIsCheckout(true)} className="w-full bg-slate-900 text-white font-bold py-3.5 rounded-xl hover:bg-slate-800 transition-colors shadow-sm">
-                    Finalizar y Cobrar
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* MINIBAR */}
-          {isOcupada && addingProduct && (
-              <div className="p-6 flex flex-col h-full">
-                  <h3 className="text-lg font-bold text-slate-900 mb-4">Despacho de Minibar</h3>
-                  <div className="flex-1 overflow-y-auto space-y-3">
-                      {articulos.map(art => (
-                          <div key={art.id} className="flex items-center justify-between p-3.5 border border-gray-100 rounded-xl bg-gradient-to-r from-gray-50/50 to-white hover:border-gray-200 transition-colors">
-                              <div className="flex flex-col">
-                                  <span className="font-semibold text-slate-800 text-sm">{art.descripcion}</span>
-                                  <span className="text-xs text-gray-400 mt-0.5">Stock: {art.stock_actual} · ${art.precio_unitario}</span>
-                              </div>
-                              <div className="flex items-center bg-white rounded-xl border border-gray-200 shadow-sm">
-                                  <button type="button" onClick={() => handleQtyChange(art.id, -1)} className="p-2 text-gray-400 hover:text-slate-900 transition-colors"><Minus className="w-3.5 h-3.5" /></button>
-                                  <span className="w-7 text-center font-bold text-sm text-slate-900 tabular-nums">{quantities[art.id] || 0}</span>
-                                  <button type="button" onClick={() => handleQtyChange(art.id, 1)} className="p-2 text-gray-400 hover:text-slate-900 transition-colors"><Plus className="w-3.5 h-3.5" /></button>
-                              </div>
-                          </div>
-                      ))}
-                  </div>
-                  <div className="pt-5 mt-4 border-t border-gray-100 flex space-x-3">
-                      <button onClick={() => {
-                        if (initialAddProduct) {
-                          onClose();
-                        } else {
-                          setAddingProduct(false); 
-                          setQuantities({});
-                        }
-                      }} className="flex-1 bg-white text-slate-600 font-semibold py-3 rounded-xl border border-gray-200 hover:bg-gray-50 transition-colors">
-                        {initialAddProduct ? 'Cancelar' : 'Volver'}
-                      </button>
-                      <button onClick={handleAddConsumo} className="flex-1 bg-indigo-600 text-white font-bold py-3 rounded-xl hover:bg-indigo-700 transition-colors shadow-sm">Guardar en la Cuenta</button>
-                  </div>
-              </div>
-          )}
-
-          {/* CHECKOUT */}
-          {isOcupada && isCheckout && resumen && (
-              <div className="p-6 flex flex-col h-full">
-                  <h3 className="text-lg font-bold text-slate-900 mb-6">Liquidación de Turno</h3>
-                  
-                  <div className="bg-gradient-to-br from-slate-900 to-slate-800 text-white p-6 rounded-2xl mb-8 flex flex-col items-center justify-center shadow-lg">
-                      <span className="text-xs text-slate-400 uppercase tracking-widest font-medium mb-1">Total a Pagar</span>
-                      <span className="text-4xl font-extrabold tracking-tight tabular-nums">${resumen.total_general}</span>
-                  </div>
-
-                  <div className="space-y-4 flex-1">
-                      <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider">Medio de Pago</label>
-                      <div className="grid grid-cols-2 gap-3">
-                          <button onClick={() => setMedioPago('EFECTIVO')} className={`p-4 rounded-xl border flex flex-col items-center justify-center transition-all ${medioPago === 'EFECTIVO' ? 'border-indigo-500 bg-indigo-50 text-indigo-700 shadow-sm' : 'border-gray-200 text-gray-400 hover:border-gray-300'}`}>
-                              <Banknote className="w-5 h-5 mb-2" />
-                              <span className="text-sm font-bold">Efectivo</span>
-                          </button>
-                          <button onClick={() => setMedioPago('POSNET')} className={`p-4 rounded-xl border flex flex-col items-center justify-center transition-all ${medioPago === 'POSNET' ? 'border-indigo-500 bg-indigo-50 text-indigo-700 shadow-sm' : 'border-gray-200 text-gray-400 hover:border-gray-300'}`}>
-                              <CreditCard className="w-5 h-5 mb-2" />
-                              <span className="text-sm font-bold">Tarjeta / MP</span>
-                          </button>
-                      </div>
-
-                      {medioPago === 'POSNET' && (
-                          <div className="mt-4">
-                              <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Nº Comprobante / Lote</label>
-                              <div className="relative">
-                                <Receipt className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
-                                <input type="text" value={comprobante} onChange={e => setComprobante(e.target.value)} placeholder="000123456" className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl outline-none focus:border-indigo-500 font-mono text-sm transition-colors" />
-                              </div>
-                          </div>
-                      )}
-                  </div>
-
-                  <div className="pt-5 mt-4 border-t border-gray-100 flex space-x-3">
-                      <button onClick={() => setIsCheckout(false)} className="flex-1 bg-white text-slate-600 font-semibold py-3 rounded-xl border border-gray-200 hover:bg-gray-50 transition-colors">Cancelar</button>
-                      <button onClick={handleCobrar} className="flex-1 bg-emerald-500 text-white font-bold py-3 rounded-xl hover:bg-emerald-600 shadow-sm transition-colors">Confirmar Pago</button>
-                  </div>
-              </div>
-          )}
-
+        <div className="flex items-baseline justify-between border-t border-line-strong pt-4">
+          <span className="text-sm font-medium text-ink">Total a cobrar</span>
+          <span className="text-2xl font-semibold tabular-nums text-ink">{formatMoney(resumen.total_general)}</span>
         </div>
       </div>
-    </>
+    );
+    footer = (
+      <div className="flex gap-3">
+        <Button variant="secondary" className="flex-1" onClick={() => setVista('productos')}>
+          Agregar productos
+        </Button>
+        <Button className="flex-1" onClick={() => setVista('cobro')}>
+          Cobrar
+        </Button>
+      </div>
+    );
+  } else if (vista === 'productos') {
+    body =
+      articulos.length === 0 ? (
+        <p className="text-sm text-muted">No hay artículos cargados en el inventario.</p>
+      ) : (
+        <ul className="divide-y divide-line rounded-md border border-line">
+          {articulos.map((art) => {
+            const qty = quantities[art.id] ?? 0;
+            const sinStock = art.stock_actual === 0;
+            return (
+              <li key={art.id} className="flex items-center justify-between gap-3 px-3 py-2.5">
+                <div className="min-w-0">
+                  <p className={`truncate text-sm font-medium ${sinStock ? 'text-subtle' : 'text-ink'}`}>
+                    {art.descripcion}
+                  </p>
+                  <p className="text-xs text-muted">
+                    {formatMoney(art.precio_unitario)} ·{' '}
+                    {sinStock ? <span className="text-danger">Sin stock</span> : `Stock ${art.stock_actual}`}
+                  </p>
+                </div>
+                <div className="flex items-center rounded-md border border-line-strong">
+                  <button
+                    type="button"
+                    aria-label={`Quitar una unidad de ${art.descripcion}`}
+                    disabled={qty === 0}
+                    onClick={() => changeQty(art, -1)}
+                    className="p-2 text-muted hover:text-ink disabled:opacity-40"
+                  >
+                    <Minus className="h-3.5 w-3.5" aria-hidden="true" />
+                  </button>
+                  <span className="w-8 text-center text-sm font-medium tabular-nums" aria-live="polite">
+                    {qty}
+                  </span>
+                  <button
+                    type="button"
+                    aria-label={`Agregar una unidad de ${art.descripcion}`}
+                    disabled={qty >= art.stock_actual}
+                    onClick={() => changeQty(art, 1)}
+                    className="p-2 text-muted hover:text-ink disabled:opacity-40"
+                  >
+                    <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+                  </button>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      );
+    footer = (
+      <div className="space-y-3">
+        <div className="flex items-baseline justify-between text-sm">
+          <span className="text-muted">Subtotal seleccionado</span>
+          <span className="font-semibold tabular-nums text-ink">{formatMoney(subtotalSeleccion)}</span>
+        </div>
+        <div className="flex gap-3">
+          <Button
+            variant="secondary"
+            className="flex-1"
+            onClick={() => {
+              if (initialAddProduct) {
+                onClose();
+              } else {
+                setQuantities({});
+                setVista('cuenta');
+              }
+            }}
+          >
+            {initialAddProduct ? 'Cancelar' : 'Volver'}
+          </Button>
+          <Button className="flex-1" disabled={seleccion.length === 0 || enviando} onClick={() => void guardarConsumos()}>
+            Guardar en la cuenta
+          </Button>
+        </div>
+      </div>
+    );
+  } else {
+    body = (
+      <div className="space-y-6">
+        <div className="rounded-md border border-line bg-surface-2 px-4 py-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-subtle">Total a cobrar</p>
+          <p className="mt-1 text-3xl font-semibold tabular-nums text-ink">{formatMoney(resumen.total_general)}</p>
+        </div>
+
+        <div>
+          <SectionTitle>Medio de pago</SectionTitle>
+          <div role="radiogroup" aria-label="Medio de pago" className="grid grid-cols-3 gap-2">
+            {MEDIOS.map(({ value, label, icon: Icon }) => (
+              <button
+                key={value}
+                type="button"
+                role="radio"
+                aria-checked={medioPago === value}
+                onClick={() => {
+                  setMedioPago(value);
+                  setErrorComprobante('');
+                }}
+                className={`flex flex-col items-center gap-1.5 rounded-md border px-2 py-3 text-center text-sm transition-colors ${
+                  medioPago === value
+                    ? 'border-accent bg-accent-soft font-medium text-accent'
+                    : 'border-line-strong bg-surface text-muted hover:text-ink'
+                }`}
+              >
+                <Icon className="h-5 w-5" aria-hidden="true" />
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {medioPago !== 'EFECTIVO' && (
+          <Field label="Nº de comprobante / lote" htmlFor="comprobante" error={errorComprobante}>
+            <input
+              id="comprobante"
+              data-autofocus
+              type="text"
+              inputMode="numeric"
+              autoComplete="off"
+              placeholder="000123456"
+              className={`${inputClass} font-mono`}
+              value={comprobante}
+              onChange={(e) => {
+                setComprobante(e.target.value);
+                setErrorComprobante('');
+              }}
+            />
+          </Field>
+        )}
+      </div>
+    );
+    footer = (
+      <div className="flex gap-3">
+        <Button variant="secondary" className="flex-1" disabled={enviando} onClick={() => setVista('cuenta')}>
+          Volver
+        </Button>
+        <Button className="flex-[2]" disabled={enviando} onClick={() => void cobrar()}>
+          Confirmar cobro de {formatMoney(resumen.total_general)}
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <Drawer title={titulo} subtitle={subtitulo} onClose={onClose} footer={footer}>
+      {body}
+    </Drawer>
   );
 };
 

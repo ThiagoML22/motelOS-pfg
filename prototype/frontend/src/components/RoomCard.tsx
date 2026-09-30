@@ -1,213 +1,166 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { ChevronRight, Timer, Car, Bike, Footprints, ShoppingBag, MoreVertical, Wrench, Sparkles, CheckCircle2 } from 'lucide-react';
-import { HabitacionConDetalles } from '../types';
+import React, { useEffect, useRef, useState } from 'react';
+import { Bike, Car, CheckCircle2, Footprints, MoreVertical, Sparkles, Wrench } from 'lucide-react';
+import { HabitacionConDetalles, RoomStatus } from '../types';
+import { formatDuration, formatMoney, formatRoomNumber } from '../utils/format';
+import { ESTADIA_BASE_MIN, elapsedMinutes, elapsedMs, faseEstadia } from '../utils/turno';
+import Button from './ui/Button';
+import { ESTADO_META, FASE_META } from './ui/status';
 
 interface RoomCardProps {
   room: HabitacionConDetalles;
+  now: number;
   onClick: (room: HabitacionConDetalles) => void;
-  onAddConsumo?: (room: HabitacionConDetalles) => void;
-  onChangeEstado?: (room: HabitacionConDetalles, newState: string) => void;
+  onAddConsumo: (room: HabitacionConDetalles) => void;
+  onChangeEstado: (room: HabitacionConDetalles, newState: RoomStatus) => void;
 }
 
-const RoomCard: React.FC<RoomCardProps> = ({ room, onClick, onAddConsumo, onChangeEstado }) => {
-  const isOcupada = room.estado === 'Ocupada';
-  const [showMenu, setShowMenu] = useState(false);
+const CAMBIOS_ESTADO: { estado: RoomStatus; label: string; icon: React.ElementType }[] = [
+  { estado: 'Libre', label: 'Disponible', icon: CheckCircle2 },
+  { estado: 'En Limpieza', label: 'Limpieza', icon: Sparkles },
+  { estado: 'Mantenimiento', label: 'Mantenimiento', icon: Wrench },
+];
+
+const TIPO_ICON: Record<string, React.ElementType> = { Auto: Car, Moto: Bike, Peaton: Footprints };
+const TIPO_LABEL: Record<string, string> = { Auto: 'Auto', Moto: 'Moto', Peaton: 'Peatón' };
+
+const RoomCard: React.FC<RoomCardProps> = ({ room, now, onClick, onAddConsumo, onChangeEstado }) => {
+  const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const meta = ESTADO_META[room.estado];
+  const turno = room.estado === 'Ocupada' ? room.turno_activo : null;
 
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setShowMenu(false);
-      }
+    if (!menuOpen) return;
+    const onMouseDown = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
     };
-    if (showMenu) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [showMenu]);
+    document.addEventListener('mousedown', onMouseDown);
+    return () => document.removeEventListener('mousedown', onMouseDown);
+  }, [menuOpen]);
 
-  const getStyle = () => {
-    switch (room.estado) {
-      case 'Libre':
-        return {
-          cardBg: 'bg-gradient-to-br from-white to-emerald-50/40',
-          cardBorder: 'border-gray-200 hover:border-emerald-300',
-          badgeBg: 'bg-emerald-50',
-          badgeBorder: 'border-emerald-200',
-          badgeText: 'text-emerald-600',
-          badgeDot: 'bg-emerald-500',
-          bottomText: 'text-gray-400 font-medium'
-        };
-      case 'Ocupada':
-        return {
-          cardBg: 'bg-gradient-to-br from-white to-rose-50/30',
-          cardBorder: 'border-slate-300 hover:border-slate-400 shadow-sm',
-          badgeBg: 'bg-rose-50',
-          badgeBorder: 'border-rose-200',
-          badgeText: 'text-rose-600',
-          badgeDot: 'bg-rose-500',
-          bottomText: 'text-rose-600 font-mono font-bold'
-        };
-      case 'En Limpieza':
-        return {
-          cardBg: 'bg-gradient-to-br from-white to-amber-50/40',
-          cardBorder: 'border-amber-200 hover:border-amber-300',
-          badgeBg: 'bg-amber-50',
-          badgeBorder: 'border-amber-200',
-          badgeText: 'text-amber-600',
-          badgeDot: 'bg-amber-500',
-          bottomText: 'text-gray-400 font-medium'
-        };
-      case 'Mantenimiento':
-        return {
-          cardBg: 'bg-gradient-to-br from-white to-slate-50',
-          cardBorder: 'border-slate-200 hover:border-slate-300',
-          badgeBg: 'bg-slate-100',
-          badgeBorder: 'border-slate-200',
-          badgeText: 'text-slate-500',
-          badgeDot: 'bg-slate-400',
-          bottomText: 'text-gray-400 font-medium'
-        };
-      default:
-        return {
-          cardBg: 'bg-white',
-          cardBorder: 'border-gray-200',
-          badgeBg: 'bg-gray-50',
-          badgeBorder: 'border-gray-200',
-          badgeText: 'text-gray-500',
-          badgeDot: 'bg-gray-400',
-          bottomText: 'text-gray-400 font-medium'
-        };
-    }
-  };
-
-  const style = getStyle();
-  const displayState = room.estado === 'Libre' ? 'Disponible' : (room.estado === 'En Limpieza' ? 'Limpieza' : room.estado);
-
-  const getTipoIcon = () => {
-    const tipo = room.turno_activo?.tipo_cliente;
-    if (tipo === 'Moto') return <Bike className="w-3.5 h-3.5 mr-1 text-slate-400" />;
-    if (tipo === 'Peaton') return <Footprints className="w-3.5 h-3.5 mr-1 text-slate-400" />;
-    return <Car className="w-3.5 h-3.5 mr-1 text-slate-400" />;
-  };
-
-  const getClienteLabel = () => {
-    const turno = room.turno_activo;
-    if (!turno) return '';
-    if (turno.tipo_cliente === 'Peaton') return 'Peatón';
-    return turno.identificador_vehicular || '';
-  };
-
-  const hasConsumos = isOcupada && room.turno_activo && room.turno_activo.total_consumos > 0;
-
-  const handleStateChange = (e: React.MouseEvent, state: string) => {
-    e.stopPropagation();
-    setShowMenu(false);
-    if (onChangeEstado) onChangeEstado(room, state);
-  };
+  const minutos = turno ? elapsedMinutes(turno, now) : 0;
+  const fase = faseEstadia(minutos);
+  const faseMeta = FASE_META[fase];
+  const barClass = turno && faseMeta.bar ? faseMeta.bar : meta.bar;
+  const TipoIcon = turno ? (TIPO_ICON[turno.tipo_cliente] ?? Car) : Car;
+  const cliente = turno
+    ? turno.tipo_cliente === 'Peaton'
+      ? 'Peatón'
+      : turno.identificador_vehicular || TIPO_LABEL[turno.tipo_cliente]
+    : '';
 
   return (
-    <div 
+    <div
+      role="button"
+      tabIndex={0}
       onClick={() => onClick(room)}
-      className={`${style.cardBg} rounded-2xl border p-5 flex flex-col justify-between relative min-h-[148px] cursor-pointer transition-all duration-200 hover:shadow-lg hover:scale-[1.02] ${style.cardBorder}`}
+      onKeyDown={(e) => {
+        if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
+          e.preventDefault();
+          onClick(room);
+        }
+      }}
+      aria-label={`${formatRoomNumber(room.numero)}, ${meta.label}`}
+      className={`flex min-h-[9.5rem] cursor-pointer flex-col rounded-lg border border-l-4 border-line bg-surface p-4 transition-colors hover:bg-surface-2 ${barClass}`}
     >
-      {/* Header */}
-      <div className="flex justify-between items-start">
-        <div>
-          <h3 className="text-lg font-extrabold text-slate-900 tracking-tight">
-            HAB {room.numero.toString().padStart(2, '0')}
-          </h3>
-          {isOcupada && room.turno_activo && (
-            <div className="flex items-center mt-1.5">
-              {getTipoIcon()}
-              <span className="text-xs text-slate-400 font-medium truncate max-w-[120px]">
-                {getClienteLabel()}
-              </span>
-            </div>
-          )}
-        </div>
-        <div className="flex flex-col items-end gap-1.5">
-          <div className={`flex items-center px-2.5 py-1 rounded-full border ${style.badgeBg} ${style.badgeBorder}`}>
-            <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${style.badgeDot}`}></span>
-            <span className={`text-[10px] font-bold uppercase tracking-wider ${style.badgeText}`}>
-              {displayState}
-            </span>
-          </div>
-          {hasConsumos && (
-            <div className="flex items-center px-2 py-0.5 rounded-full bg-blue-50 border border-blue-100 text-blue-600">
-              <ShoppingBag className="w-3 h-3 mr-1" />
-              <span className="text-[10px] font-bold">${room.turno_activo?.total_consumos}</span>
-            </div>
-          )}
-        </div>
+      <div className="flex items-start justify-between gap-2">
+        <h3 className="text-base font-semibold text-ink">{formatRoomNumber(room.numero)}</h3>
+        <span className={`flex items-center gap-1.5 text-xs font-medium ${meta.text}`}>
+          <span className={`h-2 w-2 rounded-full ${meta.dot}`} aria-hidden="true" />
+          {meta.label}
+        </span>
       </div>
 
-      {/* Footer */}
-      <div className="flex justify-between items-end mt-auto pt-3">
-        <div className="flex items-center">
-          {isOcupada ? (
-            <div className="flex items-center bg-rose-50 px-2.5 py-1 rounded-lg border border-rose-100">
-              <Timer className="w-3.5 h-3.5 mr-1.5 text-rose-500" strokeWidth={2.5} />
-              <span className={`text-sm ${style.bottomText}`}>
-                {room.tiempo_transcurrido || '00:00:00'}
-              </span>
-            </div>
-          ) : (
-            <span className={`text-xs ${style.bottomText}`}>Sin ocupar</span>
-          )}
-        </div>
-        
-        <div className="flex items-center gap-1.5">
-          {isOcupada && onAddConsumo && (
-            <button
-              onClick={(e) => { e.stopPropagation(); onAddConsumo(room); }}
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 border border-indigo-100 transition-colors text-[11px] font-bold"
-            >
-              <ShoppingBag className="w-3.5 h-3.5" />
-              + Producto
-            </button>
-          )}
-
-          {!isOcupada && (
-            <div className="relative" ref={menuRef}>
-              <button 
-                onClick={(e) => { e.stopPropagation(); setShowMenu(!showMenu); }}
-                className="w-7 h-7 rounded-lg bg-white/80 flex items-center justify-center border border-gray-200 hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600"
-              >
-                <MoreVertical className="w-3.5 h-3.5" />
-              </button>
-              
-              {showMenu && (
-                <div className="absolute bottom-full right-0 mb-2 w-44 bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden z-50">
-                  {room.estado !== 'Libre' && (
-                    <button onClick={(e) => handleStateChange(e, 'Libre')}
-                      className="w-full text-left px-3.5 py-2.5 text-sm hover:bg-gray-50 flex items-center text-slate-700 border-b border-gray-50 transition-colors">
-                      <CheckCircle2 className="w-4 h-4 mr-2.5 text-emerald-500" /> Disponible
-                    </button>
-                  )}
-                  {room.estado !== 'En Limpieza' && (
-                    <button onClick={(e) => handleStateChange(e, 'En Limpieza')}
-                      className="w-full text-left px-3.5 py-2.5 text-sm hover:bg-gray-50 flex items-center text-slate-700 border-b border-gray-50 transition-colors">
-                      <Sparkles className="w-4 h-4 mr-2.5 text-amber-500" /> Limpieza
-                    </button>
-                  )}
-                  {room.estado !== 'Mantenimiento' && (
-                    <button onClick={(e) => handleStateChange(e, 'Mantenimiento')}
-                      className="w-full text-left px-3.5 py-2.5 text-sm hover:bg-gray-50 flex items-center text-slate-700 transition-colors">
-                      <Wrench className="w-4 h-4 mr-2.5 text-slate-400" /> Mantenimiento
-                    </button>
-                  )}
-                </div>
+      <div className="mt-2 flex-1">
+        {turno ? (
+          <>
+            <p className="flex items-center gap-1.5 text-sm text-muted">
+              <TipoIcon className="h-4 w-4 shrink-0" aria-hidden="true" />
+              <span className="truncate">{cliente}</span>
+            </p>
+            <p className={`mt-1.5 font-mono text-xl font-semibold tabular-nums ${faseMeta.text}`}>
+              {formatDuration(elapsedMs(turno, now))}
+            </p>
+            <p className="mt-0.5 min-h-[1rem] text-xs text-muted">
+              {fase === 'tolerancia' && <span className="font-medium text-warn">En tolerancia</span>}
+              {fase === 'excedido' && (
+                <span className="font-medium text-danger">Excedido +{minutos - ESTADIA_BASE_MIN} min</span>
               )}
-            </div>
-          )}
+              {turno.total_consumos > 0 && (
+                <span className={fase !== 'normal' ? 'ml-2' : ''}>Consumos {formatMoney(turno.total_consumos)}</span>
+              )}
+            </p>
+          </>
+        ) : (
+          <p className="text-sm text-muted">{meta.hint}</p>
+        )}
+      </div>
 
-          {isOcupada && (
-            <div className="w-7 h-7 rounded-lg bg-white/80 flex items-center justify-center border border-gray-200 hover:bg-gray-100 transition-colors">
-              <ChevronRight className="w-3.5 h-3.5 text-gray-400" strokeWidth={2.5} />
-            </div>
-          )}
-        </div>
+      <div className="mt-3 flex items-center justify-between gap-2">
+        {turno ? (
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={(e) => {
+              e.stopPropagation();
+              onAddConsumo(room);
+            }}
+          >
+            Agregar producto
+          </Button>
+        ) : (
+          <span />
+        )}
+
+        {room.estado !== 'Ocupada' && (
+          <div className="relative" ref={menuRef}>
+            <button
+              type="button"
+              aria-label={`Cambiar estado de ${formatRoomNumber(room.numero)}`}
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+              onClick={(e) => {
+                e.stopPropagation();
+                setMenuOpen((v) => !v);
+              }}
+              onKeyDown={(e) => {
+                e.stopPropagation();
+                if (e.key === 'Escape') setMenuOpen(false);
+              }}
+              className="flex h-8 w-8 items-center justify-center rounded-md border border-line-strong bg-surface text-muted hover:bg-surface-2 hover:text-ink"
+            >
+              <MoreVertical className="h-4 w-4" aria-hidden="true" />
+            </button>
+
+            {menuOpen && (
+              <div
+                role="menu"
+                className="absolute bottom-full right-0 z-20 mb-2 w-44 overflow-hidden rounded-md border border-line bg-surface py-1 shadow-panel"
+                onClick={(e) => e.stopPropagation()}
+                onKeyDown={(e) => {
+                  e.stopPropagation();
+                  if (e.key === 'Escape') setMenuOpen(false);
+                }}
+              >
+                {CAMBIOS_ESTADO.filter((c) => c.estado !== room.estado).map(({ estado, label, icon: Icon }) => (
+                  <button
+                    key={estado}
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      onChangeEstado(room, estado);
+                    }}
+                    className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-ink hover:bg-surface-2"
+                  >
+                    <Icon className="h-4 w-4 text-muted" aria-hidden="true" />
+                    Pasar a {label.toLowerCase()}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

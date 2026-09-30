@@ -1,5 +1,6 @@
 export type RoomStatus = 'Libre' | 'Ocupada' | 'En Limpieza' | 'Mantenimiento';
 export type TipoCliente = 'Auto' | 'Moto' | 'Peaton';
+export type MedioPago = 'EFECTIVO' | 'POSNET' | 'MERCADO_PAGO';
 
 export interface Habitacion {
   id: number;
@@ -8,13 +9,23 @@ export interface Habitacion {
 }
 
 export interface Turno {
-  id?: string;
+  id: string;
   habitacion_id: number;
   identificador_vehicular?: string | null;
   tipo_cliente: TipoCliente;
-  hora_inicio?: string;
-  hora_fin?: string;
-  estado?: string;
+  hora_inicio: string;
+  hora_fin?: string | null;
+  estado: string;
+  tarifa_base: number;
+  total_sobreturno: number;
+  total_consumos: number;
+  total_general: number;
+}
+
+export interface TurnoCreate {
+  habitacion_id: number;
+  identificador_vehicular?: string;
+  tipo_cliente: TipoCliente;
 }
 
 export interface Consumo {
@@ -31,20 +42,14 @@ export interface Articulo {
   descripcion: string;
   precio_unitario: number;
   stock_actual: number;
-  categoria: string;
+  categoria?: string | null;
 }
 
 export interface TurnoResumen extends Turno {
   minutos_transcurridos: number;
-  tarifa_base: number;
-  total_sobreturno: number;
-  total_consumos: number;
-  total_general: number;
   consumos: Consumo[];
 }
 
 export interface HabitacionConDetalles extends Habitacion {
-  turno_activo?: TurnoResumen;
-  tiempo_transcurrido?: string; 
-  excede_tiempo?: boolean;
+  turno_activo?: Turno | null;
 }
