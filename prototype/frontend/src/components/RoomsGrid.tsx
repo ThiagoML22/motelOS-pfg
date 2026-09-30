@@ -11,7 +11,7 @@ interface RoomsGridProps {
 }
 
 const RoomsGrid: React.FC<RoomsGridProps> = ({ habitaciones, now, onRoomClick, onAddConsumo, onChangeEstado }) => (
-  <div className="grid grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-4">
+  <div className="grid animate-fade-in grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-4">
     {habitaciones.map((habitacion) => (
       <RoomCard
         key={habitacion.id}

@@ -5,12 +5,12 @@ import { api, getErrorMessage } from '../services/api';
 import { formatDuration, formatMoney, formatRoomNumber } from '../utils/format';
 import { ESTADIA_BASE_MIN, TOLERANCIA_MIN, elapsedMinutes, elapsedMs, faseEstadia } from '../utils/turno';
 import Button from './ui/Button';
-import Drawer from './ui/Drawer';
 import Field, { inputClass } from './ui/Field';
+import Modal from './ui/Modal';
 import { FASE_META } from './ui/status';
 import { useToast } from './ui/Toast';
 
-interface SlideOverPanelProps {
+interface RoomDialogProps {
   room: HabitacionConDetalles;
   now: number;
   onClose: () => void;
@@ -37,7 +37,7 @@ const SectionTitle: React.FC<{ children: React.ReactNode }> = ({ children }) => 
   <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-subtle">{children}</h3>
 );
 
-const SlideOverPanel: React.FC<SlideOverPanelProps> = ({
+const RoomDialog: React.FC<RoomDialogProps> = ({
   room,
   now,
   onClose,
@@ -183,7 +183,7 @@ const SlideOverPanel: React.FC<SlideOverPanelProps> = ({
                 role="radio"
                 aria-checked={tipoCliente === value}
                 onClick={() => setTipoCliente(value)}
-                className={`flex flex-col items-center gap-1.5 rounded-md border px-3 py-3 text-sm transition-colors ${
+                className={`flex flex-col items-center gap-1.5 rounded-md border px-3 py-3 text-sm press ${
                   tipoCliente === value
                     ? 'border-accent bg-accent-soft font-medium text-accent'
                     : 'border-line-strong bg-surface text-muted hover:text-ink'
@@ -358,7 +358,7 @@ const SlideOverPanel: React.FC<SlideOverPanelProps> = ({
                     aria-label={`Quitar una unidad de ${art.descripcion}`}
                     disabled={qty === 0}
                     onClick={() => changeQty(art, -1)}
-                    className="p-2 text-muted hover:text-ink disabled:opacity-40"
+                    className="press p-2 text-muted hover:text-ink disabled:opacity-40 disabled:active:scale-100"
                   >
                     <Minus className="h-3.5 w-3.5" aria-hidden="true" />
                   </button>
@@ -370,7 +370,7 @@ const SlideOverPanel: React.FC<SlideOverPanelProps> = ({
                     aria-label={`Agregar una unidad de ${art.descripcion}`}
                     disabled={qty >= art.stock_actual}
                     onClick={() => changeQty(art, 1)}
-                    className="p-2 text-muted hover:text-ink disabled:opacity-40"
+                    className="press p-2 text-muted hover:text-ink disabled:opacity-40 disabled:active:scale-100"
                   >
                     <Plus className="h-3.5 w-3.5" aria-hidden="true" />
                   </button>
@@ -428,7 +428,7 @@ const SlideOverPanel: React.FC<SlideOverPanelProps> = ({
                   setMedioPago(value);
                   setErrorComprobante('');
                 }}
-                className={`flex flex-col items-center gap-1.5 rounded-md border px-2 py-3 text-center text-sm transition-colors ${
+                className={`flex flex-col items-center gap-1.5 rounded-md border px-2 py-3 text-center text-sm press ${
                   medioPago === value
                     ? 'border-accent bg-accent-soft font-medium text-accent'
                     : 'border-line-strong bg-surface text-muted hover:text-ink'
@@ -474,10 +474,10 @@ const SlideOverPanel: React.FC<SlideOverPanelProps> = ({
   }
 
   return (
-    <Drawer title={titulo} subtitle={subtitulo} onClose={onClose} footer={footer}>
+    <Modal title={titulo} subtitle={subtitulo} onClose={onClose} footer={footer}>
       {body}
-    </Drawer>
+    </Modal>
   );
 };
 
-export default SlideOverPanel;
+export default RoomDialog;

@@ -5,7 +5,7 @@ import { useNow } from './hooks/useNow';
 import { formatRoomNumber } from './utils/format';
 import TopNav, { View } from './components/TopNav';
 import RoomsGrid from './components/RoomsGrid';
-import SlideOverPanel from './components/SlideOverPanel';
+import RoomDialog from './components/RoomDialog';
 import InventarioView from './components/InventarioView';
 import Button from './components/ui/Button';
 import { useToast } from './components/ui/Toast';
@@ -110,7 +110,7 @@ function App() {
                   type="button"
                   aria-pressed={filtro === 'Todas'}
                   onClick={() => setFiltro('Todas')}
-                  className={`rounded-md border px-3 py-1.5 text-sm transition-colors ${
+                  className={`press rounded-md border px-3 py-1.5 text-sm ${
                     filtro === 'Todas'
                       ? 'border-accent bg-accent-soft font-medium text-accent'
                       : 'border-line-strong bg-surface text-muted hover:text-ink'
@@ -124,7 +124,7 @@ function App() {
                     type="button"
                     aria-pressed={filtro === estado}
                     onClick={() => setFiltro(estado)}
-                    className={`flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm transition-colors ${
+                    className={`press flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm ${
                       filtro === estado
                         ? 'border-accent bg-accent-soft font-medium text-accent'
                         : 'border-line-strong bg-surface text-muted hover:text-ink'
@@ -183,7 +183,7 @@ function App() {
       </main>
 
       {selectedRoom && (
-        <SlideOverPanel
+        <RoomDialog
           key={selectedRoom.id}
           room={selectedRoom}
           now={now}

@@ -61,7 +61,7 @@ const RoomCard: React.FC<RoomCardProps> = ({ room, now, onClick, onAddConsumo, o
         }
       }}
       aria-label={`${formatRoomNumber(room.numero)}, ${meta.label}`}
-      className={`flex min-h-[9.5rem] cursor-pointer flex-col rounded-lg border border-l-4 border-line bg-surface p-4 transition-colors hover:bg-surface-2 ${barClass}`}
+      className={`group flex min-h-[9.5rem] cursor-pointer flex-col rounded-lg border border-l-4 border-line bg-surface p-4 transition duration-200 ease-out hover:-translate-y-0.5 hover:border-b-line-strong hover:border-r-line-strong hover:border-t-line-strong hover:shadow-lift active:translate-y-0 active:shadow-none ${barClass}`}
     >
       <div className="flex items-start justify-between gap-2">
         <h3 className="text-base font-semibold text-ink">{formatRoomNumber(room.numero)}</h3>
@@ -127,7 +127,7 @@ const RoomCard: React.FC<RoomCardProps> = ({ room, now, onClick, onAddConsumo, o
                 e.stopPropagation();
                 if (e.key === 'Escape') setMenuOpen(false);
               }}
-              className="flex h-8 w-8 items-center justify-center rounded-md border border-line-strong bg-surface text-muted hover:bg-surface-2 hover:text-ink"
+              className="press flex h-8 w-8 items-center justify-center rounded-md border border-line-strong bg-surface text-muted hover:bg-surface-2 hover:text-ink"
             >
               <MoreVertical className="h-4 w-4" aria-hidden="true" />
             </button>
@@ -135,7 +135,7 @@ const RoomCard: React.FC<RoomCardProps> = ({ room, now, onClick, onAddConsumo, o
             {menuOpen && (
               <div
                 role="menu"
-                className="absolute bottom-full right-0 z-20 mb-2 w-44 overflow-hidden rounded-md border border-line bg-surface py-1 shadow-panel"
+                className="absolute bottom-full right-0 z-20 mb-2 w-44 animate-pop-in overflow-hidden rounded-md border border-line bg-surface py-1 shadow-panel"
                 onClick={(e) => e.stopPropagation()}
                 onKeyDown={(e) => {
                   e.stopPropagation();
@@ -151,7 +151,7 @@ const RoomCard: React.FC<RoomCardProps> = ({ room, now, onClick, onAddConsumo, o
                       setMenuOpen(false);
                       onChangeEstado(room, estado);
                     }}
-                    className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-ink hover:bg-surface-2"
+                    className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-ink transition-colors hover:bg-surface-2"
                   >
                     <Icon className="h-4 w-4 text-muted" aria-hidden="true" />
                     Pasar a {label.toLowerCase()}

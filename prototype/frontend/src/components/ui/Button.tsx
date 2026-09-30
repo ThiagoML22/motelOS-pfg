@@ -23,7 +23,7 @@ const SIZES: Record<Size, string> = {
 const Button: React.FC<ButtonProps> = ({ variant = 'primary', size = 'md', className = '', type = 'button', ...props }) => (
   <button
     type={type}
-    className={`inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${VARIANTS[variant]} ${SIZES[size]} ${className}`}
+    className={`press inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md font-medium hover:shadow-sm disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100 ${VARIANTS[variant]} ${SIZES[size]} ${className}`}
     {...props}
   />
 );

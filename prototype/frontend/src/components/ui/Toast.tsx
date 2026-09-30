@@ -53,7 +53,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         {items.map((t) => (
           <div
             key={t.id}
-            className={`pointer-events-auto flex items-start gap-3 rounded-md border border-l-4 border-line bg-surface px-4 py-3 text-sm text-ink shadow-panel ${KIND_STYLE[t.kind]}`}
+            className={`pointer-events-auto animate-toast-in flex items-start gap-3 rounded-md border border-l-4 border-line bg-surface px-4 py-3 text-sm text-ink shadow-panel ${KIND_STYLE[t.kind]}`}
           >
             <p className="flex-1">{t.message}</p>
             <button

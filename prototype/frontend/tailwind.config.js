@@ -34,6 +34,23 @@ export default {
       },
       boxShadow: {
         panel: '0 8px 24px rgb(15 23 42 / 0.12)',
+        lift: '0 4px 14px rgb(15 23 42 / 0.08)',
+      },
+      keyframes: {
+        'fade-in': { from: { opacity: '0' }, to: { opacity: '1' } },
+        'pop-in': {
+          from: { opacity: '0', transform: 'translateY(6px) scale(0.98)' },
+          to: { opacity: '1', transform: 'translateY(0) scale(1)' },
+        },
+        'toast-in': {
+          from: { opacity: '0', transform: 'translateX(-12px)' },
+          to: { opacity: '1', transform: 'translateX(0)' },
+        },
+      },
+      animation: {
+        'fade-in': 'fade-in 160ms ease-out both',
+        'pop-in': 'pop-in 200ms cubic-bezier(0.2, 0.8, 0.2, 1) both',
+        'toast-in': 'toast-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both',
       },
     },
   },
