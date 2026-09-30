@@ -1,56 +1,63 @@
 import os
 
-import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import StaticPool
 
 from app.core.database import Base, get_db
 from app.main import app
+from app.models.articulo import Articulo
 from app.models.habitacion import Habitacion
 
-# Usar DATABASE_URL_TEST si existe, sino usar una por defecto (útil para CI)
-TEST_DATABASE_URL = os.getenv("TEST_DATABASE_URL", "postgresql+asyncpg://postgres:postgres@db:5432/motel_db")
+# Por defecto los tests son herméticos (SQLite en memoria). En CI se puede apuntar a un
+# Postgres descartable con TEST_DATABASE_URL; el nombre de la base debe contener "test"
+# porque cada test recrea el esquema completo.
+TEST_DATABASE_URL = os.getenv("TEST_DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
-@pytest.fixture(scope="session")
-def event_loop():
-    import asyncio
-    loop = asyncio.get_event_loop_policy().new_event_loop()
-    yield loop
-    loop.close()
+if not TEST_DATABASE_URL.startswith("sqlite") and "test" not in TEST_DATABASE_URL.rsplit("/", 1)[-1]:
+    raise RuntimeError("TEST_DATABASE_URL debe apuntar a una base descartable cuyo nombre contenga 'test'.")
 
-engine_test = create_async_engine(TEST_DATABASE_URL, echo=False)
-TestingSessionLocal = sessionmaker(engine_test, class_=AsyncSession, expire_on_commit=False)
 
-async def override_get_db():
-    async with TestingSessionLocal() as session:
-        yield session
-
-app.dependency_overrides[get_db] = override_get_db
-
-@pytest_asyncio.fixture(scope="session", autouse=True)
-async def setup_database():
-    async with engine_test.begin() as conn:
+@pytest_asyncio.fixture
+async def session_factory():
+    kwargs = {"poolclass": StaticPool, "connect_args": {"check_same_thread": False}} if (
+        TEST_DATABASE_URL.startswith("sqlite")
+    ) else {}
+    engine = create_async_engine(TEST_DATABASE_URL, **kwargs)
+    async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
 
-    # Sembrar habitaciones mínimas para los tests
-    async with TestingSessionLocal() as session:
-        session.add_all([
-            Habitacion(id=1, numero=1, estado="Libre"),
-            Habitacion(id=2, numero=2, estado="Libre"),
-            Habitacion(id=3, numero=3, estado="Libre"),
-        ])
+    factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    async with factory() as session:
+        session.add_all(
+            [
+                Habitacion(numero=1, estado="Libre"),
+                Habitacion(numero=2, estado="Libre"),
+                Habitacion(numero=3, estado="Mantenimiento"),
+                Articulo(codigo="MIN-001", descripcion="Agua Mineral 500ml", precio_unitario=800, stock_actual=5),
+            ]
+        )
         await session.commit()
 
-    yield
+    async def override_get_db():
+        async with factory() as session:
+            yield session
 
-    # Cleanup
-    async with engine_test.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
+    app.dependency_overrides[get_db] = override_get_db
+    yield factory
+    app.dependency_overrides.clear()
+    await engine.dispose()
+
 
 @pytest_asyncio.fixture
-async def client():
+async def client(session_factory):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
+
+
+@pytest_asyncio.fixture
+async def db(session_factory):
+    async with session_factory() as session:
+        yield session
