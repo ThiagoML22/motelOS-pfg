@@ -9,7 +9,8 @@ CREATE TABLE habitaciones (
 CREATE TABLE turnos (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     habitacion_id INTEGER NOT NULL REFERENCES habitaciones(id),
-    identificador_vehicular VARCHAR(50) NOT NULL,
+    identificador_vehicular VARCHAR(50),
+    tipo_cliente VARCHAR(20) NOT NULL DEFAULT 'Auto' CHECK (tipo_cliente IN ('Auto', 'Moto', 'Peaton')),
     hora_inicio TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     hora_fin TIMESTAMP WITH TIME ZONE,
     tarifa_base NUMERIC(10, 2) NOT NULL DEFAULT 12000,

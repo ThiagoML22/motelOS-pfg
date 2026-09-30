@@ -1,47 +1,45 @@
-# Prototipo v1 (Walking Skeleton) - Motel C.C.
+# Motel C.C. - TPS (Sistema de Procesamiento de Transacciones)
 
-Este entorno de código ejecutable corresponde a la entrega formal de la **AE2**. Constituye un prototipo funcional de extremo a extremo (Frontend, Backend y Base de Datos) orquestado mediante Docker Compose, incluyendo persistencia real y validaciones de reglas de negocio en API y base de datos (PostgreSQL).
+Prototipo del sistema de gestión operativa y control de turnos del Motel C.C.
 
-## Prerrequisitos
-- **Docker Engine** 24+
-- **Docker Compose** v2
+## Levantar el entorno (Docker)
 
-## Instrucciones de Despliegue en Máquina Limpia
-
-### Paso 1: Clonar y posicionarse
-Abre tu terminal, clona el repositorio (o extrae el código fuente) y sitúate en la carpeta del prototipo:
-```bash
-cd prototype
-```
-
-### Paso 2: Copiar variables de entorno
-Crea el archivo local de variables a partir de la plantilla:
 ```bash
 cp .env.example .env
+docker compose up --build -d
 ```
 
-### Paso 3: Construcción y arranque
-Levanta los tres contenedores en segundo plano (`backend`, `frontend` y `db`):
+- Frontend: http://localhost:5173
+- API (Swagger): http://localhost:8000/docs
+- PostgreSQL: localhost:5432
+
+## Arquitectura
+- **Frontend:** React 18, Vite 5, Tailwind CSS, Axios (TypeScript estricto).
+- **Backend:** FastAPI, Pydantic v2, SQLAlchemy asíncrono (asyncpg).
+- **Base de datos:** PostgreSQL 16 con RLS y trigger de inmutabilidad de turnos cerrados.
+
+## Verificación local
+
+Backend (Python 3.12):
+
 ```bash
-docker-compose up --build -d
+cd backend
+python -m venv .venv && .venv/Scripts/pip install -r requirements-dev.txt
+ruff check app/ --ignore B008,EXE002
+PYTHONPATH=. python -m pytest app/tests/ -v
 ```
-*(La primera vez puede demorar unos minutos mientras descarga las imágenes de Node, Python y PostgreSQL, e instala las dependencias).*
 
-### Paso 4: Comprobación de salud
-Una vez que el terminal te confirme que los contenedores están `Started`, verifica el acceso:
-- **Backend API (Swagger UI):** [http://localhost:8000/docs](http://localhost:8000/docs)
-- **Frontend UI (React Dashboard):** [http://localhost:5173](http://localhost:5173)
-- **Ejecución de Pruebas Unitarias en el contenedor:**
-  ```bash
-  docker-compose exec backend pytest
-  ```
-  *(Asegura que todos los tests pasen, validando restricciones como la RN-EXI-01).*
+Los tests son herméticos (SQLite en memoria). Para correrlos contra Postgres definir `TEST_DATABASE_URL`
+apuntando a una base descartable cuyo nombre contenga `test` (el esquema se recrea en cada test); así corre el CI.
 
-### Paso 5: Apagado seguro
-Para detener la aplicación y limpiar los volúmenes efímeros, ejecuta:
+Frontend:
+
 ```bash
-docker-compose down -v
+cd frontend
+npm ci
+npx tsc --noEmit
+npm run build
 ```
 
----
-*Este prototipo incluye Integración Continua validada mediante GitHub Actions.*
+## Variables de entorno
+Ver `.env.example`. Opcionales del backend: `SQL_ECHO` (logs SQL) y `CORS_ORIGINS` (lista separada por comas).

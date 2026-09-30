@@ -1,11 +1,10 @@
 import axios from 'axios';
-import { Turno, Articulo, TurnoResumen } from '../types';
+import { Articulo, HabitacionConDetalles, Turno, TurnoResumen } from '../types';
 
-// @ts-ignore
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
 
 export const api = {
-  getHabitaciones: async (): Promise<any[]> => {
+  getHabitaciones: async (): Promise<HabitacionConDetalles[]> => {
     const response = await axios.get(`${API_URL}/habitaciones/`);
     return response.data;
   },

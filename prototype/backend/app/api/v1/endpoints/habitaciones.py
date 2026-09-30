@@ -56,7 +56,9 @@ async def update_estado(habitacion_id: int, estado_in: HabitacionEstadoUpdate, d
         raise HTTPException(status_code=404, detail="Habitación no encontrada")
         
     if habitacion.estado == "Ocupada":
-        raise HTTPException(status_code=400, detail="No se puede cambiar manualmente el estado de una habitación Ocupada")
+        raise HTTPException(
+            status_code=400, detail="No se puede cambiar manualmente el estado de una habitación Ocupada"
+        )
         
     habitacion.estado = estado_in.estado
     await db.commit()

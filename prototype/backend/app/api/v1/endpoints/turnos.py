@@ -1,6 +1,6 @@
 import math
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -32,7 +32,7 @@ async def create_turno(turno_in: TurnoCreate, db: AsyncSession = Depends(get_db)
         habitacion_id=turno_in.habitacion_id,
         identificador_vehicular=turno_in.identificador_vehicular,
         tipo_cliente=turno_in.tipo_cliente,
-        hora_inicio=datetime.now(timezone.utc),
+        hora_inicio=datetime.now(UTC),
         estado="En Curso",
         tarifa_base=12000,
         total_general=12000
@@ -58,7 +58,9 @@ async def add_consumo(turno_id: uuid.UUID, consumo_in: ConsumoCreate, db: AsyncS
         raise HTTPException(status_code=404, detail="Artículo no encontrado")
         
     if articulo.stock_actual < consumo_in.cantidad:
-        raise HTTPException(status_code=400, detail=f"RN-EXI-02: Stock insuficiente. Stock actual: {articulo.stock_actual}")
+        raise HTTPException(
+            status_code=400, detail=f"RN-EXI-02: Stock insuficiente. Stock actual: {articulo.stock_actual}"
+        )
 
     # Descontar stock
     articulo.stock_actual -= consumo_in.cantidad
@@ -89,10 +91,10 @@ async def get_resumen(turno_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Turno no encontrado")
         
     # Calcular RN-DER-01: Sobreturno
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     # Ensuring timezone aware subtraction
     if turno.hora_inicio.tzinfo is None:
-        start_time = turno.hora_inicio.replace(tzinfo=timezone.utc)
+        start_time = turno.hora_inicio.replace(tzinfo=UTC)
     else:
         start_time = turno.hora_inicio
         
@@ -116,7 +118,16 @@ async def get_resumen(turno_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
     
     resumen_dict = turno.__dict__.copy()
     resumen_dict["minutos_transcurridos"] = minutos_transcurridos
-    resumen_dict["consumos"] = [{"id": str(c.id), "articulo_id": c.articulo_id, "cantidad": c.cantidad, "precio_unitario": c.precio_unitario, "subtotal": c.subtotal} for c in consumos]
+    resumen_dict["consumos"] = [
+        {
+            "id": str(c.id),
+            "articulo_id": c.articulo_id,
+            "cantidad": c.cantidad,
+            "precio_unitario": c.precio_unitario,
+            "subtotal": c.subtotal,
+        }
+        for c in consumos
+    ]
     
     return TurnoResumen.model_validate(resumen_dict)
 
@@ -141,7 +152,7 @@ async def cerrar_turno(turno_id: uuid.UUID, pago_in: PagoCreate, db: AsyncSessio
     db.add(nuevo_pago)
     
     turno.estado = "FINALIZADO"
-    turno.hora_fin = datetime.now(timezone.utc)
+    turno.hora_fin = datetime.now(UTC)
     
     # Liberar habitacion -> Pasa a En Limpieza
     hab_res = await db.execute(select(Habitacion).where(Habitacion.id == turno.habitacion_id))

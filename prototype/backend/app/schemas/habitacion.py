@@ -1,23 +1,27 @@
+from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
+
+from app.schemas.turno import TurnoResponse
+
+EstadoHabitacion = Literal["Libre", "Ocupada", "En Limpieza", "Mantenimiento"]
 
 
 class HabitacionBase(BaseModel):
     numero: int
-    estado: str
+    estado: EstadoHabitacion
+
 
 class HabitacionCreate(HabitacionBase):
     pass
 
+
 class HabitacionEstadoUpdate(BaseModel):
     estado: str
 
-from app.schemas.turno import TurnoResponse
-
 
 class HabitacionResponse(HabitacionBase):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     turno_activo: TurnoResponse | None = None
-
-    class Config:
-        from_attributes = True

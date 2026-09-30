@@ -17,7 +17,7 @@ function App() {
     try {
       const data = await api.getHabitaciones();
       
-      const realData = data.map((h: any) => {
+      const realData = data.map((h) => {
          let tiempo_transcurrido = undefined;
          let excede_tiempo = false;
          

@@ -10,12 +10,11 @@ export interface Habitacion {
 export interface Turno {
   id?: string;
   habitacion_id: number;
-  identificador_vehicular: string;
+  identificador_vehicular?: string | null;
   tipo_cliente: TipoCliente;
   hora_inicio?: string;
   hora_fin?: string;
   estado?: string;
-  consumo_total?: number;
 }
 
 export interface Consumo {
