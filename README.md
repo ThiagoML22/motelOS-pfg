@@ -6,7 +6,7 @@ Proyecto Final de Grado de Ingeniería en Sistemas de Información, desarrollado
 | :--- | :--- |
 | **Institución** | Universidad de la Cuenca del Plata, Sede Posadas |
 | **Asignatura** | Proyecto Final de Grado, Comisión A |
-| **Autor** | Thiago Martino Leal (proyecto individual) |
+| **Autor** | Thiago Martino Leal |
 | **Organización cliente** | Motel C.C. |
 
 ## Estado del proyecto
