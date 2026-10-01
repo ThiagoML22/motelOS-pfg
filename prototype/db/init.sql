@@ -66,16 +66,54 @@ CREATE OR REPLACE FUNCTION check_turno_inmutable()
 RETURNS TRIGGER AS $$
 BEGIN
     IF OLD.estado IN ('FINALIZADO', 'Anulado') THEN
-        RAISE EXCEPTION 'RN-RES-01: No se puede modificar un turno finalizado o anulado.';
+        RAISE EXCEPTION 'RN-RES-01: No se puede modificar ni eliminar un turno finalizado o anulado.';
+    END IF;
+    IF TG_OP = 'DELETE' THEN
+        RETURN OLD;
     END IF;
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
 CREATE TRIGGER trigger_check_turno_inmutable
-BEFORE UPDATE ON turnos
+BEFORE UPDATE OR DELETE ON turnos
 FOR EACH ROW
 EXECUTE FUNCTION check_turno_inmutable();
+
+-- Los pagos son un registro de solo agregado: no admiten UPDATE ni DELETE.
+CREATE OR REPLACE FUNCTION check_pago_append_only()
+RETURNS TRIGGER AS $$
+BEGIN
+    RAISE EXCEPTION 'RN-RES-01: Los pagos registrados no se pueden modificar ni eliminar.';
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trigger_pagos_append_only
+BEFORE UPDATE OR DELETE ON pagos
+FOR EACH ROW
+EXECUTE FUNCTION check_pago_append_only();
+
+-- Los consumos de un turno cerrado o anulado tampoco pueden alterarse.
+CREATE OR REPLACE FUNCTION check_consumo_inmutable()
+RETURNS TRIGGER AS $$
+DECLARE
+    estado_turno VARCHAR(20);
+BEGIN
+    SELECT estado INTO estado_turno FROM turnos WHERE id = OLD.turno_id;
+    IF estado_turno IN ('FINALIZADO', 'Anulado') THEN
+        RAISE EXCEPTION 'RN-RES-01: No se puede modificar ni eliminar el consumo de un turno finalizado o anulado.';
+    END IF;
+    IF TG_OP = 'DELETE' THEN
+        RETURN OLD;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trigger_consumos_inmutables
+BEFORE UPDATE OR DELETE ON detalles_consumo
+FOR EACH ROW
+EXECUTE FUNCTION check_consumo_inmutable();
 
 -- Seeds iniciales
 INSERT INTO habitaciones (numero, estado) VALUES 

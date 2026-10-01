@@ -54,6 +54,15 @@ jobs:
           TEST_DATABASE_URL: "postgresql+asyncpg://postgres:postgres@localhost:5432/motel_test"
         run: PYTHONPATH=. python -m pytest app/tests/ -v
 
+      - name: Verificar esquema SQL e inmutabilidad (RN-RES-01)
+        working-directory: ./prototype
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c "CREATE DATABASE motel_schema;"
+          psql -h localhost -U postgres -d motel_schema -v ON_ERROR_STOP=1 -q -f db/init.sql
+          psql -h localhost -U postgres -d motel_schema -v ON_ERROR_STOP=1 -f db/verify_inmutabilidad.sql
+
   frontend:
     runs-on: ubuntu-latest
     defaults:

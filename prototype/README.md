@@ -51,6 +51,13 @@ cp .env.example .env
 docker compose up --build -d
 ```
 
+La primera ejecución descarga las imágenes y compila los servicios, por lo que puede demorar algunos minutos; el frontend responde unos segundos después de iniciarse. Para detener el sistema se usa `docker compose down`, y `docker compose down -v` lo detiene y elimina la base de datos para reiniciar desde cero.
+
+**Problemas frecuentes**
+* **Puertos ocupados (5173, 8000 o 5432):** detener el servicio que los utiliza o cambiar los puertos publicados en `docker-compose.yml`.
+* **Esquema desactualizado:** `db/init.sql` se ejecuta únicamente cuando el volumen de la base de datos está vacío. Si se levantó antes otra versión, ejecutar `docker compose down -v` y volver a iniciar.
+* **Acceso desde otra dirección:** el backend acepta peticiones del frontend solo desde `http://localhost:5173` (variable `CORS_ORIGINS`).
+
 ---
 
 ## 5. Configuración de Variables de Entorno
@@ -95,7 +102,11 @@ Para validar el circuito de extremo a extremo y comprobar que el dato viaja, se 
    * Verifique que el sistema calcula el valor base más los sobreturnos transcurridos según `RN-DER-01` (`RF-03`): 120 minutos de estadía base, 10 minutos de tolerancia y, superada esta, fracciones de 30 minutos (o porción) medidas desde el fin de la estadía base. La liquidación está implementada en `backend/app/services/billing_service.py`.
    * Seleccione el medio de pago (**Efectivo**, **Posnet** o **Mercado Pago**; en los dos últimos se exige el número de comprobante) y presione **Confirmar cobro de $ X**. El sistema liquida el total adeudado vigente (`RF-06`); en esta versión no se admiten cobros parciales ni mixtos.
    * Al confirmar con saldo adeudado en $0, la habitación pasa a estado **En Limpieza** (amarillo) y el turno queda formalmente en estado `FINALIZADO`.
-   * **Verificación de Inmutabilidad (`RN-RES-01` / `RNF-01`):** La base de datos activa el trigger `trigger_check_turno_inmutable`. Cualquier intento de modificar (`UPDATE`) o eliminar (`DELETE`) el turno cerrado desde una sentencia SQL será bloqueado a nivel motor emitiendo un error de violación de regla.
+   * **Verificación de Inmutabilidad (`RN-RES-01` / `RNF-01`):** La base de datos activa los triggers `trigger_check_turno_inmutable`, `trigger_pagos_append_only` y `trigger_consumos_inmutables`. Cualquier intento de modificar (`UPDATE`) o eliminar (`DELETE`) el turno cerrado, sus pagos o sus consumos desde una sentencia SQL será bloqueado a nivel motor emitiendo un error de violación de regla. Puede comprobarse con:
+
+     ```bash
+     docker exec motel_db psql -U postgres -d motel_db -c "UPDATE turnos SET total_general = 1 WHERE estado = 'FINALIZADO';"
+     ```
 
 ---
 
@@ -108,6 +119,7 @@ El repositorio cuenta con integración continua activa mediante **GitHub Actions
   2. Servicio de base de datos `PostgreSQL 16` real instanciado durante el pipeline.
   3. Análisis estático de código y formato con **Ruff** (`ruff check app/`).
   4. Suite de **43 pruebas automatizadas con Pytest** (`pytest app/tests/ -v`) que validan formalmente los criterios de aceptación del catálogo.
+  5. Aplicación de `db/init.sql` sobre un PostgreSQL real y verificación de la inmutabilidad de los registros cerrados (`db/verify_inmutabilidad.sql`).
 * **Tareas Verificadas en el Frontend:**
   1. Entorno de compilación sobre `Node.js 20`.
   2. Verificación estricta de tipos con TypeScript (`tsc --noEmit`).
