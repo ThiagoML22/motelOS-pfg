@@ -45,7 +45,8 @@ cd motelOS-pfg
 # 2. Posicionarse en la etiqueta v1 correspondiente a la entrega de la AE2
 git checkout v1
 
-# 3. Crear el archivo de variables de entorno a partir del archivo de ejemplo
+# 3. Ingresar al directorio del prototipo y crear el archivo de variables de entorno
+cd prototype
 cp .env.example .env
 
 # 4. Construir las imágenes y levantar los tres contenedores en segundo plano
