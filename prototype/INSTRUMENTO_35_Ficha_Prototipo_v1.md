@@ -34,7 +34,7 @@
 | **Decisión arquitectónica que este recorrido prueba** | Arquitectura desacoplada cliente-servidor (React + FastAPI) con esquema relacional inmutable gobernado por triggers en PostgreSQL 16 para supresión de fraudes y discrepancias de caja. |
 | **Alternativas evaluadas y criterio de descarte** | Se evaluó SQLite y MongoDB; se descartaron por carecer de soporte nativo para Row-Level Security (RLS) y triggers robustos de inmutabilidad transaccional requeridos para auditoría financiera. |
 | **Etiqueta del repositorio** | `v1` (publicada en rama `main`). |
-| **Fecha de la última corrida exitosa del canal CI** | 30 de septiembre de 2026 (corrida de GitHub Actions n.º 36725171762 en verde: 27 tests, `ruff`, `tsc` y build de Vite). Actualizar si se registra una corrida posterior. |
+| **Fecha de la última corrida exitosa del canal CI** | 1 de octubre de 2026 (corrida de GitHub Actions n.º 36934362128 en verde: 27 tests contra PostgreSQL 16, `ruff`, `tsc` y build de Vite). La etiqueta `v1` apunta a un commit que solo agrega esta ficha sobre esa corrida. |
 
 ---
 
