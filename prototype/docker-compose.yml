@@ -28,6 +28,8 @@ services:
     restart: always
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-motel_db}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
+      SQL_ECHO: ${SQL_ECHO:-False}
     ports:
       - "8000:8000"
     depends_on:
