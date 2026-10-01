@@ -6,7 +6,7 @@ Proyecto Final de Grado de Ingeniería en Sistemas de Información, desarrollado
 | :--- | :--- |
 | **Institución** | Universidad de la Cuenca del Plata, Sede Posadas |
 | **Asignatura** | Proyecto Final de Grado, Comisión A |
-| **Equipo** | Grupo N.º 3: Thiago Martino Leal y Lautaro Geneyro |
+| **Autor** | Thiago Martino Leal (proyecto individual) |
 | **Organización cliente** | Motel C.C. |
 
 ## Estado del proyecto
@@ -15,7 +15,7 @@ Proyecto Final de Grado de Ingeniería en Sistemas de Información, desarrollado
 | :--- | :--- | :--- |
 | AE1 | Definición del proyecto, relevamiento de campo, investigación de mercado y prototipo de interfaz (v0) | Entregada |
 | AE2 | Prototipo v1 ejecutable de punta a punta, con integración continua (etiqueta `v1`) | Publicada |
-| Siguiente | Servicio de liquidación temporal, autenticación con roles y cierre de caja ciego | Planificada |
+| Siguiente | Autenticación con roles, cierre de caja ciego e integración con medios de pago | Planificada |
 
 El prototipo v1 cubre el circuito completo de un turno: apertura de habitación, registro de consumos con descuento atómico de stock, liquidación y cobro, y cierre inmutable.
 
@@ -52,7 +52,7 @@ La aplicación queda disponible en `http://localhost:5173` y la documentación i
 | RN-EXI-01 | Solo una habitación libre puede iniciar un turno | Implementada |
 | RN-EXI-02 | Descuento atómico de stock al registrar un consumo | Implementada |
 | RN-EXI-03 | El turno solo se cierra con saldo cero | Implementada para pago único; sin pagos parciales |
-| RN-DER-01 | Tarifa base de 120 minutos y sobreturno por fracciones de 30 minutos | Parcial: falta la tolerancia de 10 minutos |
+| RN-DER-01 | Tarifa base de 120 minutos, tolerancia de 10 minutos y sobreturno por fracciones de 30 minutos | Implementada en un servicio puro del backend |
 | RN-RES-01 | Inmutabilidad de los turnos finalizados | Implementada en la base de datos mediante trigger |
 | RNF-03 | No se almacenan datos personales de los clientes | Implementada |
 | RN-CAJA-01 | Cierre de caja ciego | Pendiente |

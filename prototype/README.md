@@ -8,9 +8,7 @@
 * **Asignatura:** Proyecto Final de Grado (Codificación: `ISI-PFG-2026C2-AE2-v02`)
 * **Comisión y Sede:** Comisión A · Sede Posadas · Universidad de la Cuenca del Plata
 * **Docente Titular:** PosDr. Darío Ezequiel Díaz
-* **Equipo de Desarrollo:** Grupo N.º 3
-  * **Thiago Martino Leal** (Líder Técnico y Gestión de Configuración)
-  * **Lautaro Geneyro** (Análisis Funcional y Validación)
+* **Autor:** Thiago Martino Leal (proyecto individual)
 * **Actividad y Etiqueta:** Actividad de Evaluación N.º 2 (AE2) · Etiqueta Git: `v1`
 
 ---
@@ -94,7 +92,7 @@ Para validar el circuito de extremo a extremo y comprobar que el dato viaja, se 
    * **Resultado observable:** El backend valida la existencia de inventario (`RN-EXI-02`), descuenta atómicamente el stock del artículo y suma el subtotal al importe adeudado del turno (`RF-04`).
 4. **Estación 4 (Persistencia y Retorno - Liquidación y Cierre Inmutable):**
    * En el diálogo de la habitación, presione **Cobrar**.
-   * Verifique que el sistema calcula el valor base más los sobreturnos transcurridos según `RN-DER-01` (`RF-03`).
+   * Verifique que el sistema calcula el valor base más los sobreturnos transcurridos según `RN-DER-01` (`RF-03`): 120 minutos de estadía base, 10 minutos de tolerancia y, superada esta, fracciones de 30 minutos (o porción) medidas desde el fin de la estadía base. La liquidación está implementada en `backend/app/services/billing_service.py`.
    * Seleccione el medio de pago (**Efectivo**, **Posnet** o **Mercado Pago**; en los dos últimos se exige el número de comprobante) y presione **Confirmar cobro de $ X**. El sistema liquida el total adeudado vigente (`RF-06`); en esta versión no se admiten cobros parciales ni mixtos.
    * Al confirmar con saldo adeudado en $0, la habitación pasa a estado **En Limpieza** (amarillo) y el turno queda formalmente en estado `FINALIZADO`.
    * **Verificación de Inmutabilidad (`RN-RES-01` / `RNF-01`):** La base de datos activa el trigger `trigger_check_turno_inmutable`. Cualquier intento de modificar (`UPDATE`) o eliminar (`DELETE`) el turno cerrado desde una sentencia SQL será bloqueado a nivel motor emitiendo un error de violación de regla.
@@ -109,7 +107,7 @@ El repositorio cuenta con integración continua activa mediante **GitHub Actions
   1. Entorno de ejecución en contenedor sobre `Python 3.12`.
   2. Servicio de base de datos `PostgreSQL 16` real instanciado durante el pipeline.
   3. Análisis estático de código y formato con **Ruff** (`ruff check app/`).
-  4. Suite de **27 pruebas automatizadas con Pytest** (`pytest app/tests/ -v`) que validan formalmente los criterios de aceptación del catálogo.
+  4. Suite de **43 pruebas automatizadas con Pytest** (`pytest app/tests/ -v`) que validan formalmente los criterios de aceptación del catálogo.
 * **Tareas Verificadas en el Frontend:**
   1. Entorno de compilación sobre `Node.js 20`.
   2. Verificación estricta de tipos con TypeScript (`tsc --noEmit`).
@@ -119,7 +117,6 @@ El repositorio cuenta con integración continua activa mediante **GitHub Actions
 ---
 
 ## 8. Limitaciones Conocidas de esta Versión
-* **`RN-DER-01` (tolerancia):** el cálculo del sobreturno aplica fracciones de 30 minutos a partir de los 120 minutos, pero todavía no incorpora la tolerancia de 10 minutos. Está planificado para el Sprint 3, junto con la extracción del cálculo a un servicio puro del backend (`billing_service.py`).
 * **Cobros:** un único pago por turno que cubre el total; no hay pagos parciales ni mixtos.
 * **Cierre de caja ciego, autenticación (JWT y roles) e integración con Mercado Pago/POSNET:** previstos para los Sprints 3 y 4. El medio de pago se registra, pero no hay integración con terminales.
 
@@ -129,6 +126,6 @@ El repositorio cuenta con integración continua activa mediante **GitHub Actions
 En estricto cumplimiento del **Protocolo de Uso Autorizado de Inteligencia Artificial** (Apartado 27.2 de la Guía Docente y Apartado 12 de la Consigna AE2):
 
 * **Herramientas empleadas:** Asistentes de generación de código integrados en el entorno de desarrollo (Claude Code / Antigravity).
-* **Alcance del uso:** Aceleración del andamiaje arquitectónico inicial (configuración de `docker-compose.yml` y `Dockerfile`, scripts de inicialización de esquema SQL en `db/init.sql`, datos de prueba en `backend/seed.py` y pipeline de GitHub Actions en `ci.yml`) y, en etapas posteriores, la suite de pruebas automatizadas (`backend/app/tests/`), las validaciones de esquemas del backend y el rediseño de la interfaz del frontend (componentes React y estilos Tailwind).
-* **Límites observados:** No se empleó inteligencia artificial generativa para redactar la prosa del informe, los capítulos III, IV, V y X, las bitácoras individuales, ni para justificar decisiones técnicas o de delimitación de alcance. La totalidad de las reglas de negocio, el modelado del dominio y la especificación de requisitos fueron determinados por los integrantes sobre la base del relevamiento empírico de campo.
-* **Control humano:** Todo fragmento de código asistido fue inspeccionado, refactorizado y sometido a pruebas automatizadas de aceptación por los autores del proyecto antes de su incorporación al repositorio.
+* **Alcance del uso:** Aceleración del andamiaje arquitectónico inicial (configuración de `docker-compose.yml` y `Dockerfile`, scripts de inicialización de esquema SQL en `db/init.sql`, datos de prueba en `backend/seed.py` y pipeline de GitHub Actions en `ci.yml`) y, en etapas posteriores, la suite de pruebas automatizadas (`backend/app/tests/`), las validaciones de esquemas del backend, el servicio de liquidación temporal y el rediseño de la interfaz del frontend (componentes React y estilos Tailwind).
+* **Límites observados:** No se empleó inteligencia artificial generativa para redactar la prosa del informe, los capítulos III, IV, V y X, las bitácoras individuales, ni para justificar decisiones técnicas o de delimitación de alcance. La totalidad de las reglas de negocio, el modelado del dominio y la especificación de requisitos fueron determinados por el autor sobre la base del relevamiento empírico de campo.
+* **Control humano:** Todo fragmento de código asistido fue inspeccionado, refactorizado y sometido a pruebas automatizadas de aceptación por el autor antes de su incorporación al repositorio.

@@ -1,4 +1,3 @@
-import math
 import uuid
 from datetime import UTC, datetime
 
@@ -14,8 +13,13 @@ from app.models.pago import Pago
 from app.models.turno import Turno
 from app.schemas.articulo import ConsumoCreate
 from app.schemas.turno import PagoCreate, TurnoCreate, TurnoResponse, TurnoResumen
+from app.services.billing_service import TARIFA_BASE, calcular_sobreturno
 
 router = APIRouter()
+
+
+def _utc(valor: datetime) -> datetime:
+    return valor if valor.tzinfo else valor.replace(tzinfo=UTC)
 
 @router.post("/", response_model=TurnoResponse, status_code=status.HTTP_201_CREATED)
 async def create_turno(turno_in: TurnoCreate, db: AsyncSession = Depends(get_db)):
@@ -34,8 +38,8 @@ async def create_turno(turno_in: TurnoCreate, db: AsyncSession = Depends(get_db)
         tipo_cliente=turno_in.tipo_cliente,
         hora_inicio=datetime.now(UTC),
         estado="En Curso",
-        tarifa_base=12000,
-        total_general=12000
+        tarifa_base=TARIFA_BASE,
+        total_general=TARIFA_BASE
     )
     db.add(nuevo_turno)
     habitacion.estado = "Ocupada"
@@ -90,27 +94,18 @@ async def get_resumen(turno_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
     if not turno:
         raise HTTPException(status_code=404, detail="Turno no encontrado")
         
-    # Calcular RN-DER-01: Sobreturno
-    now = datetime.now(UTC)
-    # Ensuring timezone aware subtraction
-    if turno.hora_inicio.tzinfo is None:
-        start_time = turno.hora_inicio.replace(tzinfo=UTC)
-    else:
-        start_time = turno.hora_inicio
-        
-    diff = now - start_time
-    minutos_transcurridos = int(diff.total_seconds() / 60)
-    
-    if minutos_transcurridos > 120:
-        excedente = minutos_transcurridos - 120
-        fracciones = math.ceil(excedente / 30.0)
-        turno.total_sobreturno = fracciones * 3500
-        turno.total_general = turno.tarifa_base + turno.total_sobreturno + turno.total_consumos
-        # Persist just in case, or we can just calculate on the fly. 
-        # Usually better to persist when closing, but let's update DB.
-        db.add(turno)
-        await db.commit()
-        await db.refresh(turno)
+    # RN-DER-01: la liquidación temporal se delega en un servicio puro.
+    fin = _utc(turno.hora_fin) if turno.hora_fin else datetime.now(UTC)
+    duracion = fin - _utc(turno.hora_inicio)
+    minutos_transcurridos = int(duracion.total_seconds() / 60)
+
+    if turno.estado == "En Curso":
+        sobreturno = calcular_sobreturno(duracion)
+        if sobreturno != turno.total_sobreturno:
+            turno.total_sobreturno = sobreturno
+            turno.total_general = turno.tarifa_base + sobreturno + turno.total_consumos
+            await db.commit()
+            await db.refresh(turno)
     
     # Obtener consumos
     cons_res = await db.execute(select(Consumo).where(Consumo.turno_id == turno_id))
