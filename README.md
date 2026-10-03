@@ -51,8 +51,8 @@ La aplicación queda disponible en `http://localhost:5173` y la documentación i
 | :--- | :--- | :--- |
 | RN-EXI-01 | Solo una habitación libre puede iniciar un turno | Implementada |
 | RN-EXI-02 | Descuento atómico de stock al registrar un consumo | Implementada |
-| RN-EXI-03 | El turno solo se cierra con saldo cero | Implementada para pago único; sin pagos parciales |
-| RN-DER-01 | Tarifa base de 120 minutos, tolerancia de 10 minutos y sobreturno por fracciones de 30 minutos | Implementada en un servicio puro del backend |
+| RN-EXI-03 | El turno solo se cierra, y la habitación solo pasa a limpieza, con saldo exactamente cero | Implementada, con cobro desglosado por medio de pago |
+| RN-DER-01 | Tarifa base de 120 minutos ($8.000) y sobreturno por fracciones de 30 minutos ($2.500) | Implementada en un servicio puro, con los importes en la entidad Tarifa |
 | RN-RES-01 | Inmutabilidad de los turnos finalizados | Implementada en la base de datos mediante trigger |
 | RNF-03 | No se almacenan datos personales de los clientes | Implementada |
 | RN-CAJA-01 | Cierre de caja ciego | Pendiente |

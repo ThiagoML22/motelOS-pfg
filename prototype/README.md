@@ -92,16 +92,17 @@ Para validar el circuito de extremo a extremo y comprobar que el dato viaja, se 
 2. **Estación 2 (Lógica y Entrada - Apertura de Turno):**
    * Haga clic sobre cualquier habitación en estado **Disponible** (indicador verde, ej. Hab. 01).
    * En el diálogo de apertura, seleccione el tipo de cliente (`Auto`), opcionalmente ingrese una patente vehicular transitoria (ej. `AE987CD`) y presione **Ocupar habitación**. No se registra ningún dato personal del cliente (`RNF-03`).
-   * **Resultado observable:** La API FastAPI valida la regla de existencia `RN-EXI-01` (solo habitaciones libres pueden iniciar turno), genera el identificador único transaccional, captura el timestamp automático sin permitir edición manual (`RF-02`) y transiciona la habitación a estado **Ocupada** (indicador azul; el cronómetro pasa a rojo cuando se excede la estadía base) en la interfaz.
+   * **Resultado observable:** La API FastAPI valida la regla de existencia `RN-EXI-01` (solo habitaciones libres pueden iniciar turno), genera el identificador único transaccional, captura el timestamp automático sin permitir edición manual (`RF-02`) y transiciona la habitación a estado **Ocupada** (indicador rojo; el cronómetro y la etiqueta «Excedido» señalan cuando se supera la estadía base) en la interfaz.
 3. **Estación 3 (Lógica Transaccional - Despacho de Consumición):**
    * En la tarjeta de la habitación ocupada presione **Agregar producto** (o abra la habitación y use **Agregar productos**).
    * Seleccione la cantidad de un producto del catálogo (ej. "Agua Mineral 500ml") y presione **Guardar en la cuenta**.
    * **Resultado observable:** El backend valida la existencia de inventario (`RN-EXI-02`), descuenta atómicamente el stock del artículo y suma el subtotal al importe adeudado del turno (`RF-04`).
 4. **Estación 4 (Persistencia y Retorno - Liquidación y Cierre Inmutable):**
    * En el diálogo de la habitación, presione **Cobrar**.
-   * Verifique que el sistema calcula el valor base más los sobreturnos transcurridos según `RN-DER-01` (`RF-03`): 120 minutos de estadía base, 10 minutos de tolerancia y, superada esta, fracciones de 30 minutos (o porción) medidas desde el fin de la estadía base. La liquidación está implementada en `backend/app/services/billing_service.py`.
-   * Seleccione el medio de pago (**Efectivo**, **Posnet** o **Mercado Pago**; en los dos últimos se exige el número de comprobante) y presione **Confirmar cobro de $ X**. El sistema liquida el total adeudado vigente (`RF-06`); en esta versión no se admiten cobros parciales ni mixtos.
-   * Al confirmar con saldo adeudado en $0, la habitación pasa a estado **En Limpieza** (amarillo) y el turno queda formalmente en estado `FINALIZADO`.
+   * Verifique que el sistema calcula la tarifa base ($8.000 por 120 minutos) más los sobreturnos según `RN-DER-01` (`RF-03`): superados los 120 minutos, cada fracción de 30 minutos (o porción) suma $2.500. Los importes y parámetros se guardan en la entidad `Tarifa` (tabla `tarifas`) y el cálculo está en `backend/app/services/billing_service.py`.
+   * Intente **Liberar a limpieza** con la cuenta sin saldar: el sistema rechaza la operación, mantiene la habitación en **Ocupada** y resalta el saldo pendiente (`RF-07`, `RN-EXI-03`).
+   * Presione **Cobrar** y registre el desglose del cobro en **Efectivo** y/o **Cupón POSNET** (o **Mercado Pago**), con el número de comprobante de los medios electrónicos, de modo que la suma cubra exactamente el saldo. Presione **Confirmar cobro de $ X** (`RF-06`).
+   * Al confirmar con saldo adeudado en $0, el sistema crea un registro de pago por cada medio, emite la **constancia de cobro** (imprimible), la habitación pasa a estado **En Limpieza** (amarillo) y el turno queda formalmente en estado `FINALIZADO`.
    * **Verificación de Inmutabilidad (`RN-RES-01` / `RNF-01`):** La base de datos activa los triggers `trigger_check_turno_inmutable`, `trigger_pagos_append_only` y `trigger_consumos_inmutables`. Cualquier intento de modificar (`UPDATE`) o eliminar (`DELETE`) el turno cerrado, sus pagos o sus consumos desde una sentencia SQL será bloqueado a nivel motor emitiendo un error de violación de regla. Puede comprobarse con:
 
      ```bash
@@ -118,7 +119,7 @@ El repositorio cuenta con integración continua activa mediante **GitHub Actions
   1. Entorno de ejecución en contenedor sobre `Python 3.12`.
   2. Servicio de base de datos `PostgreSQL 16` real instanciado durante el pipeline.
   3. Análisis estático de código y formato con **Ruff** (`ruff check app/`).
-  4. Suite de **43 pruebas automatizadas con Pytest** (`pytest app/tests/ -v`) que validan formalmente los criterios de aceptación del catálogo.
+  4. Suite de **52 pruebas automatizadas con Pytest** (`pytest app/tests/ -v`) que validan formalmente los criterios de aceptación del catálogo.
   5. Aplicación de `db/init.sql` sobre un PostgreSQL real y verificación de la inmutabilidad de los registros cerrados (`db/verify_inmutabilidad.sql`).
 * **Tareas Verificadas en el Frontend:**
   1. Entorno de compilación sobre `Node.js 20`.
@@ -129,7 +130,7 @@ El repositorio cuenta con integración continua activa mediante **GitHub Actions
 ---
 
 ## 8. Limitaciones Conocidas de esta Versión
-* **Cobros:** un único pago por turno que cubre el total; no hay pagos parciales ni mixtos.
+* **Cobros:** el turno se liquida en un único acto, con un desglose que cubre exactamente el saldo; no se admiten pagos parciales a cuenta.
 * **Cierre de caja ciego, autenticación (JWT y roles) e integración con Mercado Pago/POSNET:** previstos para los Sprints 3 y 4. El medio de pago se registra, pero no hay integración con terminales.
 
 ---
