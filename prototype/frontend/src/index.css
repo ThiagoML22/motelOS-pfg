@@ -24,10 +24,10 @@
 
   --libre: 23 115 84;
   --libre-soft: 231 243 238;
-  --ocupada: 176 42 42;
-  --ocupada-soft: 251 233 233;
-  --limpieza: 176 112 0;
-  --limpieza-soft: 253 246 210;
+  --ocupada: 48 82 140;
+  --ocupada-soft: 232 238 248;
+  --limpieza: 146 90 8;
+  --limpieza-soft: 252 243 224;
   --mant: 88 98 112;
   --mant-soft: 236 239 243;
   --warn: 146 90 8;
@@ -40,6 +40,21 @@
   /* Retroalimentación al presionar: leve hundimiento con transición suave. */
   .press {
     @apply transition duration-150 ease-out active:scale-[0.97];
+  }
+
+  /* Amplía el área de clic a 44x44 px (RNF-05) sin cambiar el tamaño visual del control. */
+  .hit {
+    position: relative;
+  }
+
+  .hit::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: max(100%, 44px);
+    height: max(100%, 44px);
+    transform: translate(-50%, -50%);
   }
 }
 

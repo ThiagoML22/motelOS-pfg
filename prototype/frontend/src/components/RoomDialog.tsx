@@ -38,7 +38,7 @@ const TIPOS: { value: TipoCliente; label: string; icon: React.ElementType }[] = 
 
 const MEDIOS: { value: MedioPago; label: string; comprobante: string; icon: React.ElementType }[] = [
   { value: 'EFECTIVO', label: 'Efectivo', comprobante: '', icon: Banknote },
-  { value: 'POSNET', label: 'Cupón POSNET', comprobante: 'Nº de cupón POSNET', icon: CreditCard },
+  { value: 'POSNET', label: 'Posnet', comprobante: 'Nº de cupón POSNET', icon: CreditCard },
   { value: 'MERCADO_PAGO', label: 'Mercado Pago', comprobante: 'Nº de comprobante', icon: Receipt },
 ];
 
@@ -77,6 +77,9 @@ const RoomDialog: React.FC<RoomDialogProps> = ({
   const [montos, setMontos] = useState<Montos>(VACIO);
   const [comprobantes, setComprobantes] = useState<Montos>(VACIO);
   const [errorCobro, setErrorCobro] = useState('');
+  const [dividir, setDividir] = useState(false);
+  const [medioUnico, setMedioUnico] = useState<MedioPago>('EFECTIVO');
+  const [comprobanteUnico, setComprobanteUnico] = useState('');
   const [constancia, setConstancia] = useState<ConstanciaCobro | null>(null);
   const [enviando, setEnviando] = useState(false);
 
@@ -145,17 +148,19 @@ const RoomDialog: React.FC<RoomDialogProps> = ({
 
   const cobrar = async () => {
     if (!resumen) return;
-    const pagos: PagoItem[] = MEDIOS.filter((m) => aCentavos(montos[m.value]) > 0).map((m) => ({
-      medio_pago: m.value,
-      monto: aCentavos(montos[m.value]) / 100,
-      comprobante_referencia: comprobantes[m.value].trim() || undefined,
-    }));
+    const pagos: PagoItem[] = dividir
+      ? MEDIOS.filter((m) => aCentavos(montos[m.value]) > 0).map((m) => ({
+          medio_pago: m.value,
+          monto: aCentavos(montos[m.value]) / 100,
+          comprobante_referencia: comprobantes[m.value].trim() || undefined,
+        }))
+      : [{ medio_pago: medioUnico, monto: saldoCent / 100, comprobante_referencia: comprobanteUnico.trim() || undefined }];
     const sinComprobante = pagos.find((p) => p.medio_pago !== 'EFECTIVO' && !p.comprobante_referencia);
     if (sinComprobante) {
       setErrorCobro(`Ingrese el número de comprobante de ${etiquetaMedio(sinComprobante.medio_pago)}.`);
       return;
     }
-    if (restanteCent !== 0) {
+    if (dividir && restanteCent !== 0) {
       setErrorCobro('El desglose debe cubrir exactamente el saldo pendiente.');
       return;
     }
@@ -494,9 +499,9 @@ const RoomDialog: React.FC<RoomDialogProps> = ({
                     aria-label={`Quitar una unidad de ${art.descripcion}`}
                     disabled={qty === 0}
                     onClick={() => changeQty(art, -1)}
-                    className="press flex h-11 w-11 items-center justify-center text-muted hover:text-ink disabled:opacity-40 disabled:active:scale-100"
+                    className="press hit p-2 text-muted hover:text-ink disabled:opacity-40 disabled:active:scale-100"
                   >
-                    <Minus className="h-4 w-4" aria-hidden="true" />
+                    <Minus className="h-3.5 w-3.5" aria-hidden="true" />
                   </button>
                   <span className="w-8 text-center text-sm font-medium tabular-nums" aria-live="polite">
                     {qty}
@@ -506,9 +511,9 @@ const RoomDialog: React.FC<RoomDialogProps> = ({
                     aria-label={`Agregar una unidad de ${art.descripcion}`}
                     disabled={qty >= art.stock_actual}
                     onClick={() => changeQty(art, 1)}
-                    className="press flex h-11 w-11 items-center justify-center text-muted hover:text-ink disabled:opacity-40 disabled:active:scale-100"
+                    className="press hit p-2 text-muted hover:text-ink disabled:opacity-40 disabled:active:scale-100"
                   >
-                    <Plus className="h-4 w-4" aria-hidden="true" />
+                    <Plus className="h-3.5 w-3.5" aria-hidden="true" />
                   </button>
                 </div>
               </li>
@@ -547,10 +552,71 @@ const RoomDialog: React.FC<RoomDialogProps> = ({
     body = (
       <div className="space-y-6">
         <div className="rounded-md border border-line bg-surface-2 px-4 py-4">
-          <p className="text-xs font-medium uppercase tracking-wide text-subtle">Saldo a cobrar</p>
+          <p className="text-xs font-medium uppercase tracking-wide text-subtle">Total a cobrar</p>
           <p className="mt-1 text-3xl font-semibold tabular-nums text-ink">{formatMoney(resumen.saldo_pendiente)}</p>
         </div>
 
+        {!dividir && (
+          <>
+            <div>
+              <SectionTitle>Medio de pago</SectionTitle>
+              <div role="radiogroup" aria-label="Medio de pago" className="grid grid-cols-3 gap-2">
+                {MEDIOS.map(({ value, label, icon: Icon }) => (
+                  <button
+                    key={value}
+                    type="button"
+                    role="radio"
+                    aria-checked={medioUnico === value}
+                    onClick={() => {
+                      setMedioUnico(value);
+                      setErrorCobro('');
+                    }}
+                    className={`flex flex-col items-center gap-1.5 rounded-md border px-2 py-3 text-center text-sm press ${
+                      medioUnico === value
+                        ? 'border-accent bg-accent-soft font-medium text-accent'
+                        : 'border-line-strong bg-surface text-muted hover:text-ink'
+                    }`}
+                  >
+                    <Icon className="h-5 w-5" aria-hidden="true" />
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {medioUnico !== 'EFECTIVO' && (
+              <Field label="Nº de comprobante / lote" htmlFor="comprobante-unico" error={errorCobro}>
+                <input
+                  id="comprobante-unico"
+                  data-autofocus
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  placeholder="000123456"
+                  className={`${inputClass} font-mono`}
+                  value={comprobanteUnico}
+                  onChange={(e) => {
+                    setComprobanteUnico(e.target.value);
+                    setErrorCobro('');
+                  }}
+                />
+              </Field>
+            )}
+
+            <button
+              type="button"
+              onClick={() => {
+                setDividir(true);
+                setErrorCobro('');
+              }}
+              className="hit text-sm text-accent underline-offset-2 hover:underline"
+            >
+              Dividir el pago entre medios
+            </button>
+          </>
+        )}
+
+        {dividir && (
         <div>
           <SectionTitle>Desglose del cobro</SectionTitle>
           <div className="space-y-3">
@@ -606,17 +672,32 @@ const RoomDialog: React.FC<RoomDialogProps> = ({
             })}
           </div>
         </div>
+        )}
 
-        <div className="flex items-baseline justify-between text-sm" aria-live="polite">
-          <span className="text-muted">
-            Asignado <span className="tabular-nums text-ink">{formatMoney(asignadoCent / 100)}</span>
-          </span>
-          <span className={restanteCent === 0 ? 'font-medium text-libre' : 'font-medium text-danger'}>
-            {restanteCent === 0 ? 'Saldo cubierto' : `Resta ${formatMoney(restanteCent / 100)}`}
-          </span>
-        </div>
+        {dividir && (
+          <>
+            <div className="flex items-baseline justify-between text-sm" aria-live="polite">
+              <span className="text-muted">
+                Asignado <span className="tabular-nums text-ink">{formatMoney(asignadoCent / 100)}</span>
+              </span>
+              <span className={restanteCent === 0 ? 'font-medium text-libre' : 'font-medium text-danger'}>
+                {restanteCent === 0 ? 'Saldo cubierto' : `Resta ${formatMoney(restanteCent / 100)}`}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setDividir(false);
+                setErrorCobro('');
+              }}
+              className="hit text-sm text-accent underline-offset-2 hover:underline"
+            >
+              Volver a un solo medio de pago
+            </button>
+          </>
+        )}
 
-        {errorCobro && (
+        {dividir && errorCobro && (
           <p role="alert" className="text-sm font-medium text-danger">
             {errorCobro}
           </p>
@@ -628,7 +709,7 @@ const RoomDialog: React.FC<RoomDialogProps> = ({
         <Button variant="secondary" className="flex-1" disabled={enviando} onClick={() => setVista('cuenta')}>
           Volver
         </Button>
-        <Button className="flex-[2]" disabled={enviando || restanteCent !== 0 || saldoCent === 0} onClick={() => void cobrar()}>
+        <Button className="flex-[2]" disabled={enviando || saldoCent === 0 || (dividir && restanteCent !== 0)} onClick={() => void cobrar()}>
           Confirmar cobro de {formatMoney(saldoCent / 100)}
         </Button>
       </div>

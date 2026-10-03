@@ -39,7 +39,7 @@ const TopNav: React.FC<TopNavProps> = ({ activeView, setActiveView, online, now 
                 onClick={() => setActiveView(view)}
                 aria-current={active ? 'page' : undefined}
                 aria-label={label}
-                className={`press flex min-w-11 items-center justify-center gap-2 border-b-2 px-2.5 text-sm sm:px-3 ${
+                className={`press flex items-center gap-2 border-b-2 px-2.5 text-sm sm:px-3 ${
                   active
                     ? 'border-accent font-medium text-ink'
                     : 'border-transparent text-muted hover:text-ink'

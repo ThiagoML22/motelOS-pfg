@@ -246,13 +246,13 @@ const InventarioView: React.FC = () => {
               <span className="tabular-nums">{visibles.length}</span> de{' '}
               <span className="tabular-nums">{articulos.length}</span>
               {hayFiltros && (
-                <button type="button" onClick={limpiarFiltros} className="ml-3 inline-flex min-h-11 items-center text-accent underline-offset-2 hover:underline">
+                <button type="button" onClick={limpiarFiltros} className="ml-3 text-accent underline-offset-2 hover:underline">
                   Limpiar filtros
                 </button>
               )}
             </p>
             <div className="relative w-full max-w-xs">
-              <Search className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-subtle" aria-hidden="true" />
+              <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-subtle" aria-hidden="true" />
               <label htmlFor="busqueda" className="sr-only">
                 Buscar artículo
               </label>
@@ -281,7 +281,7 @@ const InventarioView: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => ordenarPor(key)}
-                        className={`inline-flex min-h-11 items-center gap-1 uppercase tracking-wide transition-colors hover:text-ink ${
+                        className={`inline-flex items-center gap-1 uppercase tracking-wide transition-colors hover:text-ink ${
                           orden.key === key ? 'text-ink' : ''
                         }`}
                       >

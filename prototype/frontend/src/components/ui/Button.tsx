@@ -16,14 +16,14 @@ const VARIANTS: Record<Variant, string> = {
 };
 
 const SIZES: Record<Size, string> = {
-  sm: 'min-h-11 min-w-11 px-3 text-xs',
-  md: 'min-h-11 min-w-11 px-4 text-sm',
+  sm: 'h-8 px-3 text-xs',
+  md: 'h-10 px-4 text-sm',
 };
 
 const Button: React.FC<ButtonProps> = ({ variant = 'primary', size = 'md', className = '', type = 'button', ...props }) => (
   <button
     type={type}
-    className={`press inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md font-medium hover:shadow-sm disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100 ${VARIANTS[variant]} ${SIZES[size]} ${className}`}
+    className={`press hit inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md font-medium hover:shadow-sm disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100 ${VARIANTS[variant]} ${SIZES[size]} ${className}`}
     {...props}
   />
 );

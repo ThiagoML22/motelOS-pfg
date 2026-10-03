@@ -1,7 +1,7 @@
 import React from 'react';
 
 export const inputClass =
-  'min-h-11 w-full rounded-md border border-line-strong bg-surface px-3 py-2 text-sm text-ink placeholder:text-subtle focus:border-accent focus:ring-1 focus:ring-accent focus-visible:outline-none';
+  'w-full rounded-md border border-line-strong bg-surface px-3 py-2 text-sm text-ink placeholder:text-subtle focus:border-accent focus:ring-1 focus:ring-accent focus-visible:outline-none';
 
 interface FieldProps {
   label: string;

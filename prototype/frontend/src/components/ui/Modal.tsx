@@ -39,7 +39,7 @@ const Modal: React.FC<ModalProps> = ({ title, subtitle, onClose, children, foote
             type="button"
             onClick={onClose}
             aria-label="Cerrar"
-            className="press -mr-3 -mt-2 flex h-11 w-11 items-center justify-center rounded-md text-muted hover:bg-surface-2 hover:text-ink"
+            className="press hit -mr-2 rounded-md p-1.5 text-muted hover:bg-surface-2 hover:text-ink"
           >
             <X className="h-5 w-5" aria-hidden="true" />
           </button>

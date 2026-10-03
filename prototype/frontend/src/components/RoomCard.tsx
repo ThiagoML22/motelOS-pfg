@@ -41,7 +41,7 @@ const RoomCard: React.FC<RoomCardProps> = ({ room, now, onClick, onAddConsumo, o
   const transcurrido = turno ? elapsedMs(turno, now) : 0;
   const fase = faseEstadia(transcurrido);
   const faseMeta = FASE_META[fase];
-  const barClass = meta.bar;
+  const barClass = turno && faseMeta.bar ? faseMeta.bar : meta.bar;
   const TipoIcon = turno ? (TIPO_ICON[turno.tipo_cliente] ?? Car) : Car;
   const cliente = turno
     ? turno.tipo_cliente === 'Peaton'
@@ -126,7 +126,7 @@ const RoomCard: React.FC<RoomCardProps> = ({ room, now, onClick, onAddConsumo, o
                 e.stopPropagation();
                 if (e.key === 'Escape') setMenuOpen(false);
               }}
-              className="press flex h-11 w-11 items-center justify-center rounded-md border border-line-strong bg-surface text-muted hover:bg-surface-2 hover:text-ink"
+              className="press hit flex h-8 w-8 items-center justify-center rounded-md border border-line-strong bg-surface text-muted hover:bg-surface-2 hover:text-ink"
             >
               <MoreVertical className="h-4 w-4" aria-hidden="true" />
             </button>
@@ -150,7 +150,7 @@ const RoomCard: React.FC<RoomCardProps> = ({ room, now, onClick, onAddConsumo, o
                       setMenuOpen(false);
                       onChangeEstado(room, estado);
                     }}
-                    className="flex min-h-11 w-full items-center gap-2.5 px-3 text-left text-sm text-ink transition-colors hover:bg-surface-2"
+                    className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-ink transition-colors hover:bg-surface-2"
                   >
                     <Icon className="h-4 w-4 text-muted" aria-hidden="true" />
                     Pasar a {label.toLowerCase()}
