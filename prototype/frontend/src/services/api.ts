@@ -3,7 +3,7 @@ import {
   Articulo,
   ConstanciaCobro,
   HabitacionConDetalles,
-  PagoItem,
+  MedioPago,
   Turno,
   TurnoCreate,
   TurnoResumen,
@@ -57,9 +57,15 @@ export const api = {
     return response.data;
   },
 
-  cerrarTurno: async (turno_id: string, pagos: PagoItem[]): Promise<ConstanciaCobro> => {
+  // El backend registra un pago por medio; la interfaz liquida el total con un único medio.
+  cerrarTurno: async (
+    turno_id: string,
+    monto: number,
+    medio_pago: MedioPago,
+    comprobante_referencia?: string,
+  ): Promise<ConstanciaCobro> => {
     const response = await axios.post(`${API_URL}/turnos/${turno_id}/cerrar`, {
-      pagos: pagos.map((p) => ({ ...p, comprobante_referencia: p.comprobante_referencia || null })),
+      pagos: [{ monto, medio_pago, comprobante_referencia: comprobante_referencia || null }],
     });
     return response.data;
   },

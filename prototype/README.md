@@ -100,9 +100,8 @@ Para validar el circuito de extremo a extremo y comprobar que el dato viaja, se 
 4. **Estación 4 (Persistencia y Retorno - Liquidación y Cierre Inmutable):**
    * En el diálogo de la habitación, presione **Cobrar**.
    * Verifique que el sistema calcula la tarifa base ($8.000 por 120 minutos) más los sobreturnos según `RN-DER-01` (`RF-03`): superados los 120 minutos, cada fracción de 30 minutos (o porción) suma $2.500. Los importes y parámetros se guardan en la entidad `Tarifa` (tabla `tarifas`) y el cálculo está en `backend/app/services/billing_service.py`.
-   * Intente **Liberar a limpieza** con la cuenta sin saldar: el sistema rechaza la operación, mantiene la habitación en **Ocupada** y resalta el saldo pendiente (`RF-07`, `RN-EXI-03`).
-   * Presione **Cobrar**, elija el medio de pago (**Efectivo**, **Posnet** o **Mercado Pago**; en los dos últimos se exige el número de comprobante) y presione **Confirmar cobro de $ X** (`RF-06`). Para registrar efectivo y cupones en un mismo cobro, use **Dividir el pago entre medios** y asigne los importes de modo que la suma cubra exactamente el saldo.
-   * Al confirmar con saldo adeudado en $0, el sistema crea un registro de pago por cada medio, emite la **constancia de cobro** (imprimible), la habitación pasa a estado **En Limpieza** (amarillo) y el turno queda formalmente en estado `FINALIZADO`.
+   * Seleccione el medio de pago (**Efectivo**, **Posnet** o **Mercado Pago**; en los dos últimos se exige el número de comprobante) y presione **Confirmar cobro de $ X** (`RF-06`). El sistema liquida el total adeudado vigente (`RN-EXI-03`).
+   * Al confirmar con saldo adeudado en $0, la habitación pasa a estado **En Limpieza** (amarillo) y el turno queda formalmente en estado `FINALIZADO`.
    * **Verificación de Inmutabilidad (`RN-RES-01` / `RNF-01`):** La base de datos activa los triggers `trigger_check_turno_inmutable`, `trigger_pagos_append_only` y `trigger_consumos_inmutables`. Cualquier intento de modificar (`UPDATE`) o eliminar (`DELETE`) el turno cerrado, sus pagos o sus consumos desde una sentencia SQL será bloqueado a nivel motor emitiendo un error de violación de regla. Puede comprobarse con:
 
      ```bash
@@ -130,7 +129,7 @@ El repositorio cuenta con integración continua activa mediante **GitHub Actions
 ---
 
 ## 8. Limitaciones Conocidas de esta Versión
-* **Cobros:** el turno se liquida en un único acto, con un desglose que cubre exactamente el saldo; no se admiten pagos parciales a cuenta.
+* **Cobros:** el turno se liquida en un único acto, con el total adeudado y un solo medio de pago; no se admiten pagos parciales a cuenta.
 * **Cierre de caja ciego, autenticación (JWT y roles) e integración con Mercado Pago/POSNET:** previstos para los Sprints 3 y 4. El medio de pago se registra, pero no hay integración con terminales.
 
 ---
