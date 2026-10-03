@@ -9,7 +9,7 @@
 * **Comisión y Sede:** Comisión A · Sede Posadas · Universidad de la Cuenca del Plata
 * **Docente Titular:** PosDr. Darío Ezequiel Díaz
 * **Autor:** Thiago Martino Leal (proyecto individual)
-* **Actividad y Etiqueta:** Actividad de Evaluación N.º 2 (AE2) · Etiqueta Git: `v1`
+* **Actividad y Etiqueta:** Actividad de Evaluación N.º 2 (AE2) · Etiqueta Git: `v1.1` (versión vigente del prototipo v1; reemplaza a la etiqueta `v1`)
 
 ---
 
@@ -40,8 +40,8 @@ Ejecute la siguiente secuencia de comandos en una terminal limpia:
 git clone https://github.com/ThiagoML22/motelOS-pfg.git
 cd motelOS-pfg
 
-# 2. Posicionarse en la etiqueta v1 correspondiente a la entrega de la AE2
-git checkout v1
+# 2. Posicionarse en la etiqueta v1.1 correspondiente a la entrega de la AE2
+git checkout v1.1
 
 # 3. Ingresar al directorio del prototipo y crear el archivo de variables de entorno
 cd prototype

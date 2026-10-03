@@ -14,7 +14,7 @@ Proyecto Final de Grado de Ingeniería en Sistemas de Información, desarrollado
 | Etapa | Contenido | Estado |
 | :--- | :--- | :--- |
 | AE1 | Definición del proyecto, relevamiento de campo, investigación de mercado y prototipo de interfaz (v0) | Entregada |
-| AE2 | Prototipo v1 ejecutable de punta a punta, con integración continua (etiqueta `v1`) | Publicada |
+| AE2 | Prototipo v1 ejecutable de punta a punta, con integración continua (etiqueta `v1.1`, vigente) | Publicada |
 | Siguiente | Autenticación con roles, cierre de caja ciego e integración con medios de pago | Planificada |
 
 El prototipo v1 cubre el circuito completo de un turno: apertura de habitación, registro de consumos con descuento atómico de stock, liquidación y cobro, y cierre inmutable.
