@@ -21,4 +21,8 @@ export const formatClock = (date: Date): string =>
 export const parseUtc = (iso: string): Date =>
   new Date(/(Z|[+-]\d{2}:\d{2})$/.test(iso) ? iso : `${iso}Z`);
 
+const dateTimeFormatter = new Intl.DateTimeFormat('es-AR', { dateStyle: 'short', timeStyle: 'medium' });
+
+export const formatDateTime = (iso: string): string => dateTimeFormatter.format(parseUtc(iso));
+
 export const formatRoomNumber = (numero: number): string => `Hab. ${pad(numero)}`;

@@ -24,10 +24,10 @@
 
   --libre: 23 115 84;
   --libre-soft: 231 243 238;
-  --ocupada: 48 82 140;
-  --ocupada-soft: 232 238 248;
-  --limpieza: 146 90 8;
-  --limpieza-soft: 252 243 224;
+  --ocupada: 176 42 42;
+  --ocupada-soft: 251 233 233;
+  --limpieza: 176 112 0;
+  --limpieza-soft: 253 246 210;
   --mant: 88 98 112;
   --mant-soft: 236 239 243;
   --warn: 146 90 8;
@@ -61,5 +61,24 @@
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+/* Constancia de cobro: al imprimir solo se muestra el area marcada. */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+
+  [data-print-area],
+  [data-print-area] * {
+    visibility: visible;
+  }
+
+  [data-print-area] {
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 100%;
+    padding: 16px;
   }
 }

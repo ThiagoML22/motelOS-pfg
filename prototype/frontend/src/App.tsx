@@ -110,7 +110,7 @@ function App() {
                   type="button"
                   aria-pressed={filtro === 'Todas'}
                   onClick={() => setFiltro('Todas')}
-                  className={`press rounded-md border px-3 py-1.5 text-sm ${
+                  className={`press min-h-11 rounded-md border px-3 text-sm ${
                     filtro === 'Todas'
                       ? 'border-accent bg-accent-soft font-medium text-accent'
                       : 'border-line-strong bg-surface text-muted hover:text-ink'
@@ -124,7 +124,7 @@ function App() {
                     type="button"
                     aria-pressed={filtro === estado}
                     onClick={() => setFiltro(estado)}
-                    className={`press flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm ${
+                    className={`press flex min-h-11 items-center gap-2 rounded-md border px-3 text-sm ${
                       filtro === estado
                         ? 'border-accent bg-accent-soft font-medium text-accent'
                         : 'border-line-strong bg-surface text-muted hover:text-ink'

@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Bike, Car, CheckCircle2, Footprints, MoreVertical, Sparkles, Wrench } from 'lucide-react';
 import { HabitacionConDetalles, RoomStatus } from '../types';
 import { formatDuration, formatMoney, formatRoomNumber } from '../utils/format';
-import { ESTADIA_BASE_MIN, elapsedMinutes, elapsedMs, faseEstadia } from '../utils/turno';
+import { elapsedMs, faseEstadia, minutosExcedidos } from '../utils/turno';
 import Button from './ui/Button';
 import { ESTADO_META, FASE_META } from './ui/status';
 
@@ -38,10 +38,10 @@ const RoomCard: React.FC<RoomCardProps> = ({ room, now, onClick, onAddConsumo, o
     return () => document.removeEventListener('mousedown', onMouseDown);
   }, [menuOpen]);
 
-  const minutos = turno ? elapsedMinutes(turno, now) : 0;
-  const fase = faseEstadia(minutos);
+  const transcurrido = turno ? elapsedMs(turno, now) : 0;
+  const fase = faseEstadia(transcurrido);
   const faseMeta = FASE_META[fase];
-  const barClass = turno && faseMeta.bar ? faseMeta.bar : meta.bar;
+  const barClass = meta.bar;
   const TipoIcon = turno ? (TIPO_ICON[turno.tipo_cliente] ?? Car) : Car;
   const cliente = turno
     ? turno.tipo_cliente === 'Peaton'
@@ -82,9 +82,8 @@ const RoomCard: React.FC<RoomCardProps> = ({ room, now, onClick, onAddConsumo, o
               {formatDuration(elapsedMs(turno, now))}
             </p>
             <p className="mt-0.5 min-h-[1rem] text-xs text-muted">
-              {fase === 'tolerancia' && <span className="font-medium text-warn">En tolerancia</span>}
               {fase === 'excedido' && (
-                <span className="font-medium text-danger">Excedido +{minutos - ESTADIA_BASE_MIN} min</span>
+                <span className="font-medium text-danger">Excedido +{minutosExcedidos(transcurrido)} min</span>
               )}
               {turno.total_consumos > 0 && (
                 <span className={fase !== 'normal' ? 'ml-2' : ''}>Consumos {formatMoney(turno.total_consumos)}</span>
@@ -127,7 +126,7 @@ const RoomCard: React.FC<RoomCardProps> = ({ room, now, onClick, onAddConsumo, o
                 e.stopPropagation();
                 if (e.key === 'Escape') setMenuOpen(false);
               }}
-              className="press flex h-8 w-8 items-center justify-center rounded-md border border-line-strong bg-surface text-muted hover:bg-surface-2 hover:text-ink"
+              className="press flex h-11 w-11 items-center justify-center rounded-md border border-line-strong bg-surface text-muted hover:bg-surface-2 hover:text-ink"
             >
               <MoreVertical className="h-4 w-4" aria-hidden="true" />
             </button>
@@ -151,7 +150,7 @@ const RoomCard: React.FC<RoomCardProps> = ({ room, now, onClick, onAddConsumo, o
                       setMenuOpen(false);
                       onChangeEstado(room, estado);
                     }}
-                    className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-ink transition-colors hover:bg-surface-2"
+                    className="flex min-h-11 w-full items-center gap-2.5 px-3 text-left text-sm text-ink transition-colors hover:bg-surface-2"
                   >
                     <Icon className="h-4 w-4 text-muted" aria-hidden="true" />
                     Pasar a {label.toLowerCase()}

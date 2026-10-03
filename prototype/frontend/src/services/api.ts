@@ -1,5 +1,13 @@
 import axios from 'axios';
-import { Articulo, HabitacionConDetalles, MedioPago, Turno, TurnoCreate, TurnoResumen } from '../types';
+import {
+  Articulo,
+  ConstanciaCobro,
+  HabitacionConDetalles,
+  PagoItem,
+  Turno,
+  TurnoCreate,
+  TurnoResumen,
+} from '../types';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
 
@@ -49,11 +57,9 @@ export const api = {
     return response.data;
   },
 
-  cerrarTurno: async (turno_id: string, monto: number, medio_pago: MedioPago, comprobante_referencia?: string) => {
+  cerrarTurno: async (turno_id: string, pagos: PagoItem[]): Promise<ConstanciaCobro> => {
     const response = await axios.post(`${API_URL}/turnos/${turno_id}/cerrar`, {
-      monto,
-      medio_pago,
-      comprobante_referencia: comprobante_referencia || null,
+      pagos: pagos.map((p) => ({ ...p, comprobante_referencia: p.comprobante_referencia || null })),
     });
     return response.data;
   },

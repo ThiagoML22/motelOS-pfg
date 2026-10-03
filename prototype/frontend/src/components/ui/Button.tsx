@@ -16,8 +16,8 @@ const VARIANTS: Record<Variant, string> = {
 };
 
 const SIZES: Record<Size, string> = {
-  sm: 'h-8 px-3 text-xs',
-  md: 'h-10 px-4 text-sm',
+  sm: 'min-h-11 min-w-11 px-3 text-xs',
+  md: 'min-h-11 min-w-11 px-4 text-sm',
 };
 
 const Button: React.FC<ButtonProps> = ({ variant = 'primary', size = 'md', className = '', type = 'button', ...props }) => (
