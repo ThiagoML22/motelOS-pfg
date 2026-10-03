@@ -24,7 +24,7 @@ El prototipo v1 cubre el circuito completo de un turno: apertura de habitación,
 ```text
 .
 ├── .github/workflows/ci.yml   Integración continua (GitHub Actions)
-├── docs/                      Documentación de la AE1: capítulos, anexos y bibliografía
+├── docs/                      Documentación de la AE1 y la AE2: capítulos, anexos y bibliografía
 ├── portfolio_evidys/          Evidencias del relevamiento de campo
 └── prototype/                 Prototipo v1
     ├── backend/               API REST (FastAPI, SQLAlchemy asíncrono)
