@@ -1,12 +1,9 @@
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 from decimal import Decimal
 
 import pytest
-from httpx import AsyncClient
-from sqlalchemy import select
 
-from app.models.turno import Turno
-from app.services.billing_service import calcular_sobreturno
+from app.services.billing_service import TARIFA_ESTANDAR, ParametrosTarifa, calcular_sobreturno
 
 
 @pytest.mark.parametrize(
@@ -14,56 +11,35 @@ from app.services.billing_service import calcular_sobreturno
     [
         (timedelta(0), 0),
         (timedelta(minutes=119), 0),
-        (timedelta(minutes=120), 0),
-        (timedelta(minutes=125), 0),
-        (timedelta(minutes=130), 0),  # el límite de la tolerancia todavía no se cobra
-        (timedelta(minutes=130, seconds=1), 3500),  # superada la tolerancia: una fracción
-        (timedelta(minutes=131), 3500),
-        (timedelta(minutes=150), 3500),  # exactamente una fracción de 30 min sobre la base
-        (timedelta(minutes=150, seconds=1), 7000),  # cualquier porción adicional suma otra fracción
-        (timedelta(minutes=170), 7000),
-        (timedelta(minutes=180), 7000),
-        (timedelta(minutes=181), 10500),
+        (timedelta(minutes=120), 0),  # la estadía base incluye exactamente 120 minutos
+        (timedelta(minutes=120, seconds=1), 2500),  # cualquier porción excedente suma una fracción
+        (timedelta(minutes=125), 2500),
+        (timedelta(minutes=150), 2500),  # exactamente una fracción de 30 min sobre la base
+        (timedelta(minutes=150, seconds=1), 5000),
+        (timedelta(minutes=170), 5000),
+        (timedelta(minutes=180), 5000),
+        (timedelta(minutes=181), 7500),
     ],
 )
 def test_calcular_sobreturno_rn_der_01(duracion, esperado):
     assert calcular_sobreturno(duracion) == Decimal(esperado)
 
 
+def test_tarifa_estandar_coincide_con_el_catalogo():
+    assert TARIFA_ESTANDAR.tarifa_base == Decimal("8000")
+    assert TARIFA_ESTANDAR.estadia_base_min == 120
+    assert TARIFA_ESTANDAR.fraccion_min == 30
+    assert TARIFA_ESTANDAR.tarifa_fraccion == Decimal("2500")
+    assert TARIFA_ESTANDAR.tolerancia_min == 0
+
+
 def test_duracion_negativa_no_genera_cargo():
     assert calcular_sobreturno(timedelta(minutes=-5)) == 0
 
 
-async def _turno_con_antiguedad(client: AsyncClient, db, minutos: int) -> str:
-    resp = await client.post("/api/v1/turnos/", json={"habitacion_id": 1})
-    assert resp.status_code == 201
-    fila = (await db.execute(select(Turno))).scalars().first()
-    fila.hora_inicio = datetime.now(UTC) - timedelta(minutes=minutos, seconds=2)
-    await db.commit()
-    return resp.json()["id"]
+def test_los_parametros_de_la_tarifa_gobiernan_el_calculo():
+    con_tolerancia = ParametrosTarifa(Decimal("10000"), 90, 10, 20, Decimal("1000"))
 
-
-async def test_resumen_dentro_de_la_tolerancia_no_cobra_sobreturno(client: AsyncClient, db):
-    turno_id = await _turno_con_antiguedad(client, db, 125)
-
-    resumen = (await client.get(f"/api/v1/turnos/{turno_id}/resumen")).json()
-
-    assert resumen["total_sobreturno"] == 0
-    assert resumen["total_general"] == 12000
-
-
-async def test_resumen_superada_la_tolerancia_cobra_una_fraccion(client: AsyncClient, db):
-    turno_id = await _turno_con_antiguedad(client, db, 131)
-
-    resumen = (await client.get(f"/api/v1/turnos/{turno_id}/resumen")).json()
-
-    assert resumen["total_sobreturno"] == 3500
-    assert resumen["total_general"] == 15500
-
-
-async def test_cobro_dentro_de_la_tolerancia_liquida_solo_la_base(client: AsyncClient, db):
-    turno_id = await _turno_con_antiguedad(client, db, 128)
-
-    resp = await client.post(f"/api/v1/turnos/{turno_id}/cerrar", json={"monto": 12000, "medio_pago": "EFECTIVO"})
-
-    assert resp.status_code == 200
+    assert calcular_sobreturno(timedelta(minutes=100), con_tolerancia) == 0  # dentro de la tolerancia
+    assert calcular_sobreturno(timedelta(minutes=100, seconds=1), con_tolerancia) == 1000
+    assert calcular_sobreturno(timedelta(minutes=130, seconds=1), con_tolerancia) == 3000

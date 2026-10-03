@@ -9,6 +9,7 @@ from app.core.database import Base, get_db
 from app.main import app
 from app.models.articulo import Articulo
 from app.models.habitacion import Habitacion
+from app.models.tarifa import Tarifa
 
 # Por defecto los tests son herméticos (SQLite en memoria). En CI se puede apuntar a un
 # Postgres descartable con TEST_DATABASE_URL; el nombre de la base debe contener "test"
@@ -33,10 +34,20 @@ async def session_factory():
     async with factory() as session:
         session.add_all(
             [
+                Tarifa(
+                    nombre="Estandar",
+                    tarifa_base=8000,
+                    estadia_base_min=120,
+                    tolerancia_min=0,
+                    fraccion_min=30,
+                    tarifa_fraccion=2500,
+                    vigente=True,
+                ),
                 Habitacion(numero=1, estado="Libre"),
                 Habitacion(numero=2, estado="Libre"),
                 Habitacion(numero=3, estado="Mantenimiento"),
                 Articulo(codigo="MIN-001", descripcion="Agua Mineral 500ml", precio_unitario=800, stock_actual=5),
+                Articulo(codigo="MIN-002", descripcion="Papas Fritas", precio_unitario=1500, stock_actual=0),
             ]
         )
         await session.commit()

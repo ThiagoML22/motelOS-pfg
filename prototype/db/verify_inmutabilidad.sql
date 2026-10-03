@@ -6,7 +6,8 @@ DECLARE
     tid uuid;
     bloqueado boolean;
 BEGIN
-    INSERT INTO turnos (habitacion_id, estado) VALUES (1, 'FINALIZADO') RETURNING id INTO tid;
+    INSERT INTO turnos (habitacion_id, tarifa_id, tarifa_base, total_general, estado)
+    VALUES (1, 1, 8000, 8000, 'FINALIZADO') RETURNING id INTO tid;
     INSERT INTO pagos (turno_id, monto, medio_pago) VALUES (tid, 100, 'EFECTIVO');
     INSERT INTO detalles_consumo (turno_id, articulo_id, cantidad, precio_unitario, subtotal)
     VALUES (tid, 1, 1, 800, 800);

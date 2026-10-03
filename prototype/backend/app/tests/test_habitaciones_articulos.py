@@ -33,6 +33,18 @@ async def test_cambiar_estado_rechaza_valor_invalido_y_habitacion_ocupada(client
     assert resp.status_code == 400
 
 
+async def test_liberar_a_limpieza_con_saldo_pendiente_se_rechaza_rf_07(client: AsyncClient):
+    await client.post("/api/v1/turnos/", json={"habitacion_id": 2})
+
+    resp = await client.patch("/api/v1/habitaciones/2/estado", json={"estado": "En Limpieza"})
+
+    assert resp.status_code == 409
+    assert "RN-EXI-03" in resp.json()["detail"]
+    assert "8000" in resp.json()["detail"]
+    habitaciones = (await client.get("/api/v1/habitaciones/")).json()
+    assert next(h for h in habitaciones if h["numero"] == 2)["estado"] == "Ocupada"
+
+
 async def test_cambiar_estado_habitacion_inexistente_devuelve_404(client: AsyncClient):
     assert (await client.patch("/api/v1/habitaciones/999/estado", json={"estado": "Libre"})).status_code == 404
 
@@ -45,7 +57,7 @@ async def test_listar_y_crear_articulos(client: AsyncClient):
     assert creado.json()["codigo"] == "SNA-001"
 
     codigos = [a["codigo"] for a in (await client.get("/api/v1/articulos/")).json()]
-    assert set(codigos) == {"MIN-001", "SNA-001"}
+    assert set(codigos) == {"MIN-001", "MIN-002", "SNA-001"}
 
 
 async def test_crear_articulo_codigo_duplicado_devuelve_400(client: AsyncClient):

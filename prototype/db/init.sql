@@ -6,17 +6,29 @@ CREATE TABLE habitaciones (
     estado VARCHAR(20) NOT NULL CHECK (estado IN ('Libre', 'Ocupada', 'En Limpieza', 'Mantenimiento'))
 );
 
+CREATE TABLE tarifas (
+    id SERIAL PRIMARY KEY,
+    nombre VARCHAR(50) UNIQUE NOT NULL,
+    tarifa_base NUMERIC(10, 2) NOT NULL,
+    estadia_base_min INTEGER NOT NULL DEFAULT 120,
+    tolerancia_min INTEGER NOT NULL DEFAULT 0,
+    fraccion_min INTEGER NOT NULL DEFAULT 30,
+    tarifa_fraccion NUMERIC(10, 2) NOT NULL,
+    vigente BOOLEAN NOT NULL DEFAULT TRUE
+);
+
 CREATE TABLE turnos (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     habitacion_id INTEGER NOT NULL REFERENCES habitaciones(id),
+    tarifa_id INTEGER NOT NULL REFERENCES tarifas(id),
     identificador_vehicular VARCHAR(50),
     tipo_cliente VARCHAR(20) NOT NULL DEFAULT 'Auto' CHECK (tipo_cliente IN ('Auto', 'Moto', 'Peaton')),
     hora_inicio TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     hora_fin TIMESTAMP WITH TIME ZONE,
-    tarifa_base NUMERIC(10, 2) NOT NULL DEFAULT 12000,
+    tarifa_base NUMERIC(10, 2) NOT NULL,
     total_sobreturno NUMERIC(10, 2) NOT NULL DEFAULT 0,
     total_consumos NUMERIC(10, 2) NOT NULL DEFAULT 0,
-    total_general NUMERIC(10, 2) NOT NULL DEFAULT 12000,
+    total_general NUMERIC(10, 2) NOT NULL,
     estado VARCHAR(20) NOT NULL CHECK (estado IN ('En Curso', 'FINALIZADO', 'Anulado'))
 );
 
@@ -50,12 +62,14 @@ CREATE TABLE pagos (
 
 -- Habilitar RLS (Row Level Security)
 ALTER TABLE habitaciones ENABLE ROW LEVEL SECURITY;
+ALTER TABLE tarifas ENABLE ROW LEVEL SECURITY;
 ALTER TABLE turnos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE articulos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE detalles_consumo ENABLE ROW LEVEL SECURITY;
 ALTER TABLE pagos ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY all_habitaciones ON habitaciones FOR ALL USING (true);
+CREATE POLICY all_tarifas ON tarifas FOR ALL USING (true);
 CREATE POLICY all_turnos ON turnos FOR ALL USING (true);
 CREATE POLICY all_articulos ON articulos FOR ALL USING (true);
 CREATE POLICY all_detalles_consumo ON detalles_consumo FOR ALL USING (true);
@@ -116,6 +130,10 @@ FOR EACH ROW
 EXECUTE FUNCTION check_consumo_inmutable();
 
 -- Seeds iniciales
+-- Tarifa estandar: estadia base de 120 min por $8.000 y, superada, fracciones de 30 min a $2.500 (sin tolerancia).
+INSERT INTO tarifas (nombre, tarifa_base, estadia_base_min, tolerancia_min, fraccion_min, tarifa_fraccion, vigente)
+VALUES ('Estandar', 8000, 120, 0, 30, 2500, TRUE);
+
 INSERT INTO habitaciones (numero, estado) VALUES 
 (1, 'Libre'), (2, 'Libre'), (3, 'Libre'), (4, 'Libre'), (5, 'Libre'), 
 (6, 'Libre'), (7, 'Libre'), (8, 'Libre'), (9, 'Libre'), (10, 'Libre'), 
