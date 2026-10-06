@@ -9,14 +9,14 @@
 * **Comisión y Sede:** Comisión A · Sede Posadas · Universidad de la Cuenca del Plata
 * **Docente Titular:** PosDr. Darío Ezequiel Díaz
 * **Autor:** Thiago Martino Leal (proyecto individual)
-* **Actividad y Etiqueta:** Actividad de Evaluación N.º 2 (AE2) · Etiqueta Git: `v1.1` (versión vigente del prototipo v1; reemplaza a la etiqueta `v1`)
+* **Actividad y Etiqueta:** Actividad de Evaluación N.º 2 (AE2) · Etiqueta Git vigente: `v1.2` (reemplaza a `v1.1`, `v1` y `v1-previo`). La v1.2 agrega RNF-08 (la patente se separa del turno inmutable y se elimina a las 24 h) y el rol de base de datos `motel_app`
 
 ---
 
 ## 2. Qué hace este prototipo
 El prototipo v1 implementa el caso de uso vertical completo de **Apertura de Turno, Registro de Consumos, Liquidación Tarifaria y Cierre Inmutable** para el establecimiento Motel C.C. a través de sus cuatro estaciones (Interfaz de usuario $\rightarrow$ Lógica de negocio $\rightarrow$ Persistencia $\rightarrow$ Retorno a la vista). 
 
-Su propósito central no es adelantar volumen de negocio, sino probar deliberadamente la **decisión arquitectónica más comprometida del proyecto**: una arquitectura web desacoplada de baja latencia con backend asíncrono y persistencia transaccional relacional que impone inmutabilidad de datos históricos (Append-Only Log) mediante políticas de Row-Level Security (RLS) y triggers de base de datos a nivel motor, blindando la auditoría de caja frente a adulteraciones o fraudes internos.
+Su propósito central no es adelantar volumen de negocio, sino probar deliberadamente la **decisión arquitectónica más comprometida del proyecto**: una arquitectura web desacoplada de baja latencia con backend asíncrono y persistencia transaccional relacional que impone inmutabilidad de datos históricos (Append-Only Log) mediante triggers de base de datos a nivel motor, que rechazan cualquier `UPDATE` o `DELETE` sobre un turno cerrado, sus pagos y sus consumos. La garantía alcanza a las sentencias de la aplicación; la separación de roles de base de datos queda prevista para el prototipo v2 (ver la sección 8).
 
 ---
 
@@ -40,8 +40,8 @@ Ejecute la siguiente secuencia de comandos en una terminal limpia:
 git clone https://github.com/ThiagoML22/motelOS-pfg.git
 cd motelOS-pfg
 
-# 2. Posicionarse en la etiqueta v1.1 correspondiente a la entrega de la AE2
-git checkout v1.1
+# 2. Posicionarse en la etiqueta v1.2, vigente para la entrega de la AE2
+git checkout v1.2
 
 # 3. Ingresar al directorio del prototipo y crear el archivo de variables de entorno
 cd prototype
@@ -68,7 +68,9 @@ El archivo `.env` se genera a partir de `.env.example` y declara los siguientes 
 | `POSTGRES_USER` | Nombre del usuario administrador de la base de datos relacional. | `postgres` |
 | `POSTGRES_PASSWORD` | Clave de acceso para la instancia local en contenedor Docker. | `postgres` |
 | `POSTGRES_DB` | Nombre de la base de datos transaccional del establecimiento. | `motel_db` |
-| `DATABASE_URL` | Cadena de conexión asíncrona SQLAlchemy (`asyncpg`) utilizada por el backend. | `postgresql+asyncpg://postgres:postgres@db:5432/motel_db` |
+| `DATABASE_URL` | Cadena de conexión asíncrona SQLAlchemy (`asyncpg`) utilizada por el backend. Usa el rol `motel_app`, que no es dueño de las tablas. | `postgresql+asyncpg://motel_app:motel_app@db:5432/motel_db` |
+| `APP_DB_USER` / `APP_DB_PASSWORD` | Rol de la aplicación creado por `db/init.sql` (clave de demostración: se cambia al desplegar). | `motel_app` / `motel_app` |
+| `RETENCION_PATENTE_HORAS` | Horas posteriores al cierre del turno tras las cuales se elimina la patente (RNF-08). | `24` |
 | `VITE_API_URL` | URL base de la API que consume el frontend. | `http://localhost:8000/api/v1` |
 | `CORS_ORIGINS` | Lista de orígenes autorizados (separados por coma) para peticiones HTTP cruzadas desde el frontend. | `http://localhost:5173` |
 | `SQL_ECHO` | Flag booleano (`True`/`False`) para emitir trazas de sentencias SQL en consola. | `False` |
@@ -91,7 +93,7 @@ Para validar el circuito de extremo a extremo y comprobar que el dato viaja, se 
    * Verifique que se despliega la grilla operativa con las **13 habitaciones** del establecimiento con codificación cromática en tiempo real (satisfaciendo `RF-01` en menos de 500 ms).
 2. **Estación 2 (Lógica y Entrada - Apertura de Turno):**
    * Haga clic sobre cualquier habitación en estado **Disponible** (indicador verde, ej. Hab. 01).
-   * En el diálogo de apertura, seleccione el tipo de cliente (`Auto`), opcionalmente ingrese una patente vehicular transitoria (ej. `AE987CD`) y presione **Ocupar habitación**. No se registra ningún dato personal del cliente (`RNF-03`).
+   * En el diálogo de apertura, seleccione el tipo de cliente (`Auto`), opcionalmente ingrese una patente vehicular transitoria (ej. `AE987CD`, se elimina 24 h después del cierre, `RNF-08`) y presione **Ocupar habitación**. No se registra ningún dato personal del cliente (`RNF-03`).
    * **Resultado observable:** La API FastAPI valida la regla de existencia `RN-EXI-01` (solo habitaciones libres pueden iniciar turno), genera el identificador único transaccional, captura el timestamp automático sin permitir edición manual (`RF-02`) y transiciona la habitación a estado **Ocupada** (indicador azul; el cronómetro y la etiqueta «Excedido» pasan a rojo cuando se supera la estadía base) en la interfaz.
 3. **Estación 3 (Lógica Transaccional - Despacho de Consumición):**
    * En la tarjeta de la habitación ocupada presione **Agregar producto** (o abra la habitación y use **Agregar productos**).
@@ -118,8 +120,8 @@ El repositorio cuenta con integración continua activa mediante **GitHub Actions
   1. Entorno de ejecución en contenedor sobre `Python 3.12`.
   2. Servicio de base de datos `PostgreSQL 16` real instanciado durante el pipeline.
   3. Análisis estático de código y formato con **Ruff** (`ruff check app/`).
-  4. Suite de **52 pruebas automatizadas con Pytest** (`pytest app/tests/ -v`) que validan formalmente los criterios de aceptación del catálogo.
-  5. Aplicación de `db/init.sql` sobre un PostgreSQL real y verificación de la inmutabilidad de los registros cerrados (`db/verify_inmutabilidad.sql`).
+  4. Suite de **59 pruebas automatizadas con Pytest** (`pytest app/tests/ -v`) que validan formalmente los criterios de aceptación del catálogo.
+  5. Aplicación de `db/init.sql` sobre un PostgreSQL real y verificación de la inmutabilidad de los registros cerrados (`db/verify_inmutabilidad.sql`) y de los permisos del rol de la aplicación (`db/verify_roles.sql`).
 * **Tareas Verificadas en el Frontend:**
   1. Entorno de compilación sobre `Node.js 20`.
   2. Verificación estricta de tipos con TypeScript (`tsc --noEmit`).
@@ -129,7 +131,10 @@ El repositorio cuenta con integración continua activa mediante **GitHub Actions
 ---
 
 ## 8. Limitaciones Conocidas de esta Versión
-* **Cobros:** el turno se liquida en un único acto, con el total adeudado y un solo medio de pago; no se admiten pagos parciales a cuenta.
+* **Cobros:** el turno se liquida en un único acto y el desglose por medio de pago (efectivo, POSNET, Mercado Pago) debe sumar exactamente el saldo adeudado; no se admiten pagos parciales a cuenta.
+* **Alcance de la inmutabilidad (RNF-01):** los triggers rechazan cualquier sentencia de la aplicación que altere un turno cerrado. El backend se conecta con el rol dueño de las tablas, y un dueño puede deshabilitar un trigger (`ALTER TABLE ... DISABLE TRIGGER`). Por eso la garantía vigente es «ninguna sentencia de la aplicación altera un turno cerrado», no «ningún dato puede adulterarse». La separación entre un rol dueño (migraciones) y un rol de aplicación sin ese permiso está prevista para el prototipo v2.
+* **Datos del vehículo (RNF-08):** la patente es opcional y vive en la tabla `estadias_activas`, separada del turno inmutable. Una tarea de fondo la elimina dentro de las 24 h posteriores al cierre del turno (`RETENCION_PATENTE_HORAS`); el turno, sus pagos y sus consumos no se modifican. El plazo de 24 h es una propuesta que la gerencia todavía debe confirmar.
+* **Permisos de base de datos:** el backend se conecta con el rol `motel_app`, que no es dueño de las tablas ni puede deshabilitar triggers (`db/verify_roles.sql`). Quien administra la base con el usuario dueño (`postgres`) sí puede hacerlo: esa persona es de confianza por definición. La clave `motel_app` del repositorio es solo de demostración.
 * **Cierre de caja ciego, autenticación (JWT y roles) e integración con Mercado Pago/POSNET:** previstos para los Sprints 3 y 4. El medio de pago se registra, pero no hay integración con terminales.
 
 ---
@@ -137,7 +142,8 @@ El repositorio cuenta con integración continua activa mediante **GitHub Actions
 ## 9. Declaración de Herramientas Auxiliares
 En estricto cumplimiento del **Protocolo de Uso Autorizado de Inteligencia Artificial** (Apartado 27.2 de la Guía Docente y Apartado 12 de la Consigna AE2):
 
-* **Herramientas empleadas:** Asistentes de generación de código integrados en el entorno de desarrollo (Claude Code / Antigravity).
+* **Herramientas empleadas:** Claude Code, un asistente de generación de código integrado en el entorno de desarrollo (es la única herramienta de asistencia usada, según confirma el autor).
 * **Alcance del uso:** Aceleración del andamiaje arquitectónico inicial (configuración de `docker-compose.yml` y `Dockerfile`, scripts de inicialización de esquema SQL en `db/init.sql`, datos de prueba en `backend/seed.py` y pipeline de GitHub Actions en `ci.yml`) y, en etapas posteriores, la suite de pruebas automatizadas (`backend/app/tests/`), las validaciones de esquemas del backend, el servicio de liquidación temporal y el rediseño de la interfaz del frontend (componentes React y estilos Tailwind).
-* **Límites observados:** No se empleó inteligencia artificial generativa para redactar la prosa del informe, los capítulos III, IV, V y X, las bitácoras individuales, ni para justificar decisiones técnicas o de delimitación de alcance. La totalidad de las reglas de negocio, el modelado del dominio y la especificación de requisitos fueron determinados por el autor sobre la base del relevamiento empírico de campo.
+* **Documentos de la Ventana de Mejora (desde el 04/10/2026):** se usó Claude Code para preparar el libro de trabajo, el informe, los instrumentos y la bitácora versión 2, y para corregir `backend/seed.py`, `db/init.sql` y este archivo. Las decisiones de diseño, el relevamiento de campo y los datos son del autor, que revisa y adopta cada documento.
+* **Declaración única:** el detalle de cada uso (herramienta, función, commit, fecha y verificación posterior) está en la bitácora individual versión 2 y es el mismo que el de esta sección. La herramienta de cada uso del andamiaje, de las pruebas, del servicio de liquidación y del frontend se precisa por commit en esa bitácora.
 * **Control humano:** Todo fragmento de código asistido fue inspeccionado, refactorizado y sometido a pruebas automatizadas de aceptación por el autor antes de su incorporación al repositorio.
