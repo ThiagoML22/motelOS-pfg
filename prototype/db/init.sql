@@ -21,7 +21,6 @@ CREATE TABLE turnos (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     habitacion_id INTEGER NOT NULL REFERENCES habitaciones(id),
     tarifa_id INTEGER NOT NULL REFERENCES tarifas(id),
-    identificador_vehicular VARCHAR(50),
     tipo_cliente VARCHAR(20) NOT NULL DEFAULT 'Auto' CHECK (tipo_cliente IN ('Auto', 'Moto', 'Peaton')),
     hora_inicio TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     hora_fin TIMESTAMP WITH TIME ZONE,
@@ -30,6 +29,14 @@ CREATE TABLE turnos (
     total_consumos NUMERIC(10, 2) NOT NULL DEFAULT 0,
     total_general NUMERIC(10, 2) NOT NULL,
     estado VARCHAR(20) NOT NULL CHECK (estado IN ('En Curso', 'FINALIZADO', 'Anulado'))
+);
+
+-- RNF-08: la patente es un dato operativo y vive fuera del turno inmutable. La aplicacion la elimina
+-- dentro de las 24 h posteriores al cierre del turno (RETENCION_PATENTE_HORAS); el turno, sus pagos y sus
+-- consumos no se tocan.
+CREATE TABLE estadias_activas (
+    turno_id UUID PRIMARY KEY REFERENCES turnos(id),
+    identificador_vehicular VARCHAR(50) NOT NULL
 );
 
 CREATE TABLE articulos (
@@ -60,20 +67,11 @@ CREATE TABLE pagos (
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- Habilitar RLS (Row Level Security)
-ALTER TABLE habitaciones ENABLE ROW LEVEL SECURITY;
-ALTER TABLE tarifas ENABLE ROW LEVEL SECURITY;
-ALTER TABLE turnos ENABLE ROW LEVEL SECURITY;
-ALTER TABLE articulos ENABLE ROW LEVEL SECURITY;
-ALTER TABLE detalles_consumo ENABLE ROW LEVEL SECURITY;
-ALTER TABLE pagos ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY all_habitaciones ON habitaciones FOR ALL USING (true);
-CREATE POLICY all_tarifas ON tarifas FOR ALL USING (true);
-CREATE POLICY all_turnos ON turnos FOR ALL USING (true);
-CREATE POLICY all_articulos ON articulos FOR ALL USING (true);
-CREATE POLICY all_detalles_consumo ON detalles_consumo FOR ALL USING (true);
-CREATE POLICY all_pagos ON pagos FOR ALL USING (true);
+-- Sin Row-Level Security: el prototipo atiende a un solo establecimiento y una politica
+-- "USING (true)" no restringiria ninguna fila. La inmutabilidad la imponen los triggers de abajo.
+-- Alcance de esa garantia: ninguna sentencia de la aplicacion altera un turno cerrado. El dueno de las
+-- tablas puede deshabilitar un trigger, por eso la aplicacion se conecta con un rol distinto (motel_app,
+-- al final de este archivo) que no es dueno de las tablas y no puede alterarlas ni deshabilitar triggers.
 
 -- Disparador para asegurar inmutabilidad de turnos cerrados/anulados (Append-Only Log)
 CREATE OR REPLACE FUNCTION check_turno_inmutable()
@@ -144,3 +142,20 @@ INSERT INTO articulos (codigo, descripcion, precio_unitario, stock_actual, categ
 ('MIN-002', 'Bebida Energética', 1200, 8, 'Bebidas'),
 ('MIN-003', 'Cerveza Lata 473ml', 1800, 12, 'Bebidas'),
 ('SNA-001', 'Papas Fritas Lays 90g', 1500, 5, 'Snacks');
+
+-- Roles (RNF-08 / RNF-01): el usuario que ejecuta este archivo es el dueno de las tablas y se reserva para
+-- migraciones y datos iniciales. La aplicacion usa motel_app: sin propiedad de las tablas, sin permiso para
+-- ALTER TABLE ni para deshabilitar triggers, y con los privilegios minimos de cada tabla.
+-- La clave de abajo es solo para el entorno de demostracion: se cambia al desplegar.
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'motel_app') THEN
+        CREATE ROLE motel_app LOGIN PASSWORD 'motel_app' NOSUPERUSER NOCREATEDB NOCREATEROLE;
+    END IF;
+END $$;
+GRANT USAGE ON SCHEMA public TO motel_app;
+GRANT SELECT, UPDATE ON habitaciones, articulos TO motel_app;
+GRANT SELECT ON tarifas TO motel_app;
+GRANT SELECT, INSERT, UPDATE ON turnos TO motel_app;
+GRANT SELECT, INSERT ON detalles_consumo, pagos TO motel_app;
+GRANT SELECT, INSERT, DELETE ON estadias_activas TO motel_app;

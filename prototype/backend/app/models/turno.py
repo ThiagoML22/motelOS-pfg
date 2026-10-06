@@ -13,7 +13,9 @@ class Turno(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     habitacion_id = Column(Integer, ForeignKey("habitaciones.id"), nullable=False)
     tarifa_id = Column(Integer, ForeignKey("tarifas.id"), nullable=False)
-    identificador_vehicular = Column(String(50), nullable=True)
+    # RNF-08: la patente ya no se guarda en el turno (inmutable); vive en estadias_activas y se carga
+    # como atributo transitorio con app.services.estadia.cargar_patentes.
+    identificador_vehicular = None
     tipo_cliente = Column(String(20), nullable=False, default="Auto")
     hora_inicio = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False)
     hora_fin = Column(DateTime(timezone=True), nullable=True)

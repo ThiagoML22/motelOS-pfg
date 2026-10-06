@@ -9,6 +9,7 @@ from sqlalchemy.future import select
 from app.core.database import get_db
 from app.models.articulo import Articulo
 from app.models.consumo import Consumo
+from app.models.estadia_activa import EstadiaActiva
 from app.models.habitacion import Habitacion
 from app.models.pago import Pago
 from app.models.tarifa import Tarifa
@@ -22,6 +23,7 @@ from app.schemas.turno import (
     TurnoResponse,
     TurnoResumen,
 )
+from app.services.estadia import cargar_patentes
 from app.services.liquidacion import liquidar_turno
 
 router = APIRouter()
@@ -46,7 +48,6 @@ async def create_turno(turno_in: TurnoCreate, db: AsyncSession = Depends(get_db)
     nuevo_turno = Turno(
         habitacion_id=turno_in.habitacion_id,
         tarifa_id=tarifa.id,
-        identificador_vehicular=turno_in.identificador_vehicular,
         tipo_cliente=turno_in.tipo_cliente,
         hora_inicio=datetime.now(UTC),
         estado="En Curso",
@@ -54,10 +55,16 @@ async def create_turno(turno_in: TurnoCreate, db: AsyncSession = Depends(get_db)
         total_general=tarifa.tarifa_base,
     )
     db.add(nuevo_turno)
+    patente = (turno_in.identificador_vehicular or "").strip() or None
+    if patente:
+        # RNF-08: la patente vive en la estadía activa, no en el turno inmutable.
+        await db.flush()
+        db.add(EstadiaActiva(turno_id=nuevo_turno.id, identificador_vehicular=patente))
     habitacion.estado = "Ocupada"
 
     await db.commit()
     await db.refresh(nuevo_turno)
+    nuevo_turno.identificador_vehicular = patente
     return nuevo_turno
 
 
@@ -116,6 +123,7 @@ async def get_resumen(turno_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
     cons_res = await db.execute(select(Consumo).where(Consumo.turno_id == turno_id))
     consumos = cons_res.scalars().all()
 
+    await cargar_patentes(db, [turno])
     resumen_dict = turno.__dict__.copy()
     resumen_dict["minutos_transcurridos"] = liquidacion.minutos_transcurridos
     resumen_dict["total_pagado"] = liquidacion.total_pagado
