@@ -1,10 +1,25 @@
+import asyncio
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1.endpoints import articulos, habitaciones, turnos
 from app.core.config import settings
+from app.services.estadia import ciclo_depuracion
 
-app = FastAPI(title=settings.PROJECT_NAME, version="1.0.0")
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    # RNF-08: depuración periódica de las patentes de turnos cerrados.
+    tarea = asyncio.create_task(ciclo_depuracion())
+    try:
+        yield
+    finally:
+        tarea.cancel()
+
+
+app = FastAPI(title=settings.PROJECT_NAME, version="1.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
