@@ -63,6 +63,13 @@ jobs:
           psql -h localhost -U postgres -d motel_schema -v ON_ERROR_STOP=1 -q -f db/init.sql
           psql -h localhost -U postgres -d motel_schema -v ON_ERROR_STOP=1 -f db/verify_inmutabilidad.sql
 
+      - name: Verificar permisos del rol de la aplicación (RNF-01, RNF-08)
+        working-directory: ./prototype
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h localhost -U postgres -d motel_schema -v ON_ERROR_STOP=1 -f db/verify_roles.sql
+
   frontend:
     runs-on: ubuntu-latest
     defaults:

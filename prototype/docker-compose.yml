@@ -25,7 +25,8 @@ services:
     container_name: motel_backend
     restart: always
     environment:
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-motel_db}
+      # La aplicacion usa el rol motel_app (db/init.sql), que no es dueno de las tablas ni puede deshabilitar triggers.
+      DATABASE_URL: postgresql+asyncpg://${APP_DB_USER:-motel_app}:${APP_DB_PASSWORD:-motel_app}@db:5432/${POSTGRES_DB:-motel_db}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
       SQL_ECHO: ${SQL_ECHO:-False}
     ports:
