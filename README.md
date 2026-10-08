@@ -15,7 +15,7 @@ Proyecto Final de Grado de Ingeniería en Sistemas de Información, desarrollado
 | :--- | :--- | :--- |
 | AE1 | Definición del proyecto, relevamiento de campo, investigación de mercado y prototipo de interfaz (v0) | Entregada |
 | AE2 | Prototipo v1 ejecutable de punta a punta, con integración continua (etiqueta `v1.2`, vigente) | Publicada |
-| Siguiente | Autenticación con roles, cierre de caja ciego e integración con medios de pago | Planificada |
+| AE3 | Autenticación con roles (Operador y Guardia), cierre de caja ciego y pruebas de RF-08 y RF-09 | Planificada |
 
 El prototipo v1 cubre el circuito completo de un turno: apertura de habitación, registro de consumos con descuento atómico de stock, liquidación y cobro, y cierre inmutable.
 
@@ -24,12 +24,12 @@ El prototipo v1 cubre el circuito completo de un turno: apertura de habitación,
 ```text
 .
 ├── .github/workflows/ci.yml   Integración continua (GitHub Actions)
-├── docs/                      Documentación de la AE1 y la AE2: capítulos, anexos y bibliografía
+├── docs/                      Documentación de la AE1 y la AE2 (ver docs/README.md); versiones superadas en docs/versiones_anteriores/
 ├── portfolio_evidys/          Evidencias del relevamiento de campo
-└── prototype/                 Prototipo v1
+└── prototype/                 Prototipo v1 (etiqueta v1.2)
     ├── backend/               API REST (FastAPI, SQLAlchemy asíncrono)
     ├── frontend/              Aplicación web (React, TypeScript, Tailwind CSS)
-    ├── db/                    Esquema PostgreSQL con RLS y trigger de inmutabilidad
+    ├── db/                    Esquema PostgreSQL, trigger de inmutabilidad y rol de aplicación sin privilegios de dueño
     └── docker-compose.yml     Orquestación de los tres servicios
 ```
 
