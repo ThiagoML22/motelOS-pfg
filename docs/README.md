@@ -13,6 +13,6 @@ Esta carpeta contiene la documentación formal del Proyecto de Grado: borradores
 | Bitácora individual | `AE2/20261004_Bitacora_AE2_ThiagoLeal_v2.pdf` | Versión 2 |
 | Correcciones de la AE1 | `AE2/20261004_Correcciones_AE1_ThiagoLeal_v2.pdf` | Versión 2 |
 | Respuestas al dictamen DEV-AE2 N.º 11/2026 (Bloque A) | `AE2/20261004_Respuestas_Bloque_A_ThiagoLeal.pdf` | Versión 1 |
-| Registro de corridas del canal de integración continua | `AE2/20261004_Registro_corridas_Actions_motelOS.xlsx` | 33 corridas, exportado el 05/10/2026 a las 22:50 |
+| Registro de corridas del canal de integración continua | `AE2/20261004_Registro_corridas_Actions_motelOS.xlsx` | Registro completo, con su fecha y hora de exportación |
 
 El prototipo vigente es la etiqueta `v1.2` (carpeta `prototype/`).
