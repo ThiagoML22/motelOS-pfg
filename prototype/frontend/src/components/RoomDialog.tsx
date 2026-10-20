@@ -157,6 +157,8 @@ const RoomDialog: React.FC<RoomDialogProps> = ({
   const titulo = formatRoomNumber(room.numero);
   let subtitulo = 'Apertura de turno';
   if (isOcupada) subtitulo = vista === 'productos' ? 'Agregar productos' : vista === 'cobro' ? 'Cobro y cierre' : 'Cuenta del turno';
+  // RNF-04: en el recambio, la guardia entrante ve quién abrió el turno que va a cobrar.
+  if (isOcupada && room.turno_activo?.abierto_por) subtitulo += ` · abierto por ${room.turno_activo.abierto_por}`;
   if (room.estado === 'En Limpieza') subtitulo = 'En limpieza';
   if (room.estado === 'Mantenimiento') subtitulo = 'En mantenimiento';
 

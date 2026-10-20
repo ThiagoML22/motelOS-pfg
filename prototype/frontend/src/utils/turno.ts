@@ -15,10 +15,3 @@ export const minutosExcedidos = (transcurridoMs: number): number =>
 
 export const elapsedMs = (turno: Pick<Turno, 'hora_inicio'>, now: number): number =>
   Math.max(0, now - parseUtc(turno.hora_inicio).getTime());
-
-// Guardias de conserjería: Mañana 06–14, Tarde 14–22, Noche 22–06.
-export const guardiaActual = (hour: number): { label: string; range: string } => {
-  if (hour >= 6 && hour < 14) return { label: 'Mañana', range: '06:00–14:00' };
-  if (hour >= 14 && hour < 22) return { label: 'Tarde', range: '14:00–22:00' };
-  return { label: 'Noche', range: '22:00–06:00' };
-};

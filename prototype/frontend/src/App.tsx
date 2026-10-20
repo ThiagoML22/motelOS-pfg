@@ -1,25 +1,90 @@
 import { useCallback, useEffect, useState } from 'react';
-import { HabitacionConDetalles, RoomStatus, TipoCliente } from './types';
-import { api, getErrorMessage } from './services/api';
+import { HabitacionConDetalles, RoomStatus, Sesion, TipoCliente } from './types';
+import { api, getErrorMessage, onSesionVencida } from './services/api';
 import { useNow } from './hooks/useNow';
 import { formatRoomNumber } from './utils/format';
 import TopNav, { View } from './components/TopNav';
 import RoomsGrid from './components/RoomsGrid';
 import RoomDialog from './components/RoomDialog';
 import InventarioView from './components/InventarioView';
+import LoginView from './components/LoginView';
+import GuardiaView from './components/GuardiaView';
+import CierreCajaView from './components/CierreCajaView';
+import PanelGerencia from './components/PanelGerencia';
 import Button from './components/ui/Button';
 import { useToast } from './components/ui/Toast';
 import { ESTADOS_ORDEN, ESTADO_META } from './components/ui/status';
 
 const POLL_MS = 10000;
+const SESION_POLL_MS = 30000;
 
 type Filtro = RoomStatus | 'Todas';
 type Carga = 'cargando' | 'ok' | 'error';
 
+// RNF-04: sin sesión solo se muestra el ingreso. La sesión (cookie httpOnly) la valida el backend en cada
+// petición; si vence, la API responde 401 y se vuelve al ingreso.
 function App() {
+  const [sesion, setSesion] = useState<Sesion | null>(null);
+  const [iniciando, setIniciando] = useState(true);
+  const [aviso, setAviso] = useState<string | null>(null);
+
+  const refrescarSesion = useCallback(async () => {
+    try {
+      setSesion(await api.getSesion());
+    } catch {
+      setSesion(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    onSesionVencida(() => {
+      setSesion(null);
+      setAviso('La sesión venció o se cerró. Ingrese nuevamente.');
+    });
+    void refrescarSesion().finally(() => setIniciando(false));
+  }, [refrescarSesion]);
+
+  const salir = useCallback(async () => {
+    try {
+      await api.logout();
+    } finally {
+      setSesion(null);
+      setAviso(null);
+    }
+  }, []);
+
+  if (iniciando) {
+    return <p className="py-24 text-center text-sm text-muted">Cargando…</p>;
+  }
+  if (!sesion) {
+    return (
+      <LoginView
+        aviso={aviso}
+        onIngreso={(nueva) => {
+          setAviso(null);
+          setSesion(nueva);
+        }}
+      />
+    );
+  }
+  return (
+    <Ventanilla key={sesion.operador.id} sesion={sesion} onRefrescarSesion={refrescarSesion} onSalir={() => void salir()} />
+  );
+}
+
+interface VentanillaProps {
+  sesion: Sesion;
+  onRefrescarSesion: () => Promise<void>;
+  onSalir: () => void;
+}
+
+function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
   const { toast } = useToast();
   const now = useNow();
-  const [activeView, setActiveView] = useState<View>('dashboard');
+  const esGerencia = sesion.operador.rol === 'ADMINISTRADOR';
+  // El conserje opera solo con su propia guardia abierta (RF-08).
+  const conGuardiaPropia = esGerencia || Boolean(sesion.guardia?.es_propia);
+  const [activeView, setActiveView] = useState<View>(esGerencia ? 'gerencia' : 'dashboard');
   const [habitaciones, setHabitaciones] = useState<HabitacionConDetalles[]>([]);
   const [carga, setCarga] = useState<Carga>('cargando');
   const [online, setOnline] = useState(true);
@@ -48,6 +113,13 @@ function App() {
       window.removeEventListener('focus', onFocus);
     };
   }, [fetchHabitaciones]);
+
+  // El estado de la guardia de la ventanilla se refresca solo: el conserje que espera ve cuándo la anterior
+  // se cerró, y la gerencia ve quién está atendiendo.
+  useEffect(() => {
+    const interval = setInterval(() => void onRefrescarSesion(), SESION_POLL_MS);
+    return () => clearInterval(interval);
+  }, [onRefrescarSesion]);
 
   const selectedRoom = habitaciones.find((h) => h.id === selectedId) ?? null;
 
@@ -94,15 +166,29 @@ function App() {
 
   return (
     <div className="flex min-h-screen flex-col">
-      <TopNav activeView={activeView} setActiveView={setActiveView} online={online} now={now} />
+      <TopNav
+        sesion={sesion}
+        activeView={activeView}
+        setActiveView={setActiveView}
+        online={online}
+        now={now}
+        onSalir={onSalir}
+      />
 
       <main className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col px-4 py-6 sm:px-6">
-        {activeView === 'dashboard' && (
+        {!conGuardiaPropia && activeView !== 'inventario' && (
+          <GuardiaView sesion={sesion} onGuardiaAbierta={onRefrescarSesion} onSalir={onSalir} />
+        )}
+
+        {conGuardiaPropia && activeView === 'dashboard' && (
           <>
             <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
               <div>
                 <h1 className="text-xl font-semibold text-ink">Habitaciones</h1>
-                <p className="mt-0.5 text-sm text-muted">{habitaciones.length} habitaciones</p>
+                <p className="mt-0.5 text-sm text-muted">
+                  {habitaciones.length} habitaciones
+                  {esGerencia && ' · vista de consulta: la ventanilla la opera el conserje con su guardia'}
+                </p>
               </div>
 
               <div role="group" aria-label="Filtrar por estado" className="flex flex-wrap items-center gap-1.5">
@@ -170,16 +256,11 @@ function App() {
           </>
         )}
 
-        {activeView === 'inventario' && <InventarioView />}
+        {activeView === 'inventario' && <InventarioView puedeCrear={esGerencia} />}
 
-        {activeView === 'caja' && (
-          <div className="flex flex-1 flex-col items-center justify-center rounded-lg border border-line bg-surface p-12 text-center">
-            <h1 className="text-lg font-semibold text-ink">Cierre de caja</h1>
-            <p className="mt-1 max-w-sm text-sm text-muted">
-              Este módulo todavía no está disponible. Se habilitará junto con el cierre de caja ciego.
-            </p>
-          </div>
-        )}
+        {conGuardiaPropia && activeView === 'caja' && !esGerencia && <CierreCajaView sesion={sesion} onFinalizar={onSalir} />}
+
+        {esGerencia && activeView === 'gerencia' && <PanelGerencia onCambioGuardia={onRefrescarSesion} />}
       </main>
 
       {selectedRoom && (
