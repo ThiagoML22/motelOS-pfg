@@ -55,7 +55,9 @@ services:
     ports:
       - "5173:5173"
     environment:
-      VITE_API_URL: http://localhost:8000/api/v1
+      VITE_API_URL: ${VITE_API_URL:-http://localhost:8000/api/v1}
+      # Docker Desktop en Windows no avisa los cambios de archivos de la carpeta montada: Vite los sondea.
+      VITE_USE_POLLING: "true"
     depends_on:
       - backend
     volumes:

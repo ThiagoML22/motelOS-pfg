@@ -11,7 +11,7 @@ interface EstadoMeta {
 
 export const ESTADOS_ORDEN: RoomStatus[] = ['Libre', 'Ocupada', 'En Limpieza', 'Mantenimiento'];
 
-// Codificación cromática de RF-01: Libre = verde, Ocupada = rojo, Limpieza = amarillo.
+// Codificación cromática de RF-01: Libre = verde, Ocupada = azul, En Limpieza = amarillo, Mantenimiento = gris.
 export const ESTADO_META: Record<RoomStatus, EstadoMeta> = {
   Libre: { label: 'Disponible', hint: 'Lista para ocupar', dot: 'bg-libre', text: 'text-libre', bar: 'border-l-libre' },
   Ocupada: { label: 'Ocupada', hint: '', dot: 'bg-ocupada', text: 'text-ocupada', bar: 'border-l-ocupada' },
