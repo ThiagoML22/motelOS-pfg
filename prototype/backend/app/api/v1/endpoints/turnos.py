@@ -6,11 +6,13 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
+from app.api.deps import operador_actual
 from app.core.database import get_db
 from app.models.articulo import Articulo
 from app.models.consumo import Consumo
 from app.models.estadia_activa import EstadiaActiva
 from app.models.habitacion import Habitacion
+from app.models.operador import Operador
 from app.models.pago import Pago
 from app.models.tarifa import Tarifa
 from app.models.turno import Turno
@@ -23,14 +25,19 @@ from app.schemas.turno import (
     TurnoResponse,
     TurnoResumen,
 )
-from app.services.estadia import cargar_patentes
+from app.services.caja import guardia_del_operador
+from app.services.estadia import cargar_nombres_de_apertura, cargar_patentes
 from app.services.liquidacion import liquidar_turno
 
 router = APIRouter()
 
 
 @router.post("/", response_model=TurnoResponse, status_code=status.HTTP_201_CREATED)
-async def create_turno(turno_in: TurnoCreate, db: AsyncSession = Depends(get_db)):
+async def create_turno(
+    turno_in: TurnoCreate,
+    db: AsyncSession = Depends(get_db),
+    operador: Operador = Depends(operador_actual),
+):
     result = await db.execute(select(Habitacion).where(Habitacion.id == turno_in.habitacion_id))
     habitacion = result.scalars().first()
 
@@ -39,6 +46,8 @@ async def create_turno(turno_in: TurnoCreate, db: AsyncSession = Depends(get_db)
 
     if habitacion.estado != "Libre":
         raise HTTPException(status_code=409, detail="RN-EXI-01: La habitación no está en estado Libre")
+
+    guardia = await guardia_del_operador(db, operador)
 
     tarifa_res = await db.execute(select(Tarifa).where(Tarifa.vigente.is_(True)).order_by(Tarifa.id.desc()))
     tarifa = tarifa_res.scalars().first()
@@ -53,6 +62,9 @@ async def create_turno(turno_in: TurnoCreate, db: AsyncSession = Depends(get_db)
         estado="En Curso",
         tarifa_base=tarifa.tarifa_base,
         total_general=tarifa.tarifa_base,
+        # RNF-04: el turno queda a nombre del operador de la sesión y de su guardia.
+        operador_apertura_id=operador.id,
+        guardia_apertura_id=guardia.id,
     )
     db.add(nuevo_turno)
     patente = (turno_in.identificador_vehicular or "").strip() or None
@@ -65,16 +77,24 @@ async def create_turno(turno_in: TurnoCreate, db: AsyncSession = Depends(get_db)
     await db.commit()
     await db.refresh(nuevo_turno)
     nuevo_turno.identificador_vehicular = patente
+    nuevo_turno.abierto_por = operador.nombre_visible
     return nuevo_turno
 
 
 @router.post("/{turno_id}/consumos", status_code=status.HTTP_201_CREATED)
-async def add_consumo(turno_id: uuid.UUID, consumo_in: ConsumoCreate, db: AsyncSession = Depends(get_db)):
+async def add_consumo(
+    turno_id: uuid.UUID,
+    consumo_in: ConsumoCreate,
+    db: AsyncSession = Depends(get_db),
+    operador: Operador = Depends(operador_actual),
+):
     # RN-EXI-02: Check stock and atomically add consumption
     turno_res = await db.execute(select(Turno).where(Turno.id == turno_id))
     turno = turno_res.scalars().first()
     if not turno or turno.estado != "En Curso":
         raise HTTPException(status_code=400, detail="Turno no válido o no está en curso")
+
+    await guardia_del_operador(db, operador)
 
     art_res = await db.execute(select(Articulo).where(Articulo.id == consumo_in.articulo_id).with_for_update())
     articulo = art_res.scalars().first()
@@ -97,6 +117,7 @@ async def add_consumo(turno_id: uuid.UUID, consumo_in: ConsumoCreate, db: AsyncS
         cantidad=consumo_in.cantidad,
         precio_unitario=articulo.precio_unitario,
         subtotal=subtotal,
+        operador_id=operador.id,
     )
     db.add(nuevo_consumo)
 
@@ -124,6 +145,7 @@ async def get_resumen(turno_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
     consumos = cons_res.scalars().all()
 
     await cargar_patentes(db, [turno])
+    await cargar_nombres_de_apertura(db, [turno])
     resumen_dict = turno.__dict__.copy()
     resumen_dict["minutos_transcurridos"] = liquidacion.minutos_transcurridos
     resumen_dict["total_pagado"] = liquidacion.total_pagado
@@ -143,12 +165,20 @@ async def get_resumen(turno_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/{turno_id}/cerrar", response_model=ConstanciaCobro)
-async def cerrar_turno(turno_id: uuid.UUID, cierre_in: CierreTurnoCreate, db: AsyncSession = Depends(get_db)):
+async def cerrar_turno(
+    turno_id: uuid.UUID,
+    cierre_in: CierreTurnoCreate,
+    db: AsyncSession = Depends(get_db),
+    operador: Operador = Depends(operador_actual),
+):
     turno_res = await db.execute(select(Turno).where(Turno.id == turno_id))
     turno = turno_res.scalars().first()
     if not turno or turno.estado != "En Curso":
         raise HTTPException(status_code=400, detail="Turno no válido o ya finalizado")
 
+    # RN-DER-04: el cobro entra a la caja de la guardia que atiende ahora, aunque el turno lo haya
+    # abierto la anterior.
+    guardia = await guardia_del_operador(db, operador)
     liquidacion = await liquidar_turno(db, turno)
     montos = [Decimal(str(p.monto)).quantize(Decimal("0.01")) for p in cierre_in.pagos]
     total_declarado = sum(montos, Decimal("0"))
@@ -167,13 +197,23 @@ async def cerrar_turno(turno_id: uuid.UUID, cierre_in: CierreTurnoCreate, db: As
     pagos_constancia = []
     for pago_in, monto in zip(cierre_in.pagos, montos, strict=True):
         comprobante = (pago_in.comprobante_referencia or "").strip() or None
-        db.add(Pago(turno_id=turno.id, monto=monto, medio_pago=pago_in.medio_pago, comprobante_referencia=comprobante))
+        db.add(
+            Pago(
+                turno_id=turno.id,
+                monto=monto,
+                medio_pago=pago_in.medio_pago,
+                comprobante_referencia=comprobante,
+                operador_id=operador.id,
+                guardia_id=guardia.id,
+            )
+        )
         pagos_constancia.append(
             PagoConstancia(medio_pago=pago_in.medio_pago, monto=monto, comprobante_referencia=comprobante)
         )
 
     turno.estado = "FINALIZADO"
     turno.hora_fin = datetime.now(UTC)
+    turno.operador_cierre_id = operador.id
 
     # Liberar habitacion -> Pasa a En Limpieza
     hab_res = await db.execute(select(Habitacion).where(Habitacion.id == turno.habitacion_id))

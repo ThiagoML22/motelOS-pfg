@@ -1,4 +1,6 @@
--- db/init.sql
+-- db/migraciones/001_esquema_v1.sql
+-- Esquema del prototipo v1 (etiqueta v1.2, antes db/init.sql). Las migraciones se aplican en orden
+-- numerico con el usuario dueno de las tablas; la aplicacion nunca las ejecuta.
 
 CREATE TABLE habitaciones (
     id SERIAL PRIMARY KEY,

@@ -4,9 +4,12 @@ on:
   push:
     branches:
       - main
+      # Rama de integración del prototipo v2 (AE3): cada etapa entra por una solicitud de cambios.
+      - ae3/v2
   pull_request:
     branches:
       - main
+      - ae3/v2
 
 jobs:
   backend:
@@ -47,28 +50,78 @@ jobs:
           pip install -r requirements-dev.txt
 
       - name: Lint (Ruff)
-        run: ruff check app/ --ignore B008,EXE002
+        run: ruff check app/ scripts/ --ignore B008,EXE002
 
-      - name: Run Pytest
+      - name: Auditar dependencias (vulnerabilidades conocidas)
+        run: pip-audit -r requirements.txt --progress-spinner off
+
+      - name: Pruebas sobre PostgreSQL con cobertura de liquidación y caja (RNF-07, corte en 70 %)
         env:
           TEST_DATABASE_URL: "postgresql+asyncpg://postgres:postgres@localhost:5432/motel_test"
-        run: PYTHONPATH=. python -m pytest app/tests/ -v
+        run: PYTHONPATH=. python -m pytest app/tests/ -v --cov --cov-config=.coveragerc
 
-      - name: Verificar esquema SQL e inmutabilidad (RN-RES-01)
+      - name: Aplicar migraciones y verificar inmutabilidad (RN-RES-01)
         working-directory: ./prototype
         env:
           PGPASSWORD: postgres
         run: |
           psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c "CREATE DATABASE motel_schema;"
-          psql -h localhost -U postgres -d motel_schema -v ON_ERROR_STOP=1 -q -f db/init.sql
+          for m in db/migraciones/*.sql; do
+            echo "Aplicando $m"
+            psql -h localhost -U postgres -d motel_schema -v ON_ERROR_STOP=1 -q -f "$m"
+          done
           psql -h localhost -U postgres -d motel_schema -v ON_ERROR_STOP=1 -f db/verify_inmutabilidad.sql
 
-      - name: Verificar permisos del rol de la aplicación (RNF-01, RNF-08)
+      - name: Verificar permisos del rol de la aplicación (RNF-01, RNF-04, RNF-08)
         working-directory: ./prototype
         env:
           PGPASSWORD: postgres
         run: |
           psql -h localhost -U postgres -d motel_schema -v ON_ERROR_STOP=1 -f db/verify_roles.sql
+
+      - name: Verificar el cierre de caja en la base (RF-08, RF-09, RF-14, RN-RES-02, RN-DER-03, RN-DER-04)
+        working-directory: ./prototype
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h localhost -U postgres -d motel_schema -v ON_ERROR_STOP=1 -f db/verify_caja.sql
+
+      - name: Verificar la migración desde una base v1.2 con datos
+        working-directory: ./prototype
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c "CREATE DATABASE motel_migracion;"
+          psql -h localhost -U postgres -d motel_migracion -v ON_ERROR_STOP=1 -q -f db/migraciones/001_esquema_v1.sql
+          psql -h localhost -U postgres -d motel_migracion -v ON_ERROR_STOP=1 -q -v fase=antes -f db/verify_migracion_datos_v1.sql
+          for m in db/migraciones/*.sql; do
+            [ "$(basename "$m")" = "001_esquema_v1.sql" ] && continue
+            psql -h localhost -U postgres -d motel_migracion -v ON_ERROR_STOP=1 -q -f "$m"
+          done
+          psql -h localhost -U postgres -d motel_migracion -v ON_ERROR_STOP=1 -v fase=despues -f db/verify_migracion_datos_v1.sql
+
+      # De punta a punta: la API corre con el rol motel_app sobre el esquema migrado (triggers y permisos
+      # reales). Las claves son de un solo uso, generadas en esta corrida.
+      - name: Recorrido de punta a punta y latencia (RF-08, RF-09, RNF-04, RNF-02)
+        env:
+          JWT_SECRET: ${{ github.run_id }}-${{ github.run_attempt }}-clave-efimera-del-canal
+        run: |
+          export DEMO_CLAVE_GERENCIA="g-$(openssl rand -hex 12)"
+          export DEMO_CLAVE_CONSERJES="c-$(openssl rand -hex 12)"
+          DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/motel_schema python -m scripts.cargar_demo
+          DATABASE_URL=postgresql+asyncpg://motel_app:motel_app@localhost:5432/motel_schema \
+            uvicorn app.main:app --port 8000 > uvicorn.log 2>&1 &
+          for i in $(seq 1 30); do curl -sf http://localhost:8000/health && break; sleep 1; done
+          python -m scripts.recorrido_v2 --api http://localhost:8000
+          python -m scripts.medir_latencia --api http://localhost:8000 --salida medicion_latencia_RNF-02.csv
+
+      - name: Guardar la medición de latencia
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: medicion-latencia-rnf-02
+          path: prototype/backend/medicion_latencia_RNF-02.csv
+          if-no-files-found: ignore
 
   frontend:
     runs-on: ubuntu-latest
@@ -89,6 +142,11 @@ jobs:
 
       - name: Install NPM Packages
         run: npm ci
+
+      # Solo las dependencias que viajan al navegador; las de compilación (Vite, Tailwind) se declaran en
+      # el archivo de lectura y se actualizan en la iteración 4.
+      - name: Auditar dependencias de producción
+        run: npm audit --omit=dev --audit-level=high
 
       - name: Type Check
         run: npx tsc --noEmit

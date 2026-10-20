@@ -1,7 +1,7 @@
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import Column, DateTime, ForeignKey, Numeric, String
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, Numeric, String
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.core.database import Base
@@ -16,3 +16,7 @@ class Pago(Base):
     medio_pago = Column(String(50), nullable=False)
     comprobante_referencia = Column(String(100), nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False)
+    # RNF-04 y RN-DER-04: el pago se imputa al operador y a la guardia abierta al momento del cobro,
+    # aunque el turno lo haya abierto otra guardia. Nulos solo en los pagos de la v1.
+    operador_id = Column(Integer, ForeignKey("operadores.id"), nullable=True)
+    guardia_id = Column(Integer, ForeignKey("guardias.id"), nullable=True)

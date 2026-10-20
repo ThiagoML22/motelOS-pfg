@@ -17,3 +17,5 @@ class Consumo(Base):
     precio_unitario = Column(Numeric(10, 2), nullable=False)
     subtotal = Column(Numeric(10, 2), nullable=False)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False)
+    # RNF-04: quién despachó el consumo (nulo solo en los consumos de la v1).
+    operador_id = Column(Integer, ForeignKey("operadores.id"), nullable=True)

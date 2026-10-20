@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.database import AsyncSessionLocal
 from app.models.estadia_activa import EstadiaActiva
+from app.models.operador import Operador
 from app.models.turno import Turno
 
 logger = logging.getLogger(__name__)
@@ -21,6 +22,17 @@ async def cargar_patentes(db: AsyncSession, turnos: list[Turno]) -> None:
     patentes = {e.turno_id: e.identificador_vehicular for e in res.scalars().all()}
     for turno in turnos:
         turno.identificador_vehicular = patentes.get(turno.id)
+
+
+async def cargar_nombres_de_apertura(db: AsyncSession, turnos: list[Turno]) -> None:
+    """Completa el nombre visible de quien abrió cada turno, para el recambio de guardia (RNF-04)."""
+    ids = {t.operador_apertura_id for t in turnos if t.operador_apertura_id}
+    if not ids:
+        return
+    res = await db.execute(select(Operador.id, Operador.nombre_visible).where(Operador.id.in_(ids)))
+    nombres = dict(res.all())
+    for turno in turnos:
+        turno.abierto_por = nombres.get(turno.operador_apertura_id)
 
 
 async def depurar_patentes(
