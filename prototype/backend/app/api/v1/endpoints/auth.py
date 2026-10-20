@@ -7,6 +7,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import operador_actual
+from app.api.v1.endpoints.guardias import guardia_publica
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.seguridad import (
@@ -18,6 +19,7 @@ from app.core.seguridad import (
 )
 from app.models.operador import Operador
 from app.schemas.auth import LoginRequest, OperadorPublico, SesionResponse
+from app.services.caja import guardia_abierta
 from app.services.liquidacion import con_zona
 
 router = APIRouter()
@@ -67,7 +69,7 @@ async def login(datos: LoginRequest, response: Response, db: AsyncSession = Depe
     await db.commit()
 
     poner_cookie_sesion(response, crear_token(operador.id, operador.rol, ahora))
-    return SesionResponse(operador=OperadorPublico.model_validate(operador))
+    return await _sesion_de(db, operador)
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
@@ -78,5 +80,13 @@ async def logout():
 
 
 @router.get("/sesion", response_model=SesionResponse)
-async def sesion(operador: Operador = Depends(operador_actual)):
-    return SesionResponse(operador=OperadorPublico.model_validate(operador))
+async def sesion(db: AsyncSession = Depends(get_db), operador: Operador = Depends(operador_actual)):
+    return await _sesion_de(db, operador)
+
+
+async def _sesion_de(db: AsyncSession, operador: Operador) -> SesionResponse:
+    guardia = await guardia_abierta(db)
+    return SesionResponse(
+        operador=OperadorPublico.model_validate(operador),
+        guardia=await guardia_publica(db, guardia, operador) if guardia else None,
+    )

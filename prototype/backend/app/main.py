@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.api.deps import operador_actual
-from app.api.v1.endpoints import articulos, auth, habitaciones, turnos
+from app.api.v1.endpoints import articulos, auth, guardias, habitaciones, turnos
 from app.core.config import settings
 from app.services.estadia import ciclo_depuracion
 
@@ -68,6 +68,7 @@ app.include_router(auth.router, prefix="/api/v1/auth", tags=["sesión"])
 app.include_router(habitaciones.router, prefix="/api/v1/habitaciones", tags=["habitaciones"], dependencies=con_sesion)
 app.include_router(turnos.router, prefix="/api/v1/turnos", tags=["turnos"], dependencies=con_sesion)
 app.include_router(articulos.router, prefix="/api/v1/articulos", tags=["articulos"], dependencies=con_sesion)
+app.include_router(guardias.router, prefix="/api/v1/guardias", tags=["caja"], dependencies=con_sesion)
 
 
 @app.get("/health")

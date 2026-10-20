@@ -3,6 +3,9 @@ import os
 # Las pruebas usan un costo de argon2 bajo para no demorar: se fija antes de importar la aplicación.
 os.environ.setdefault("ARGON2_TIME_COST", "1")
 os.environ.setdefault("ARGON2_MEMORY_KIB", "1024")
+# Las pruebas de caja verifican la aritmética del arqueo sin fondo de cambio; el fondo aprobado ($25.000) se
+# prueba aparte en test_caja (test_el_fondo_de_cambio_integra_el_efectivo_del_sistema).
+os.environ.setdefault("FONDO_INICIAL_CAJA", "0")
 
 import pytest_asyncio  # noqa: E402
 from httpx import ASGITransport, AsyncClient  # noqa: E402
@@ -98,11 +101,18 @@ async def anonimo(session_factory):
         yield ac
 
 
+async def abrir_guardia(ac: AsyncClient) -> dict:
+    resp = await ac.post("/api/v1/guardias/")
+    assert resp.status_code == 201, resp.text
+    return resp.json()
+
+
 @pytest_asyncio.fixture
 async def client(session_factory):
-    """Cliente con la sesión de conserje1: es el operador con el que corren las pruebas de la v1."""
+    """Cliente de conserje1 con su guardia abierta: es el operador con el que corren las pruebas de la v1."""
     async with nuevo_cliente() as ac:
         await iniciar_sesion(ac, "conserje1")
+        await abrir_guardia(ac)
         yield ac
 
 

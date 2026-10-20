@@ -31,6 +31,8 @@ class TurnoResponse(TurnoBase):
     total_sobreturno: float
     total_consumos: float
     total_general: float
+    # RNF-04: quién abrió el turno (útil en el recambio, cuando lo cobra la guardia siguiente).
+    abierto_por: str | None = None
 
 
 class TurnoResumen(TurnoResponse):

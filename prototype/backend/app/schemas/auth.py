@@ -1,5 +1,7 @@
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.schemas.caja import GuardiaPublica
+
 
 class LoginRequest(BaseModel):
     usuario: str = Field(min_length=1, max_length=40)
@@ -19,3 +21,5 @@ class OperadorPublico(BaseModel):
 
 class SesionResponse(BaseModel):
     operador: OperadorPublico
+    # La guardia abierta en la ventanilla, si hay una (sin importes).
+    guardia: GuardiaPublica | None = None
