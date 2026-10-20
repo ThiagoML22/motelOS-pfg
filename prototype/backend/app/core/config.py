@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -30,6 +32,14 @@ class Settings(BaseSettings):
     # Costo de argon2id para las claves (valores por defecto de argon2-cffi; las pruebas los bajan).
     ARGON2_TIME_COST: int = 3
     ARGON2_MEMORY_KIB: int = 65536
+
+    # Guardias (RF-08): franjas de 06:00, 14:00 y 22:00 en la hora local del motel. Una guardia abierta hasta
+    # GUARDIA_ANTICIPACION_MIN minutos antes de su hora de inicio corresponde a esa franja.
+    ZONA_HORARIA: str = "America/Argentina/Buenos_Aires"
+    GUARDIA_ANTICIPACION_MIN: int = 120
+    # Fondo de cambio que recibe cada guardia en la gaveta: $25.000, aprobado por la gerencia en el acta de
+    # validación del 19/10/2026 (punto 5). Se suma al efectivo que el sistema espera en el arqueo.
+    FONDO_INICIAL_CAJA: Decimal = Decimal("25000")
 
     @model_validator(mode="after")
     def exigir_configuracion_segura(self) -> "Settings":

@@ -8,3 +8,5 @@ alembic==1.13.1
 # Sesión y claves (RNF-04). PyJWT 2.15 corrige vulnerabilidades publicadas de las versiones 2.9 a 2.14.
 PyJWT==2.15.1
 argon2-cffi==25.1.0
+# Zona horaria del motel para la franja de cada guardia (zoneinfo en Windows y en imágenes mínimas).
+tzdata==2026.5
