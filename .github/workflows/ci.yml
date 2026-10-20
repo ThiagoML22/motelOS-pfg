@@ -4,9 +4,12 @@ on:
   push:
     branches:
       - main
+      # Rama de integración del prototipo v2 (AE3): cada etapa entra por una solicitud de cambios.
+      - ae3/v2
   pull_request:
     branches:
       - main
+      - ae3/v2
 
 jobs:
   backend:
