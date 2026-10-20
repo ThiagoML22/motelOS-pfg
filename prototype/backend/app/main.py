@@ -5,8 +5,8 @@ from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api.deps import operador_actual
-from app.api.v1.endpoints import articulos, auth, guardias, habitaciones, turnos
+from app.api.deps import operador_actual, solo_administrador
+from app.api.v1.endpoints import arqueos, articulos, auth, guardias, habitaciones, operadores, turnos
 from app.core.config import settings
 from app.services.estadia import ciclo_depuracion
 
@@ -69,6 +69,10 @@ app.include_router(habitaciones.router, prefix="/api/v1/habitaciones", tags=["ha
 app.include_router(turnos.router, prefix="/api/v1/turnos", tags=["turnos"], dependencies=con_sesion)
 app.include_router(articulos.router, prefix="/api/v1/articulos", tags=["articulos"], dependencies=con_sesion)
 app.include_router(guardias.router, prefix="/api/v1/guardias", tags=["caja"], dependencies=con_sesion)
+# Panel de la gerencia: solo el rol ADMINISTRADOR.
+solo_gerencia = [Depends(solo_administrador)]
+app.include_router(arqueos.router, prefix="/api/v1/arqueos", tags=["gerencia"], dependencies=solo_gerencia)
+app.include_router(operadores.router, prefix="/api/v1/operadores", tags=["gerencia"], dependencies=solo_gerencia)
 
 
 @app.get("/health")
