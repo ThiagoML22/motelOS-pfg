@@ -1,0 +1,14 @@
+# RNF-07: cobertura de los modulos de liquidacion y de caja.
+# SQLAlchemy asincrono ejecuta el codigo dentro de greenlets: sin la opcion concurrency, coverage pierde el
+# rastro de las lineas que siguen a cada await y subestima la cobertura real.
+[run]
+concurrency = greenlet, thread
+include =
+    */app/services/liquidacion.py
+    */app/services/billing_service.py
+    */app/services/caja.py
+    */app/services/reportes.py
+
+[report]
+fail_under = 70
+show_missing = True

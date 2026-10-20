@@ -29,3 +29,8 @@ Thumbs.db
 *.tsbuildinfo
 vite.config.js
 vite.config.d.ts
+
+# Cobertura y mediciones temporales
+.coverage
+htmlcov/
+backend/medicion_latencia_*.csv
