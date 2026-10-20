@@ -13,8 +13,9 @@ Esta carpeta contiene la documentación formal del Proyecto de Grado: borradores
 | Correcciones de la AE1 | `AE2/20261004_Correcciones_AE1_ThiagoLeal_v2.pdf` | Versión 2 |
 | Respuestas al dictamen DEV-AE2 N.º 11/2026 (Bloque A) | `AE2/20261004_Respuestas_Bloque_A_ThiagoLeal.pdf` | Versión 1 |
 | Registro de corridas del canal de integración continua | `AE2/20261004_Registro_corridas_Actions_motelOS.xlsx` | Registro completo, con su fecha y hora de exportación |
+| Catálogo de requisitos de la AE3 (libro oficial de la cátedra) | `AE3/20261019_CatalogoRequisitos_ThiagoLeal_v4.xlsx` | Versión 4: RF-14 nuevo, RN-DER-04 con la redacción nueva y el fondo de cambio de $25.000 (RN-DER-05), validados en el acta del 19/10/2026 |
 
-El prototipo vigente es la etiqueta `v1.2` (carpeta `prototype/`).
+El prototipo vigente es la etiqueta `v1.2` (carpeta `prototype/`). El prototipo v2 se integra por etapas en la rama `ae3/v2`.
 
 ## Versiones anteriores
 
