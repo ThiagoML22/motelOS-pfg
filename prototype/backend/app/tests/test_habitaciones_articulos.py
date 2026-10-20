@@ -49,22 +49,31 @@ async def test_cambiar_estado_habitacion_inexistente_devuelve_404(client: AsyncC
     assert (await client.patch("/api/v1/habitaciones/999/estado", json={"estado": "Libre"})).status_code == 404
 
 
-async def test_listar_y_crear_articulos(client: AsyncClient):
+async def test_listar_y_crear_articulos(client: AsyncClient, cliente_como):
+    gerencia = await cliente_como("gerencia")
     nuevo = {"codigo": "SNA-001", "descripcion": "Papas Fritas", "precio_unitario": 1500, "stock_actual": 5}
 
-    creado = await client.post("/api/v1/articulos/", json=nuevo)
+    creado = await gerencia.post("/api/v1/articulos/", json=nuevo)
     assert creado.status_code == 201
     assert creado.json()["codigo"] == "SNA-001"
 
+    # El conserje ve el inventario completo.
     codigos = [a["codigo"] for a in (await client.get("/api/v1/articulos/")).json()]
     assert set(codigos) == {"MIN-001", "MIN-002", "SNA-001"}
 
 
-async def test_crear_articulo_codigo_duplicado_devuelve_400(client: AsyncClient):
+async def test_el_conserje_no_da_de_alta_articulos(client: AsyncClient):
+    nuevo = {"codigo": "SNA-009", "descripcion": "Maní", "precio_unitario": 900, "stock_actual": 5}
+    assert (await client.post("/api/v1/articulos/", json=nuevo)).status_code == 403
+
+
+async def test_crear_articulo_codigo_duplicado_devuelve_400(cliente_como):
+    gerencia = await cliente_como("gerencia")
     dup = {"codigo": "MIN-001", "descripcion": "Otra", "precio_unitario": 1, "stock_actual": 1}
-    assert (await client.post("/api/v1/articulos/", json=dup)).status_code == 400
+    assert (await gerencia.post("/api/v1/articulos/", json=dup)).status_code == 400
 
 
-async def test_crear_articulo_con_stock_negativo_devuelve_422(client: AsyncClient):
+async def test_crear_articulo_con_stock_negativo_devuelve_422(cliente_como):
+    gerencia = await cliente_como("gerencia")
     malo = {"codigo": "X-1", "descripcion": "Malo", "precio_unitario": 1, "stock_actual": -1}
-    assert (await client.post("/api/v1/articulos/", json=malo)).status_code == 422
+    assert (await gerencia.post("/api/v1/articulos/", json=malo)).status_code == 422

@@ -6,11 +6,13 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
+from app.api.deps import operador_actual
 from app.core.database import get_db
 from app.models.articulo import Articulo
 from app.models.consumo import Consumo
 from app.models.estadia_activa import EstadiaActiva
 from app.models.habitacion import Habitacion
+from app.models.operador import Operador
 from app.models.pago import Pago
 from app.models.tarifa import Tarifa
 from app.models.turno import Turno
@@ -30,7 +32,11 @@ router = APIRouter()
 
 
 @router.post("/", response_model=TurnoResponse, status_code=status.HTTP_201_CREATED)
-async def create_turno(turno_in: TurnoCreate, db: AsyncSession = Depends(get_db)):
+async def create_turno(
+    turno_in: TurnoCreate,
+    db: AsyncSession = Depends(get_db),
+    operador: Operador = Depends(operador_actual),
+):
     result = await db.execute(select(Habitacion).where(Habitacion.id == turno_in.habitacion_id))
     habitacion = result.scalars().first()
 
@@ -53,6 +59,8 @@ async def create_turno(turno_in: TurnoCreate, db: AsyncSession = Depends(get_db)
         estado="En Curso",
         tarifa_base=tarifa.tarifa_base,
         total_general=tarifa.tarifa_base,
+        # RNF-04: el turno queda a nombre del operador de la sesión.
+        operador_apertura_id=operador.id,
     )
     db.add(nuevo_turno)
     patente = (turno_in.identificador_vehicular or "").strip() or None
@@ -69,7 +77,12 @@ async def create_turno(turno_in: TurnoCreate, db: AsyncSession = Depends(get_db)
 
 
 @router.post("/{turno_id}/consumos", status_code=status.HTTP_201_CREATED)
-async def add_consumo(turno_id: uuid.UUID, consumo_in: ConsumoCreate, db: AsyncSession = Depends(get_db)):
+async def add_consumo(
+    turno_id: uuid.UUID,
+    consumo_in: ConsumoCreate,
+    db: AsyncSession = Depends(get_db),
+    operador: Operador = Depends(operador_actual),
+):
     # RN-EXI-02: Check stock and atomically add consumption
     turno_res = await db.execute(select(Turno).where(Turno.id == turno_id))
     turno = turno_res.scalars().first()
@@ -97,6 +110,7 @@ async def add_consumo(turno_id: uuid.UUID, consumo_in: ConsumoCreate, db: AsyncS
         cantidad=consumo_in.cantidad,
         precio_unitario=articulo.precio_unitario,
         subtotal=subtotal,
+        operador_id=operador.id,
     )
     db.add(nuevo_consumo)
 
@@ -143,7 +157,12 @@ async def get_resumen(turno_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/{turno_id}/cerrar", response_model=ConstanciaCobro)
-async def cerrar_turno(turno_id: uuid.UUID, cierre_in: CierreTurnoCreate, db: AsyncSession = Depends(get_db)):
+async def cerrar_turno(
+    turno_id: uuid.UUID,
+    cierre_in: CierreTurnoCreate,
+    db: AsyncSession = Depends(get_db),
+    operador: Operador = Depends(operador_actual),
+):
     turno_res = await db.execute(select(Turno).where(Turno.id == turno_id))
     turno = turno_res.scalars().first()
     if not turno or turno.estado != "En Curso":
@@ -167,13 +186,22 @@ async def cerrar_turno(turno_id: uuid.UUID, cierre_in: CierreTurnoCreate, db: As
     pagos_constancia = []
     for pago_in, monto in zip(cierre_in.pagos, montos, strict=True):
         comprobante = (pago_in.comprobante_referencia or "").strip() or None
-        db.add(Pago(turno_id=turno.id, monto=monto, medio_pago=pago_in.medio_pago, comprobante_referencia=comprobante))
+        db.add(
+            Pago(
+                turno_id=turno.id,
+                monto=monto,
+                medio_pago=pago_in.medio_pago,
+                comprobante_referencia=comprobante,
+                operador_id=operador.id,
+            )
+        )
         pagos_constancia.append(
             PagoConstancia(medio_pago=pago_in.medio_pago, monto=monto, comprobante_referencia=comprobante)
         )
 
     turno.estado = "FINALIZADO"
     turno.hora_fin = datetime.now(UTC)
+    turno.operador_cierre_id = operador.id
 
     # Liberar habitacion -> Pasa a En Limpieza
     hab_res = await db.execute(select(Habitacion).where(Habitacion.id == turno.habitacion_id))
