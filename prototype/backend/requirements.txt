@@ -1,7 +1,10 @@
-﻿fastapi==0.111.0
+fastapi==0.111.0
 uvicorn[standard]==0.29.0
 sqlalchemy==2.0.29
 asyncpg==0.29.0
 pydantic==2.7.1
 pydantic-settings==2.2.1
 alembic==1.13.1
+# Sesión y claves (RNF-04). PyJWT 2.15 corrige vulnerabilidades publicadas de las versiones 2.9 a 2.14.
+PyJWT==2.15.1
+argon2-cffi==25.1.0

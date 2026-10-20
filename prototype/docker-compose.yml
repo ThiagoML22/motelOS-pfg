@@ -27,12 +27,17 @@ services:
     container_name: motel_backend
     restart: always
     environment:
-      # La aplicacion usa el rol motel_app (db/init.sql), que no es dueno de las tablas ni puede deshabilitar triggers.
+      # La aplicación usa el rol motel_app (db/migraciones), que no es dueño de las tablas ni puede
+      # deshabilitar triggers, crear operadores ni modificar arqueos.
       DATABASE_URL: postgresql+asyncpg://${APP_DB_USER:-motel_app}:${APP_DB_PASSWORD:-motel_app}@db:5432/${POSTGRES_DB:-motel_db}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
       SQL_ECHO: ${SQL_ECHO:-False}
+      # RNF-04: clave de firma de las sesiones y cookie solo por HTTPS en producción.
+      JWT_SECRET: ${JWT_SECRET:?Definir JWT_SECRET en .env}
+      COOKIE_SECURE: ${COOKIE_SECURE:-False}
+      ENTORNO: ${ENTORNO:-desarrollo}
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     depends_on:
       db:
         condition: service_healthy
@@ -54,6 +59,27 @@ services:
     volumes:
       - ./frontend:/app
       - /app/node_modules
+
+  # Tareas de administración con el usuario dueño de las tablas (alta de operadores, datos de
+  # demostración). No corre con la aplicación: se invoca con `docker compose run --rm admin ...`.
+  # La API nunca recibe estas credenciales.
+  admin:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    profiles: ["admin"]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-motel_db}
+      JWT_SECRET: no-se-usa-en-tareas-de-administracion
+      DEMO_CLAVE_GERENCIA: ${DEMO_CLAVE_GERENCIA:-}
+      DEMO_CLAVE_CONSERJES: ${DEMO_CLAVE_CONSERJES:-}
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+    entrypoint: ["python", "-m"]
+    command: ["scripts.cargar_demo"]
 
 volumes:
   pgdata:
