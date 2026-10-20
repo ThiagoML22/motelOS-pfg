@@ -14,6 +14,8 @@ Esta carpeta contiene la documentación formal del Proyecto de Grado: borradores
 | Respuestas al dictamen DEV-AE2 N.º 11/2026 (Bloque A) | `AE2/20261004_Respuestas_Bloque_A_ThiagoLeal.pdf` | Versión 1 |
 | Registro de corridas del canal de integración continua | `AE2/20261004_Registro_corridas_Actions_motelOS.xlsx` | Registro completo, con su fecha y hora de exportación |
 | Catálogo de requisitos de la AE3 (libro oficial de la cátedra) | `AE3/20261019_CatalogoRequisitos_ThiagoLeal_v4.xlsx` | Versión 4: RF-14 nuevo, RN-DER-04 con la redacción nueva y el fondo de cambio de $25.000 (RN-DER-05), validados en el acta del 19/10/2026 |
+| Arquitectura del prototipo v2: modelo de datos, decisiones, trigger, permiso y RLS, amenazas y validación con la gerencia | `AE3/20261019_Arquitectura_v2_ThiagoLeal_v1.md` | Versión 1 |
+| Medición de latencia de RNF-02 | `AE3/20261019_Medicion_latencia_RNF-02.csv` | 200 peticiones, P95 de 146,9 ms |
 
 El prototipo vigente es la etiqueta `v1.2` (carpeta `prototype/`). El prototipo v2 se integra por etapas en la rama `ae3/v2`.
 
