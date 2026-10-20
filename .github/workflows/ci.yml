@@ -57,21 +57,45 @@ jobs:
           TEST_DATABASE_URL: "postgresql+asyncpg://postgres:postgres@localhost:5432/motel_test"
         run: PYTHONPATH=. python -m pytest app/tests/ -v
 
-      - name: Verificar esquema SQL e inmutabilidad (RN-RES-01)
+      - name: Aplicar migraciones y verificar inmutabilidad (RN-RES-01)
         working-directory: ./prototype
         env:
           PGPASSWORD: postgres
         run: |
           psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c "CREATE DATABASE motel_schema;"
-          psql -h localhost -U postgres -d motel_schema -v ON_ERROR_STOP=1 -q -f db/init.sql
+          for m in db/migraciones/*.sql; do
+            echo "Aplicando $m"
+            psql -h localhost -U postgres -d motel_schema -v ON_ERROR_STOP=1 -q -f "$m"
+          done
           psql -h localhost -U postgres -d motel_schema -v ON_ERROR_STOP=1 -f db/verify_inmutabilidad.sql
 
-      - name: Verificar permisos del rol de la aplicación (RNF-01, RNF-08)
+      - name: Verificar permisos del rol de la aplicación (RNF-01, RNF-04, RNF-08)
         working-directory: ./prototype
         env:
           PGPASSWORD: postgres
         run: |
           psql -h localhost -U postgres -d motel_schema -v ON_ERROR_STOP=1 -f db/verify_roles.sql
+
+      - name: Verificar el cierre de caja en la base (RF-08, RF-09, RF-14, RN-RES-02, RN-DER-03, RN-DER-04)
+        working-directory: ./prototype
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h localhost -U postgres -d motel_schema -v ON_ERROR_STOP=1 -f db/verify_caja.sql
+
+      - name: Verificar la migración desde una base v1.2 con datos
+        working-directory: ./prototype
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c "CREATE DATABASE motel_migracion;"
+          psql -h localhost -U postgres -d motel_migracion -v ON_ERROR_STOP=1 -q -f db/migraciones/001_esquema_v1.sql
+          psql -h localhost -U postgres -d motel_migracion -v ON_ERROR_STOP=1 -q -v fase=antes -f db/verify_migracion_datos_v1.sql
+          for m in db/migraciones/*.sql; do
+            [ "$(basename "$m")" = "001_esquema_v1.sql" ] && continue
+            psql -h localhost -U postgres -d motel_migracion -v ON_ERROR_STOP=1 -q -f "$m"
+          done
+          psql -h localhost -U postgres -d motel_migracion -v ON_ERROR_STOP=1 -v fase=despues -f db/verify_migracion_datos_v1.sql
 
   frontend:
     runs-on: ubuntu-latest

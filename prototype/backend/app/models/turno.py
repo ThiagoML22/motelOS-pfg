@@ -24,3 +24,8 @@ class Turno(Base):
     total_consumos = Column(Numeric(10, 2), nullable=False, default=0)
     total_general = Column(Numeric(10, 2), nullable=False)
     estado = Column(String(20), nullable=False, default="En Curso")
+    # RNF-04: quién abrió el turno, en qué guardia, y quién lo cobró. Los toma el backend del token de
+    # sesión, nunca del cuerpo de la petición. Nulos solo en los turnos de la v1 (sin autenticación).
+    operador_apertura_id = Column(Integer, ForeignKey("operadores.id"), nullable=True)
+    guardia_apertura_id = Column(Integer, ForeignKey("guardias.id"), nullable=True)
+    operador_cierre_id = Column(Integer, ForeignKey("operadores.id"), nullable=True)
