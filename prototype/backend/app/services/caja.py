@@ -161,6 +161,31 @@ async def confirmar_arqueo(
     return await _registrar_arqueo(db, guardia, operador, efectivo, posnet, mercado_pago, None)
 
 
+async def cierre_supervisado(
+    db: AsyncSession,
+    gerencia: Operador,
+    guardia_id: int,
+    efectivo: Decimal,
+    posnet: Decimal,
+    mercado_pago: Decimal,
+    observacion: str,
+) -> ArqueoCaja:
+    """Cierre de una guardia abandonada: la gerencia cuenta la gaveta y confirma, también a ciegas.
+
+    El arqueo sigue siendo de la caja del conserje (operador_id) y registra quién lo confirmó y por qué.
+    """
+    guardia = await guardia_abierta(db, bloquear=True)
+    if guardia is None or guardia.id != guardia_id:
+        await db.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Esa guardia no está abierta.")
+    if guardia.operador_id == gerencia.id:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="Su propia guardia se cierra desde Cierre de caja."
+        )
+    return await _registrar_arqueo(db, guardia, gerencia, efectivo, posnet, mercado_pago, observacion.strip())
+
+
 async def _registrar_arqueo(
     db: AsyncSession,
     guardia: Guardia,

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -29,6 +29,12 @@ class DeclaracionCaja(BaseModel):
     mercado_pago: Decimal = Field(default=Decimal("0"), ge=0, le=IMPORTE_MAXIMO, decimal_places=2)
 
 
+class DeclaracionSupervisada(DeclaracionCaja):
+    """Recuento de la gerencia en el cierre de una guardia abandonada: exige explicar por qué."""
+
+    observacion: str = Field(min_length=10, max_length=300)
+
+
 class ArqueoResultado(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -55,3 +61,37 @@ class ArqueoResultado(BaseModel):
     supervisado: bool = False
     confirmado_por_nombre: str | None = None
     observacion: str | None = None
+
+
+class PagoDetalle(BaseModel):
+    registrado_en: datetime
+    habitacion_numero: int
+    medio_pago: str
+    monto: float
+    comprobante_referencia: str | None = None
+
+
+class ArqueoDetalle(ArqueoResultado):
+    pagos: list[PagoDetalle]
+
+
+class MetricaCaja(BaseModel):
+    """RF-09: métrica por operador (o general) que hoy la gerencia arma a mano (H-18)."""
+
+    operador_id: int | None = None
+    operador_nombre: str | None = None
+    arqueos: int
+    correctos: int
+    faltantes: int
+    sobrantes: int
+    total_faltante: float
+    total_sobrante: float
+    # Tasa de Discrepancia de Caja: arqueos con diferencia distinta de 0 sobre el total (línea de base: 10 %).
+    tdc: float
+
+
+class MetricasCaja(BaseModel):
+    desde: date | None
+    hasta: date | None
+    general: MetricaCaja
+    por_operador: list[MetricaCaja]

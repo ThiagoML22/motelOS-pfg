@@ -6,6 +6,8 @@ arqueo contra UPDATE y DELETE (RN-RES-02) lo verifica db/verify_caja.sql sobre P
 RF-09: «con D = $50.000 y S = $52.500 el resultado es Faltante de $2.500».
 """
 
+import json
+import uuid
 from datetime import UTC, datetime
 from decimal import Decimal
 
@@ -116,7 +118,7 @@ def _rutas_get_sin_parametros() -> list[str]:
         camino for camino, operaciones in app.openapi()["paths"].items()
         if camino.startswith("/api/") and "get" in operaciones and "{" not in camino
     ]
-    assert len(rutas) >= 4, "No se encontraron las rutas de consulta de la API"
+    assert len(rutas) >= 7, "No se encontraron las rutas de consulta de la API"
     return rutas
 
 
@@ -134,6 +136,9 @@ async def test_rf_08_ninguna_respuesta_muestra_el_total_antes_del_recuento(clien
             assert "total_sistema" not in texto and "sistema_" not in texto, camino
             assert "16800" not in texto, f"{camino} expone el total de la guardia abierta"
 
+    # Las rutas de la gerencia están cerradas para el conserje.
+    assert (await client.get("/api/v1/arqueos/")).status_code == 403
+    assert (await client.get("/api/v1/arqueos/metricas")).status_code == 403
 
 
 async def test_rf_08_al_confirmar_se_guarda_el_arqueo_y_se_cierra_la_guardia(client: AsyncClient, db):
@@ -233,3 +238,104 @@ async def test_rn_der_04_el_cobro_va_a_la_guardia_que_atiende(client: AsyncClien
     assert pago.guardia_id == guardia_22["id"]
     arqueo_22 = (await conserje2.post(ARQUEO, json={"efectivo": 8000})).json()
     assert (arqueo_22["total_sistema"], arqueo_22["categoria"]) == (8000, "Correcto")
+
+
+# --- Panel de la gerencia (RF-09) ------------------------------------------------------------------
+
+
+async def test_panel_de_gerencia_lista_arqueos_detalle_y_tdc(client: AsyncClient, cliente_como):
+    await _cobrar_turno(client, 1)
+    await client.post(ARQUEO, json={"efectivo": 5500})  # Faltante de 2.500 de Conserje Uno
+
+    conserje2 = await cliente_como("conserje2")
+    await abrir_guardia(conserje2)
+    await _cobrar_turno(conserje2, 2, "MERCADO_PAGO")
+    await conserje2.post(ARQUEO, json={"efectivo": 0, "mercado_pago": 8000})  # Correcto de Conserje Dos
+
+    gerencia = await cliente_como("gerencia")
+    arqueos = (await gerencia.get("/api/v1/arqueos/")).json()
+    assert [a["categoria"] for a in arqueos] == ["Correcto", "Faltante"]  # el más reciente primero
+
+    detalle = (await gerencia.get(f"/api/v1/arqueos/{arqueos[1]['id']}")).json()
+    assert detalle["pagos"][0]["habitacion_numero"] == 1
+    assert detalle["pagos"][0]["monto"] == 8000
+
+    metricas = (await gerencia.get("/api/v1/arqueos/metricas")).json()
+    assert metricas["general"]["arqueos"] == 2
+    assert metricas["general"]["faltantes"] == 1
+    assert metricas["general"]["tdc"] == 0.5
+    por_operador = {m["operador_nombre"]: m for m in metricas["por_operador"]}
+    assert por_operador["Conserje Uno"]["total_faltante"] == 2500
+    assert por_operador["Conserje Dos"]["tdc"] == 0
+
+    filtrado = (await gerencia.get("/api/v1/arqueos/", params={"operador_id": 2})).json()
+    assert [a["operador_nombre"] for a in filtrado] == ["Conserje Dos"]
+
+    assert (await gerencia.get(f"/api/v1/arqueos/{uuid.uuid4().int % 10_000 + 100}")).status_code == 404
+
+
+async def test_filtro_por_fecha_en_hora_local(client: AsyncClient, cliente_como):
+    await client.post(ARQUEO, json={"efectivo": 0})
+    gerencia = await cliente_como("gerencia")
+    hoy = datetime.now(UTC).astimezone().date().isoformat()
+    lejos = "2020-01-01"
+    con_hoy = (await gerencia.get("/api/v1/arqueos/", params={"desde": lejos})).json()
+    vacio = (await gerencia.get("/api/v1/arqueos/", params={"hasta": lejos})).json()
+    assert len(con_hoy) == 1 and vacio == []
+    assert json.loads((await gerencia.get("/api/v1/arqueos/metricas", params={"desde": hoy})).text)["desde"] == hoy
+
+
+# --- Cierre supervisado de una guardia abandonada -------------------------------------------------
+
+
+async def test_la_gerencia_cierra_a_ciegas_la_guardia_abandonada(client: AsyncClient, cliente_como):
+    await _cobrar_turno(client, 1)  # Conserje Uno cobra $8.000 y se va sin arquear.
+    guardia = (await client.get("/api/v1/guardias/actual")).json()
+
+    gerencia = await cliente_como("gerencia")
+    # Antes de confirmar, la gerencia tampoco ve el total de la guardia abierta.
+    vista = (await gerencia.get("/api/v1/guardias/actual")).text
+    assert "8000" not in vista and "sistema" not in vista
+
+    resp = await gerencia.post(
+        f"/api/v1/arqueos/guardias/{guardia['id']}/cierre-supervisado",
+        json={"efectivo": 7000, "observacion": "Conserje Uno se retiró sin cerrar su guardia."},
+    )
+    assert resp.status_code == 201, resp.text
+    arqueo = resp.json()
+    # La caja sigue siendo de Conserje Uno; lo confirmó la gerencia.
+    assert arqueo["operador_nombre"] == "Conserje Uno"
+    assert arqueo["supervisado"] is True and arqueo["confirmado_por_nombre"] == "Gerencia"
+    assert (arqueo["diferencia"], arqueo["categoria"]) == (-1000, "Faltante")
+
+    # La ventanilla queda libre para la guardia siguiente.
+    conserje2 = await cliente_como("conserje2")
+    assert (await conserje2.post("/api/v1/guardias/")).status_code == 201
+
+
+async def test_cierre_supervisado_exige_observacion_rol_y_guardia_abierta(client: AsyncClient, cliente_como):
+    guardia = (await client.get("/api/v1/guardias/actual")).json()
+    url = f"/api/v1/arqueos/guardias/{guardia['id']}/cierre-supervisado"
+    gerencia = await cliente_como("gerencia")
+
+    assert (await gerencia.post(url, json={"efectivo": 0})).status_code == 422
+    assert (await gerencia.post(url, json={"efectivo": 0, "observacion": "corta"})).status_code == 422
+    conserje2 = await cliente_como("conserje2")
+    assert (await conserje2.post(url, json={"efectivo": 0, "observacion": "Se fue sin cerrar."})).status_code == 403
+    otra = f"/api/v1/arqueos/guardias/{guardia['id'] + 99}/cierre-supervisado"
+    assert (await gerencia.post(otra, json={"efectivo": 0, "observacion": "Guardia inexistente."})).status_code == 409
+
+
+async def test_un_arqueo_comun_no_figura_como_supervisado(client: AsyncClient, cliente_como):
+    await client.post(ARQUEO, json={"efectivo": 0})
+    gerencia = await cliente_como("gerencia")
+    arqueo = (await gerencia.get("/api/v1/arqueos/")).json()[0]
+    assert arqueo["supervisado"] is False and arqueo["confirmado_por_nombre"] is None
+
+
+async def test_la_gerencia_ve_operadores_sin_hash(cliente_como):
+    gerencia = await cliente_como("gerencia")
+    resp = await gerencia.get("/api/v1/operadores/")
+    assert resp.status_code == 200
+    assert {o["usuario"] for o in resp.json()} == {"conserje1", "conserje2", "gerencia", "baja"}
+    assert "hash" not in resp.text
