@@ -11,20 +11,23 @@ import { useToast } from './ui/Toast';
 
 interface CierreCajaViewProps {
   sesion: Sesion;
+  // El arqueo confirmado lo guarda la vista que contiene a esta pantalla: así el comprobante sigue a la vista
+  // aunque la sesión, al refrescarse, ya informe la guardia como cerrada.
+  resultado: Arqueo | null;
+  onConfirmado: (arqueo: Arqueo) => void;
   onFinalizar: () => void;
 }
 
 // RF-08: cierre de caja ciego. El operador declara lo que tiene en la gaveta y los comprobantes sin ver
 // el total del sistema (RN-RES-03); la pantalla no lo pide ni lo recibe hasta que confirma el recuento.
 // El efectivo se declara como monto total, sin desglose por billete (acta del 19/10/2026, punto 6).
-const CierreCajaView: React.FC<CierreCajaViewProps> = ({ sesion, onFinalizar }) => {
+const CierreCajaView: React.FC<CierreCajaViewProps> = ({ sesion, resultado, onConfirmado, onFinalizar }) => {
   const { toast } = useToast();
   const [efectivoTexto, setEfectivoTexto] = useState('');
   const [posnet, setPosnet] = useState('');
   const [mercadoPago, setMercadoPago] = useState('');
   const [confirmando, setConfirmando] = useState(false);
   const [enviando, setEnviando] = useState(false);
-  const [resultado, setResultado] = useState<Arqueo | null>(null);
 
   const importes = useMemo(() => {
     const efectivo = aImporte(efectivoTexto);
@@ -50,7 +53,7 @@ const CierreCajaView: React.FC<CierreCajaViewProps> = ({ sesion, onFinalizar }) 
         posnet: importes.posnet ?? 0,
         mercado_pago: importes.mercadoPago ?? 0,
       });
-      setResultado(arqueo);
+      onConfirmado(arqueo);
       setConfirmando(false);
       toast('Arqueo confirmado. Su guardia quedó cerrada.', 'success');
     } catch (err) {

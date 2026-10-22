@@ -212,6 +212,14 @@ async def test_solo_el_operador_de_la_guardia_la_arquea(client: AsyncClient, cli
     assert (await gerencia.post(ARQUEO, json={"efectivo": 0})).status_code == 409
 
 
+async def test_la_gerencia_no_abre_guardias(cliente_como):
+    # Acta del 19/10/2026, punto 3: el conserje opera la ventanilla; la gerencia hace el control de caja.
+    gerencia = await cliente_como("gerencia")
+    resp = await gerencia.post("/api/v1/guardias/")
+    assert resp.status_code == 403
+    assert (await gerencia.get("/api/v1/guardias/actual")).json() is None
+
+
 # --- RN-DER-04: el turno que cruza el recambio -----------------------------------------------------
 
 

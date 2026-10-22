@@ -3,15 +3,16 @@
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import operador_actual
+from app.api.deps import operador_actual, requiere_rol
 from app.core.database import get_db
 from app.models.guardia import Guardia
-from app.models.operador import Operador
+from app.models.operador import ROL_OPERADOR, Operador
 from app.schemas.caja import ArqueoResultado, DeclaracionCaja, GuardiaPublica
 from app.services import caja
 from app.services.reportes import resultado_de_arqueo
 
 router = APIRouter()
+solo_conserje = requiere_rol(ROL_OPERADOR)
 
 
 async def guardia_publica(db: AsyncSession, guardia: Guardia, operador: Operador) -> GuardiaPublica:
@@ -36,7 +37,8 @@ async def guardia_actual(db: AsyncSession = Depends(get_db), operador: Operador 
 
 
 @router.post("/", response_model=GuardiaPublica, status_code=status.HTTP_201_CREATED)
-async def abrir_guardia(db: AsyncSession = Depends(get_db), operador: Operador = Depends(operador_actual)):
+async def abrir_guardia(db: AsyncSession = Depends(get_db), operador: Operador = Depends(solo_conserje)):
+    """Solo un conserje abre una guardia: la gerencia hace el control de caja (acta del 19/10/2026, punto 3)."""
     guardia = await caja.abrir_guardia(db, operador)
     return await guardia_publica(db, guardia, operador)
 
