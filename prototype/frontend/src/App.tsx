@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { HabitacionConDetalles, RoomStatus, Sesion, TipoCliente } from './types';
+import { Arqueo, HabitacionConDetalles, RoomStatus, Sesion, TipoCliente } from './types';
 import { api, getErrorMessage, onSesionVencida } from './services/api';
 import { useNow } from './hooks/useNow';
 import { formatRoomNumber } from './utils/format';
@@ -91,6 +91,17 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
   const [filtro, setFiltro] = useState<Filtro>('Todas');
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [openAddProduct, setOpenAddProduct] = useState(false);
+  // Arqueo recién confirmado: el comprobante queda a la vista hasta que el conserje finaliza, aunque el
+  // refresco de la sesión ya informe la guardia como cerrada.
+  const [ultimoArqueo, setUltimoArqueo] = useState<Arqueo | null>(null);
+  const mostrandoComprobante = activeView === 'caja' && ultimoArqueo !== null;
+
+  // Si el conserje abre una guardia nueva, el comprobante anterior deja lugar al formulario de cierre.
+  useEffect(() => {
+    if (ultimoArqueo && sesion.guardia?.es_propia && sesion.guardia.id !== ultimoArqueo.guardia_id) {
+      setUltimoArqueo(null);
+    }
+  }, [sesion.guardia, ultimoArqueo]);
 
   const fetchHabitaciones = useCallback(async () => {
     try {
@@ -176,7 +187,7 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
       />
 
       <main className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col px-4 py-6 sm:px-6">
-        {!conGuardiaPropia && activeView !== 'inventario' && (
+        {!conGuardiaPropia && !mostrandoComprobante && activeView !== 'inventario' && (
           <GuardiaView sesion={sesion} onGuardiaAbierta={onRefrescarSesion} onSalir={onSalir} />
         )}
 
@@ -258,7 +269,9 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
 
         {activeView === 'inventario' && <InventarioView puedeCrear={esGerencia} />}
 
-        {conGuardiaPropia && activeView === 'caja' && !esGerencia && <CierreCajaView sesion={sesion} onFinalizar={onSalir} />}
+        {(conGuardiaPropia || mostrandoComprobante) && activeView === 'caja' && !esGerencia && (
+          <CierreCajaView sesion={sesion} resultado={ultimoArqueo} onConfirmado={setUltimoArqueo} onFinalizar={onSalir} />
+        )}
 
         {esGerencia && activeView === 'gerencia' && <PanelGerencia onCambioGuardia={onRefrescarSesion} />}
       </main>
