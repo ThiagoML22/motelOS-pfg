@@ -17,11 +17,15 @@ Esta carpeta contiene la documentación formal del Proyecto de Grado: borradores
 | Arquitectura del prototipo v2: modelo de datos, decisiones, trigger, permiso y RLS, amenazas y validación con la gerencia | `AE3/20261019_Arquitectura_v2_ThiagoLeal_v1.md` | Versión 1 |
 | Medición de latencia de RNF-02 | `AE3/20261019_Medicion_latencia_RNF-02.csv` | 200 peticiones, P95 de 146,9 ms |
 
-El prototipo vigente es la etiqueta `v1.2` (carpeta `prototype/`). El prototipo v2 se integra por etapas en la rama `ae3/v2`.
+El prototipo v2 está en `main` desde el 19/10/2026 (carpeta `prototype/`). La última etiqueta publicada es `v1.2`; la etiqueta `v2` se crea después de la demostración a la gerencia.
 
 ## Versiones anteriores
 
-La carpeta `versiones_anteriores/` conserva, sin cambios, lo que ya se entregó antes de la Ventana de Mejora y quedó reemplazado: el informe de la AE2 versión 2 (02/10/2026), los catálogos de requisitos versión 1 y versión 2 y el informe grupal de la AE2 original. Ningún documento vigente depende de ellos.
+La carpeta `versiones_anteriores/` conserva, sin cambios, los catálogos de requisitos versión 1 y versión 2, que ya se entregaron antes de la Ventana de Mejora y quedaron reemplazados. Ningún documento vigente depende de ellos.
+
+## Documentos retirados por contener datos personales
+
+El 26/10/2026 se retiraron del repositorio, por pedido del dictamen DEV-AE2 N.º 11/2026 (apartado 14), tres documentos que exponían datos personales: el acta de validación escaneada, con la firma de la gerente, y el informe de la AE2 versión 2 y el informe grupal original, con los números de documento del autor y de otro estudiante. Los originales se conservan en el Portafolio de la cátedra y no se publican.
 
 ## Autoría de los commits
 
