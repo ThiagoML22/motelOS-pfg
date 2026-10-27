@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
@@ -38,7 +39,8 @@ async def create_turno(
     db: AsyncSession = Depends(get_db),
     operador: Operador = Depends(operador_actual),
 ):
-    result = await db.execute(select(Habitacion).where(Habitacion.id == turno_in.habitacion_id))
+    # Bloquea la habitación: una segunda apertura simultánea espera y la encuentra Ocupada.
+    result = await db.execute(select(Habitacion).where(Habitacion.id == turno_in.habitacion_id).with_for_update())
     habitacion = result.scalars().first()
 
     if not habitacion:
@@ -68,13 +70,17 @@ async def create_turno(
     )
     db.add(nuevo_turno)
     patente = (turno_in.identificador_vehicular or "").strip() or None
-    if patente:
-        # RNF-08: la patente vive en la estadía activa, no en el turno inmutable.
-        await db.flush()
-        db.add(EstadiaActiva(turno_id=nuevo_turno.id, identificador_vehicular=patente))
-    habitacion.estado = "Ocupada"
-
-    await db.commit()
+    try:
+        if patente:
+            # RNF-08: la patente vive en la estadía activa, no en el turno inmutable.
+            await db.flush()
+            db.add(EstadiaActiva(turno_id=nuevo_turno.id, identificador_vehicular=patente))
+        habitacion.estado = "Ocupada"
+        await db.commit()
+    except IntegrityError:
+        # RN-EXI-01: el índice turnos_uno_en_curso_por_habitacion deja pasar un solo turno en curso.
+        await db.rollback()
+        raise HTTPException(status_code=409, detail="RN-EXI-01: La habitación ya tiene un turno en curso") from None
     await db.refresh(nuevo_turno)
     nuevo_turno.identificador_vehicular = patente
     nuevo_turno.abierto_por = operador.nombre_visible
@@ -89,7 +95,8 @@ async def add_consumo(
     operador: Operador = Depends(operador_actual),
 ):
     # RN-EXI-02: Check stock and atomically add consumption
-    turno_res = await db.execute(select(Turno).where(Turno.id == turno_id))
+    # El turno se bloquea igual que en el cobro: un consumo y un cobro simultáneos no se intercalan.
+    turno_res = await db.execute(select(Turno).where(Turno.id == turno_id).with_for_update())
     turno = turno_res.scalars().first()
     if not turno or turno.estado != "En Curso":
         raise HTTPException(status_code=400, detail="Turno no válido o no está en curso")
@@ -171,7 +178,9 @@ async def cerrar_turno(
     db: AsyncSession = Depends(get_db),
     operador: Operador = Depends(operador_actual),
 ):
-    turno_res = await db.execute(select(Turno).where(Turno.id == turno_id))
+    # Bloquea el turno: un segundo cobro simultáneo (doble clic, reintento) espera y lo encuentra finalizado,
+    # en lugar de chocar con el trigger de inmutabilidad (RN-RES-01) y responder un error interno.
+    turno_res = await db.execute(select(Turno).where(Turno.id == turno_id).with_for_update())
     turno = turno_res.scalars().first()
     if not turno or turno.estado != "En Curso":
         raise HTTPException(status_code=400, detail="Turno no válido o ya finalizado")

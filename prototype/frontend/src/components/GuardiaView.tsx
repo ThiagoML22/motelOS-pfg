@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { DoorOpen, LogOut, ShieldAlert } from 'lucide-react';
 import { Sesion } from '../types';
 import { api, getErrorMessage } from '../services/api';
-import { formatDateTime } from '../utils/format';
+import { formatDateTime, formatMoney } from '../utils/format';
 import { NOMBRE_FRANJA } from '../utils/caja';
 import Button from './ui/Button';
 import { useToast } from './ui/Toast';
@@ -24,7 +24,9 @@ const GuardiaView: React.FC<GuardiaViewProps> = ({ sesion, onGuardiaAbierta, onS
     setAbriendo(true);
     try {
       const guardia = await api.abrirGuardia();
-      toast(`Guardia ${NOMBRE_FRANJA[guardia.franja] ?? guardia.franja} abierta.`, 'success');
+      // Acta del 19/10/2026, punto 5: cada caja empieza con el fondo de cambio, y el conserje lo ve al abrirla.
+      const fondo = guardia.fondo_inicial > 0 ? ` con un fondo de cambio de ${formatMoney(guardia.fondo_inicial)}` : '';
+      toast(`Guardia ${NOMBRE_FRANJA[guardia.franja] ?? guardia.franja} abierta${fondo}.`, 'success');
       await onGuardiaAbierta();
     } catch (err) {
       toast(getErrorMessage(err, 'No se pudo abrir la guardia.'), 'error');
@@ -59,8 +61,8 @@ const GuardiaView: React.FC<GuardiaViewProps> = ({ sesion, onGuardiaAbierta, onS
             <h1 className="mt-4 text-lg font-semibold text-ink">Abrir su guardia</h1>
             <p className="mt-2 text-sm text-muted">
               Hola, {sesion.operador.nombre_visible}. Al abrir la guardia, los turnos, consumos y cobros que registre
-              quedan en su caja. Al terminar, hará el cierre de caja ciego: declara lo que cuenta sin ver el total del
-              sistema.
+              quedan en su caja, que empieza con el fondo de cambio. Al terminar, hará el cierre de caja ciego: declara
+              lo que cuenta sin ver el total del sistema.
             </p>
             <div className="mt-6 flex justify-center gap-3">
               <Button variant="secondary" onClick={onSalir}>
