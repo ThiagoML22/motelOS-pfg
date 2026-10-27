@@ -1,14 +1,21 @@
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, Numeric, String
+from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, Numeric, String, text
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.core.database import Base
 
+EN_CURSO = text("estado = 'En Curso'")
+
 
 class Turno(Base):
     __tablename__ = "turnos"
+    # RN-EXI-01: a lo sumo un turno en curso por habitación (migración 004). Parcial para conservar el historial.
+    __table_args__ = (
+        Index("turnos_uno_en_curso_por_habitacion", "habitacion_id", unique=True,
+              postgresql_where=EN_CURSO, sqlite_where=EN_CURSO),
+    )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     habitacion_id = Column(Integer, ForeignKey("habitaciones.id"), nullable=False)

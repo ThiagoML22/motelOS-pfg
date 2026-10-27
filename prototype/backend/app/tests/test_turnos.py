@@ -1,7 +1,12 @@
+import asyncio
+import os
+import uuid
 from datetime import UTC, datetime, timedelta
 
+import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from app.models.articulo import Articulo
 from app.models.habitacion import Habitacion
@@ -10,6 +15,12 @@ from app.models.tarifa import Tarifa
 from app.models.turno import Turno
 
 EFECTIVO = "EFECTIVO"
+
+# Las carreras reales necesitan conexiones separadas: corren con PostgreSQL (en el canal), no con SQLite en memoria.
+solo_postgres = pytest.mark.skipif(
+    os.getenv("TEST_DATABASE_URL", "sqlite").startswith("sqlite"),
+    reason="La carrera entre dos peticiones necesita PostgreSQL; corre en el canal.",
+)
 
 
 def pagos(*items: tuple[str, float, str | None]) -> dict:
@@ -319,6 +330,49 @@ async def test_cerrar_turno_dos_veces_devuelve_400(client: AsyncClient):
     payload = pagos((EFECTIVO, 8000, None))
     assert (await client.post(f"/api/v1/turnos/{turno['id']}/cerrar", json=payload)).status_code == 200
     assert (await client.post(f"/api/v1/turnos/{turno['id']}/cerrar", json=payload)).status_code == 400
+
+
+# --- RN-EXI-01 y concurrencia ------------------------------------------------------------------------
+
+
+async def test_la_base_admite_un_solo_turno_en_curso_por_habitacion(db):
+    # Migración 004: el índice único parcial rechaza un segundo turno en curso en la misma habitación.
+    tarifa = (await db.execute(select(Tarifa))).scalars().first()
+    for _ in range(2):
+        db.add(Turno(habitacion_id=1, tarifa_id=tarifa.id, tarifa_base=8000, total_general=8000, estado="En Curso"))
+    with pytest.raises(IntegrityError):
+        await db.commit()
+
+
+async def test_los_turnos_finalizados_no_cuentan_para_la_regla(db):
+    # El índice es parcial: la habitación conserva su historial y admite un turno nuevo en curso.
+    tarifa = (await db.execute(select(Tarifa))).scalars().first()
+    for estado in ("FINALIZADO", "FINALIZADO", "En Curso"):
+        db.add(Turno(habitacion_id=1, tarifa_id=tarifa.id, tarifa_base=8000, total_general=8000, estado=estado))
+    await db.commit()
+
+
+@solo_postgres
+async def test_dos_aperturas_simultaneas_abren_un_solo_turno(client: AsyncClient, db):
+    respuestas = await asyncio.gather(*[client.post("/api/v1/turnos/", json={"habitacion_id": 1}) for _ in range(2)])
+
+    assert sorted(r.status_code for r in respuestas) == [201, 409]
+    en_curso = await db.execute(select(Turno).where(Turno.habitacion_id == 1, Turno.estado == "En Curso"))
+    assert len(en_curso.scalars().all()) == 1
+
+
+@solo_postgres
+async def test_dos_cobros_simultaneos_del_mismo_turno_cobran_una_sola_vez(client: AsyncClient, db):
+    turno = await _abrir_turno(client)
+    payload = pagos((EFECTIVO, 8000, None))
+
+    respuestas = await asyncio.gather(
+        *[client.post(f"/api/v1/turnos/{turno['id']}/cerrar", json=payload) for _ in range(2)]
+    )
+
+    assert sorted(r.status_code for r in respuestas) == [200, 400]
+    registrados = await db.execute(select(Pago).where(Pago.turno_id == uuid.UUID(turno["id"])))
+    assert len(registrados.scalars().all()) == 1
 
 
 async def test_resumen_de_un_turno_finalizado_conserva_sus_importes(client: AsyncClient, db):

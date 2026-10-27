@@ -1,4 +1,5 @@
--- Verifica las reglas del cierre de caja ciego en la base (RF-08, RF-09, RN-RES-02, RN-DER-03, RN-DER-04).
+-- Verifica las reglas del cierre de caja ciego en la base (RF-08, RF-09, RN-RES-02, RN-DER-03, RN-DER-04) y que
+-- una habitacion tenga a lo sumo un turno en curso (RN-EXI-01).
 -- Falla con error si alguna regla no se cumple. Corre dentro de una transaccion que se revierte.
 -- Uso: psql -v ON_ERROR_STOP=1 -d <base con las migraciones aplicadas> -f db/verify_caja.sql
 BEGIN;
@@ -31,6 +32,14 @@ BEGIN
     INSERT INTO turnos (habitacion_id, tarifa_id, tarifa_base, total_general, estado,
                         operador_apertura_id, guardia_apertura_id)
     VALUES (1, 1, 8000, 13000, 'En Curso', op_a, g14) RETURNING id INTO tid;
+
+    -- RN-EXI-01: la misma habitacion no admite un segundo turno en curso (migracion 004).
+    bloqueado := false;
+    BEGIN INSERT INTO turnos (habitacion_id, tarifa_id, tarifa_base, total_general, estado,
+                              operador_apertura_id, guardia_apertura_id)
+          VALUES (1, 1, 8000, 8000, 'En Curso', op_a, g14);
+    EXCEPTION WHEN unique_violation THEN bloqueado := true; END;
+    IF NOT bloqueado THEN RAISE EXCEPTION 'Se abrieron dos turnos en curso en la misma habitacion'; END IF;
 
     -- Un pago sin atribucion se rechaza (RNF-04).
     bloqueado := false;
