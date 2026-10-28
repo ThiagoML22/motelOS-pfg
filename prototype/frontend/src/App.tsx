@@ -267,7 +267,7 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
           </>
         )}
 
-        {activeView === 'inventario' && <InventarioView puedeCrear={esGerencia} />}
+        {activeView === 'inventario' && <InventarioView />}
 
         {(conGuardiaPropia || mostrandoComprobante) && activeView === 'caja' && !esGerencia && (
           <CierreCajaView sesion={sesion} resultado={ultimoArqueo} onConfirmado={setUltimoArqueo} onFinalizar={onSalir} />

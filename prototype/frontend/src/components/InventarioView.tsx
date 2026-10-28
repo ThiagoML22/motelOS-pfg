@@ -31,12 +31,8 @@ const COLUMNAS: { key: SortKey; label: string; align?: 'right' }[] = [
 
 const FORM_VACIO = { codigo: '', descripcion: '', categoria: '', precio: '', stock: '' };
 
-interface InventarioViewProps {
-  // El alta de artículos (precio y stock inicial) es de la gerencia; el conserje consulta el stock.
-  puedeCrear: boolean;
-}
-
-const InventarioView: React.FC<InventarioViewProps> = ({ puedeCrear }) => {
+// El conserje y la gerencia dan de alta artículos: el conserje no depende de la gerencia para cargar uno nuevo.
+const InventarioView: React.FC = () => {
   const { toast } = useToast();
   const [articulos, setArticulos] = useState<Articulo[]>([]);
   const [estado, setEstado] = useState<'cargando' | 'ok' | 'error'>('cargando');
@@ -153,12 +149,10 @@ const InventarioView: React.FC<InventarioViewProps> = ({ puedeCrear }) => {
           <h1 className="text-xl font-semibold text-ink">Inventario</h1>
           <p className="mt-0.5 text-sm text-muted">Minibar y productos de venta</p>
         </div>
-        {puedeCrear && (
-          <Button onClick={abrirModal}>
-            <Plus className="h-4 w-4" aria-hidden="true" />
-            Nuevo artículo
-          </Button>
-        )}
+        <Button onClick={abrirModal}>
+          <Plus className="h-4 w-4" aria-hidden="true" />
+          Nuevo artículo
+        </Button>
       </div>
 
       {estado === 'cargando' && <p className="py-16 text-center text-sm text-muted">Cargando inventario…</p>}
