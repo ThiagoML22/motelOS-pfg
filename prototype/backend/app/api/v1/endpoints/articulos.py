@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
-from app.api.deps import solo_administrador
+from app.api.deps import operador_actual
 from app.core.database import get_db
 from app.models.articulo import Articulo
 from app.schemas.articulo import ArticuloCreate, ArticuloResponse
@@ -16,12 +16,14 @@ async def get_articulos(db: AsyncSession = Depends(get_db)):
     return result.scalars().all()
 
 
-# El alta de artículos (precio y stock inicial) es una decisión de la gerencia, no del conserje.
+# El alta de artículos la hace cualquier operador con sesión: el conserje no depende de la gerencia para cargar
+# un artículo nuevo que llega a la ventanilla (decisión del autor, 27/10/2026). Modificar la tarifa y los precios
+# de los artículos existentes sigue siendo de la gerencia (RF-11, iteración 4).
 @router.post(
     "/",
     response_model=ArticuloResponse,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(solo_administrador)],
+    dependencies=[Depends(operador_actual)],
 )
 async def create_articulo(articulo_in: ArticuloCreate, db: AsyncSession = Depends(get_db)):
     query = await db.execute(select(Articulo).where(Articulo.codigo == articulo_in.codigo))

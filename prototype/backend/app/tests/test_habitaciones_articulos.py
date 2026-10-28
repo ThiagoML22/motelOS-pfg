@@ -62,9 +62,18 @@ async def test_listar_y_crear_articulos(client: AsyncClient, cliente_como):
     assert set(codigos) == {"MIN-001", "MIN-002", "SNA-001"}
 
 
-async def test_el_conserje_no_da_de_alta_articulos(client: AsyncClient):
+async def test_el_conserje_da_de_alta_articulos(client: AsyncClient):
+    # El conserje carga un artículo nuevo sin depender de la gerencia (decisión del 27/10/2026).
     nuevo = {"codigo": "SNA-009", "descripcion": "Maní", "precio_unitario": 900, "stock_actual": 5}
-    assert (await client.post("/api/v1/articulos/", json=nuevo)).status_code == 403
+    creado = await client.post("/api/v1/articulos/", json=nuevo)
+    assert creado.status_code == 201, creado.text
+    codigos = [a["codigo"] for a in (await client.get("/api/v1/articulos/")).json()]
+    assert "SNA-009" in codigos
+
+
+async def test_sin_sesion_no_se_dan_de_alta_articulos(anonimo: AsyncClient):
+    nuevo = {"codigo": "SNA-010", "descripcion": "Chicle", "precio_unitario": 300, "stock_actual": 5}
+    assert (await anonimo.post("/api/v1/articulos/", json=nuevo)).status_code == 401
 
 
 async def test_crear_articulo_codigo_duplicado_devuelve_400(cliente_como):
