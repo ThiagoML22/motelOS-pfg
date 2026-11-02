@@ -1,9 +1,9 @@
 import React from 'react';
-import { BarChart3, LayoutGrid, Lock, LogOut, Package } from 'lucide-react';
+import { BarChart3, LayoutGrid, Lock, LogOut, Package, Settings } from 'lucide-react';
 import { Sesion } from '../types';
 import { formatClock, parseUtc } from '../utils/format';
 
-export type View = 'dashboard' | 'inventario' | 'caja' | 'gerencia';
+export type View = 'dashboard' | 'inventario' | 'caja' | 'gerencia' | 'configuracion';
 
 interface TopNavProps {
   sesion: Sesion;
@@ -19,6 +19,7 @@ const ITEMS: { view: View; label: string; icon: React.ElementType; roles: string
   { view: 'inventario', label: 'Inventario', icon: Package, roles: ['OPERADOR', 'ADMINISTRADOR'] },
   { view: 'caja', label: 'Cierre de caja', icon: Lock, roles: ['OPERADOR'] },
   { view: 'gerencia', label: 'Control de caja', icon: BarChart3, roles: ['ADMINISTRADOR'] },
+  { view: 'configuracion', label: 'Configuración', icon: Settings, roles: ['ADMINISTRADOR'] },
 ];
 
 const hora = (iso: string): string => {
