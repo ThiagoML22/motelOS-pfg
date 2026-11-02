@@ -5,6 +5,7 @@
   puede leerlo, de modo que un script inyectado no puede robarlo.
 """
 
+import re
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -14,6 +15,11 @@ from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatc
 from fastapi import Response
 
 from app.core.config import settings
+
+# Reglas del alta de operadores, comunes al script del dueño de las tablas y al panel de la gerencia (RF-11).
+# El patrón del usuario es el mismo CHECK de la tabla operadores (migración 002).
+LARGO_MINIMO_CLAVE = 10
+PATRON_USUARIO = re.compile(r"^[a-z0-9._-]{3,40}$")
 
 _hasher = PasswordHasher(time_cost=settings.ARGON2_TIME_COST, memory_cost=settings.ARGON2_MEMORY_KIB)
 

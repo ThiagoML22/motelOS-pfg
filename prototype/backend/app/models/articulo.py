@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, Numeric, String
+from sqlalchemy import Boolean, Column, Integer, Numeric, String, true
 
 from app.core.database import Base
 
@@ -12,3 +12,5 @@ class Articulo(Base):
     precio_unitario = Column(Numeric(10, 2), nullable=False)
     stock_actual = Column(Integer, nullable=False)
     categoria = Column(String(50))
+    # RF-11: baja lógica; los consumos registrados siguen referenciando el artículo.
+    activo = Column(Boolean, nullable=False, default=True, server_default=true())

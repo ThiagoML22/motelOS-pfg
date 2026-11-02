@@ -8,6 +8,7 @@ include =
     */app/services/billing_service.py
     */app/services/caja.py
     */app/services/reportes.py
+    */app/services/configuracion.py
 
 [report]
 fail_under = 70

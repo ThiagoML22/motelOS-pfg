@@ -13,7 +13,8 @@ router = APIRouter()
 
 @router.get("/", response_model=list[HabitacionResponse])
 async def get_habitaciones(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Habitacion).order_by(Habitacion.numero))
+    # RF-11: las habitaciones dadas de baja no aparecen en la grilla.
+    result = await db.execute(select(Habitacion).where(Habitacion.activa.is_(True)).order_by(Habitacion.numero))
     habitaciones = result.scalars().all()
     
     turnos_result = await db.execute(select(Turno).where(Turno.estado == 'En Curso'))

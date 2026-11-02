@@ -46,6 +46,9 @@ async def create_turno(
     if not habitacion:
         raise HTTPException(status_code=404, detail="Habitación no encontrada")
 
+    if not habitacion.activa:
+        raise HTTPException(status_code=409, detail="La habitación está dada de baja.")
+
     if habitacion.estado != "Libre":
         raise HTTPException(status_code=409, detail="RN-EXI-01: La habitación no está en estado Libre")
 
@@ -107,6 +110,9 @@ async def add_consumo(
     articulo = art_res.scalars().first()
     if not articulo:
         raise HTTPException(status_code=404, detail="Artículo no encontrado")
+
+    if not articulo.activo:
+        raise HTTPException(status_code=409, detail="El artículo está dado de baja.")
 
     if articulo.stock_actual < consumo_in.cantidad:
         raise HTTPException(

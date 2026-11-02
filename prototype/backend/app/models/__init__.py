@@ -3,6 +3,7 @@
 from app.models import (  # noqa: F401
     arqueo,
     articulo,
+    configuracion,
     consumo,
     estadia_activa,
     guardia,

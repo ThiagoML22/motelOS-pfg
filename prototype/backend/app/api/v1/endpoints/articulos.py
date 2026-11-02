@@ -12,13 +12,14 @@ router = APIRouter()
 
 @router.get("/", response_model=list[ArticuloResponse])
 async def get_articulos(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Articulo).order_by(Articulo.descripcion))
+    # Los artículos dados de baja solo se ven en el panel de configuración (RF-11).
+    result = await db.execute(select(Articulo).where(Articulo.activo.is_(True)).order_by(Articulo.descripcion))
     return result.scalars().all()
 
 
 # El alta de artículos la hace cualquier operador con sesión: el conserje no depende de la gerencia para cargar
-# un artículo nuevo que llega a la ventanilla (decisión del autor, 27/10/2026). Modificar la tarifa y los precios
-# de los artículos existentes sigue siendo de la gerencia (RF-11, iteración 4).
+# un artículo nuevo que llega a la ventanilla (decisión del autor, 27/10/2026). Modificar el precio y dar de
+# baja un artículo es de la gerencia, desde el panel de configuración (RF-11).
 @router.post(
     "/",
     response_model=ArticuloResponse,
