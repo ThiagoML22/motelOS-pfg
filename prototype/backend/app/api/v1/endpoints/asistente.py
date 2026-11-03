@@ -1,5 +1,6 @@
-"""Asistente para todo el personal: ayuda para usar el sistema y el estado de la ventanilla (services.ayuda); a la
-gerencia, además, el análisis de los datos del motel (services.asistente). Todo se calcula en este servidor."""
+"""Asistente para todo el personal: ayuda para usar el sistema, glosario y estado de la ventanilla (services.ayuda y
+services.conocimiento); a la gerencia, además, el análisis de los datos del motel (services.asistente). Todo se calcula
+en este servidor."""
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,8 +18,11 @@ router = APIRouter()
 async def preguntar(
     pregunta: Pregunta, db: AsyncSession = Depends(get_db), operador: Operador = Depends(operador_actual)
 ) -> dict:
-    respuesta = await ayuda.responder(db, operador, pregunta.texto)
+    respuesta, texto = await ayuda.responder(
+        db, operador, pregunta.texto, pregunta.anterior, pregunta.anterior_intencion
+    )
     if respuesta is not None:
         return respuesta
-    # Solo llega acá la gerencia (ayuda.responder ya contestó al conserje): análisis de los datos.
-    return {**asistente.responder(await inteligencia.contexto(db), pregunta.texto), "pasos": [], "acciones": []}
+    # Solo llega acá la gerencia: análisis de los datos, con la pregunta ya corregida y la anterior para seguimientos.
+    analisis = asistente.responder(await inteligencia.contexto(db), texto, pregunta.anterior)
+    return {**analisis, "pasos": [], "acciones": []}

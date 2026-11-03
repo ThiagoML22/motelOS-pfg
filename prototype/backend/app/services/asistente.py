@@ -290,13 +290,22 @@ class Asistente:
 
     # --- Respuestas ---------------------------------------------------------------------------------------------
 
-    def responder(self, pregunta: str) -> dict:
+    def responder(self, pregunta: str, anterior: str | None = None) -> dict:
         texto = normalizar(pregunta)
         if not texto:
             return self.ayuda()
         intencion = _intencion(texto)
         periodo = interpretar_periodo(texto, self.hoy)
         categoria_id, conserje_id = self._categoria(texto), self._conserje(texto)
+        # Seguimiento («¿y la semana pasada?», «¿y en VIP?», «¿y conserje 2?»): lo que falta sale de la anterior.
+        if anterior and (texto.startswith("y ") or (intencion is None and len(texto.split()) <= 4)):
+            previo = normalizar(anterior)
+            intencion = intencion or _intencion(previo)
+            if not periodo.explicito:
+                periodo = interpretar_periodo(previo, self.hoy)
+            categoria_id = categoria_id or self._categoria(previo)
+            conserje_id = conserje_id or self._conserje(previo)
+            texto = f"{texto} {previo}"
         if intencion is None and categoria_id is not None:
             intencion = "ingresos"
         if intencion is None and self._habitacion(texto) is not None:
@@ -353,7 +362,10 @@ class Asistente:
         return _respuesta(texto, "resumen", sugerencias=["¿Qué alertas hay?", "¿Cuántos turnos esperamos mañana?"])
 
     def ingresos(self, texto: str, periodo: Periodo, categoria_id: int | None, conserje_id: int | None) -> dict:
-        if re.search(r"que categoria|por categoria|cual categoria|categorias", texto) and categoria_id is None:
+        if (
+            re.search(r"que categoria|por categoria|cual categoria|cada categoria|categorias", texto)
+            and categoria_id is None
+        ):
             turnos = self._turnos(periodo)
             tabla = self._por_categoria(turnos)
             if not tabla["filas"]:
@@ -758,5 +770,5 @@ class Asistente:
         return _respuesta(texto_resp, "habitaciones", periodo, "Turnos cobrados por habitación.", tabla)
 
 
-def responder(ctx: ia.Contexto, pregunta: str) -> dict:
-    return Asistente(ctx).responder(pregunta)
+def responder(ctx: ia.Contexto, pregunta: str, anterior: str | None = None) -> dict:
+    return Asistente(ctx).responder(pregunta, anterior)

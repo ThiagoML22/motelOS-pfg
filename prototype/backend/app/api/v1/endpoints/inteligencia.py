@@ -13,6 +13,9 @@ router = APIRouter()
 
 class Pregunta(BaseModel):
     texto: str = Field(min_length=1, max_length=300)
+    # La pregunta anterior de la conversación y su intención, para entender seguimientos («¿y la semana pasada?»).
+    anterior: str | None = Field(default=None, max_length=300)
+    anterior_intencion: str | None = Field(default=None, max_length=60)
 
 
 @router.get("/tablero")
