@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { CheckCircle2, EyeOff, LogOut, Printer, Lock } from 'lucide-react';
+import { CheckCircle2, EyeOff, FileDown, LogOut, Printer, Lock } from 'lucide-react';
 import { Arqueo, Sesion } from '../types';
 import { api, getErrorMessage } from '../services/api';
 import { formatDateTime, formatMoney } from '../utils/format';
@@ -212,7 +212,21 @@ const CierreCajaView: React.FC<CierreCajaViewProps> = ({ sesion, resultado, onCo
 };
 
 const ResultadoArqueo: React.FC<{ arqueo: Arqueo; onFinalizar: () => void }> = ({ arqueo, onFinalizar }) => {
+  const { toast } = useToast();
   const meta = CATEGORIA_META[arqueo.categoria];
+  const [descargando, setDescargando] = useState(false);
+
+  // RF-10: el comprobante en PDF, con los datos del establecimiento y los cobros, para imprimir y firmar.
+  const descargar = async () => {
+    setDescargando(true);
+    try {
+      await api.descargarComprobante(arqueo.id, false);
+    } catch (err) {
+      toast(getErrorMessage(err, 'No se pudo generar el comprobante en PDF.'), 'error');
+    } finally {
+      setDescargando(false);
+    }
+  };
   const filas: [string, number, number][] = [
     ['Efectivo', arqueo.declarado_efectivo, arqueo.sistema_efectivo],
     ['POSNET', arqueo.declarado_posnet, arqueo.sistema_posnet],
@@ -276,7 +290,11 @@ const ResultadoArqueo: React.FC<{ arqueo: Arqueo; onFinalizar: () => void }> = (
         <p className="mt-10 hidden w-56 border-t border-ink pt-1 text-center text-xs print:block">Firma del operador</p>
       </div>
 
-      <div className="mt-5 flex justify-end gap-3">
+      <div className="mt-5 flex flex-wrap justify-end gap-3">
+        <Button variant="secondary" disabled={descargando} onClick={() => void descargar()}>
+          <FileDown className="h-4 w-4" aria-hidden="true" />
+          {descargando ? 'Generando PDF…' : 'Descargar PDF'}
+        </Button>
         <Button variant="secondary" onClick={() => window.print()}>
           <Printer className="h-4 w-4" aria-hidden="true" />
           Imprimir comprobante

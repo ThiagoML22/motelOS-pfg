@@ -1,9 +1,9 @@
 import React from 'react';
-import { BarChart3, LayoutGrid, Lock, LogOut, Package, Settings } from 'lucide-react';
+import { BarChart3, ClipboardList, LayoutGrid, Lock, LogOut, Package, Settings } from 'lucide-react';
 import { Sesion } from '../types';
 import { formatClock, parseUtc } from '../utils/format';
 
-export type View = 'dashboard' | 'inventario' | 'caja' | 'gerencia' | 'configuracion';
+export type View = 'dashboard' | 'inventario' | 'caja' | 'gerencia' | 'configuracion' | 'actividad';
 
 interface TopNavProps {
   sesion: Sesion;
@@ -11,6 +11,8 @@ interface TopNavProps {
   setActiveView: (view: View) => void;
   online: boolean;
   now: number;
+  // Entradas del registro de actividad que la gerencia todavía no revisó.
+  pendientes: number;
   onSalir: () => void;
 }
 
@@ -20,6 +22,7 @@ const ITEMS: { view: View; label: string; icon: React.ElementType; roles: string
   { view: 'caja', label: 'Cierre de caja', icon: Lock, roles: ['OPERADOR'] },
   { view: 'gerencia', label: 'Control de caja', icon: BarChart3, roles: ['ADMINISTRADOR'] },
   { view: 'configuracion', label: 'Configuración', icon: Settings, roles: ['ADMINISTRADOR'] },
+  { view: 'actividad', label: 'Actividad', icon: ClipboardList, roles: ['ADMINISTRADOR'] },
 ];
 
 const hora = (iso: string): string => {
@@ -27,15 +30,23 @@ const hora = (iso: string): string => {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 };
 
-const TopNav: React.FC<TopNavProps> = ({ sesion, activeView, setActiveView, online, now, onSalir }) => {
-  const { operador, guardia } = sesion;
+const TopNav: React.FC<TopNavProps> = ({ sesion, activeView, setActiveView, online, now, pendientes, onSalir }) => {
+  const { operador, guardia, establecimiento } = sesion;
   const items = ITEMS.filter((i) => i.roles.includes(operador.rol));
 
   return (
     <header className="sticky top-0 z-30 border-b border-line bg-surface print:hidden">
       <div className="mx-auto flex h-14 max-w-[1600px] items-stretch gap-4 px-4 sm:gap-6 sm:px-6">
-        <div className="flex items-center">
+        <div className="flex items-center gap-3">
           <img src="/logo.png" alt="MotelOS" className="h-7 object-contain" />
+          {establecimiento && (
+            <span
+              className="hidden max-w-[12rem] truncate rounded-md border border-line bg-surface-2 px-2 py-1 text-xs font-medium text-ink md:inline"
+              title={`Establecimiento: ${establecimiento.nombre} (${establecimiento.codigo})`}
+            >
+              {establecimiento.nombre}
+            </span>
+          )}
         </div>
 
         <nav aria-label="Principal" className="flex items-stretch gap-1">
@@ -47,13 +58,18 @@ const TopNav: React.FC<TopNavProps> = ({ sesion, activeView, setActiveView, onli
                 type="button"
                 onClick={() => setActiveView(view)}
                 aria-current={active ? 'page' : undefined}
-                aria-label={label}
+                aria-label={view === 'actividad' && pendientes > 0 ? `${label}: ${pendientes} por revisar` : label}
                 className={`press flex items-center gap-2 border-b-2 px-2.5 text-sm sm:px-3 ${
                   active ? 'border-accent font-medium text-ink' : 'border-transparent text-muted hover:text-ink'
                 }`}
               >
                 <Icon className="h-4 w-4" aria-hidden="true" />
                 <span className="hidden sm:inline">{label}</span>
+                {view === 'actividad' && pendientes > 0 && (
+                  <span className="rounded-full bg-warn px-1.5 py-0.5 text-[11px] font-semibold leading-none text-white tabular-nums">
+                    {pendientes}
+                  </span>
+                )}
               </button>
             );
           })}

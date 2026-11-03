@@ -81,7 +81,8 @@ export interface HabitacionConDetalles extends Habitacion {
 
 // --- Sesión y caja (prototipo v2) ---
 
-export type Rol = 'OPERADOR' | 'ADMINISTRADOR';
+// PLATAFORMA: el equipo que da de alta establecimientos (multiinquilino); no opera ningún motel.
+export type Rol = 'OPERADOR' | 'ADMINISTRADOR' | 'PLATAFORMA';
 
 export interface Operador {
   id: number;
@@ -109,8 +110,16 @@ export interface Guardia {
   es_propia: boolean;
 }
 
+export interface EstablecimientoPublico {
+  id: number;
+  codigo: string;
+  nombre: string;
+}
+
 export interface Sesion {
   operador: Operador;
+  // Nulo para la plataforma.
+  establecimiento: EstablecimientoPublico | null;
   guardia: Guardia | null;
 }
 
@@ -219,4 +228,66 @@ export interface MetricasCaja {
   hasta?: string | null;
   general: MetricaCaja;
   por_operador: MetricaCaja[];
+}
+
+// --- Multiinquilino y registro de actividad (demostración del Sprint 4) ---
+
+export interface Establecimiento extends EstablecimientoPublico {
+  domicilio?: string | null;
+  telefono?: string | null;
+  leyenda_comprobante?: string | null;
+  activo: boolean;
+  creado_en: string;
+}
+
+export interface EstablecimientoDatos {
+  nombre?: string;
+  domicilio?: string | null;
+  telefono?: string | null;
+  leyenda_comprobante?: string | null;
+}
+
+export interface EstablecimientoResumen extends Establecimiento {
+  habitaciones: number;
+  ocupadas: number;
+  usuarios: number;
+  turnos_ultimas_24h: number;
+  cobrado_ultimas_24h: number;
+  guardia_abierta: boolean;
+}
+
+export interface EstablecimientoAlta {
+  codigo: string;
+  nombre: string;
+  domicilio?: string;
+  telefono?: string;
+  habitaciones: number;
+  tarifa_base: number;
+  estadia_base_min: number;
+  fraccion_min: number;
+  tarifa_fraccion: number;
+  fondo_cambio: number;
+  gerente_usuario: string;
+  gerente_nombre: string;
+  gerente_clave: string;
+}
+
+export type CategoriaActividad = 'INVENTARIO' | 'TARIFA' | 'CAJA' | 'HABITACION' | 'PERSONAL' | 'ESTABLECIMIENTO';
+
+export interface Actividad {
+  id: number;
+  creado_en: string;
+  categoria: CategoriaActividad;
+  accion: string;
+  descripcion: string;
+  operador_id: number;
+  operador_nombre: string;
+  guardia_id?: number | null;
+  articulo_id?: number | null;
+  cantidad?: number | null;
+  valor_anterior?: string | null;
+  valor_nuevo?: string | null;
+  requiere_revision: boolean;
+  revisado_en?: string | null;
+  revisado_por_nombre?: string | null;
 }

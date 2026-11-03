@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { BedDouble, Coins, Package, Receipt, Users } from 'lucide-react';
-import { Articulo, FondoCambio, HabitacionConfiguracion, OperadorEstado, Tarifa } from '../types';
+import { BedDouble, Building2, Coins, Package, Receipt, Users } from 'lucide-react';
+import { Articulo, Establecimiento, FondoCambio, HabitacionConfiguracion, OperadorEstado, Tarifa } from '../types';
 import { api, getErrorMessage } from '../services/api';
 import { formatDateTime, formatMoney, formatRoomNumber } from '../utils/format';
 import Button from './ui/Button';
@@ -8,7 +8,7 @@ import Field, { inputClass } from './ui/Field';
 import Modal from './ui/Modal';
 import { useToast } from './ui/Toast';
 
-type Seccion = 'tarifa' | 'fondo' | 'articulos' | 'habitaciones' | 'conserjes';
+type Seccion = 'tarifa' | 'fondo' | 'articulos' | 'habitaciones' | 'conserjes' | 'establecimiento';
 
 const SECCIONES: { id: Seccion; label: string; icon: React.ElementType }[] = [
   { id: 'tarifa', label: 'Tarifa', icon: Receipt },
@@ -16,6 +16,7 @@ const SECCIONES: { id: Seccion; label: string; icon: React.ElementType }[] = [
   { id: 'articulos', label: 'Artículos', icon: Package },
   { id: 'habitaciones', label: 'Habitaciones', icon: BedDouble },
   { id: 'conserjes', label: 'Conserjes', icon: Users },
+  { id: 'establecimiento', label: 'Establecimiento', icon: Building2 },
 ];
 
 // RNF-05: los campos del panel miden 44 px de alto, como el resto de los controles de la ventanilla.
@@ -42,24 +43,27 @@ const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({ onCambioHabitacio
   const [articulos, setArticulos] = useState<Articulo[]>([]);
   const [habitaciones, setHabitaciones] = useState<HabitacionConfiguracion[]>([]);
   const [operadores, setOperadores] = useState<OperadorEstado[]>([]);
+  const [establecimiento, setEstablecimiento] = useState<Establecimiento | null>(null);
   const [estado, setEstado] = useState<'cargando' | 'ok' | 'error'>('cargando');
   const [confirmacion, setConfirmacion] = useState<Confirmacion | null>(null);
   const [ocupado, setOcupado] = useState(false);
 
   const cargar = useCallback(async () => {
     try {
-      const [t, f, a, h, o] = await Promise.all([
+      const [t, f, a, h, o, e] = await Promise.all([
         api.getTarifas(),
         api.getFondoCambio(),
         api.getArticulosConfiguracion(),
         api.getHabitacionesConfiguracion(),
         api.getOperadores(),
+        api.getEstablecimiento(),
       ]);
       setTarifas(t);
       setFondo(f);
       setArticulos(a);
       setHabitaciones(h);
       setOperadores(o);
+      setEstablecimiento(e);
       setEstado('ok');
     } catch (err) {
       setEstado('error');
@@ -147,6 +151,9 @@ const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({ onCambioHabitacio
           )}
           {seccion === 'conserjes' && (
             <SeccionConserjes operadores={operadores} ocupado={ocupado} ejecutar={ejecutar} confirmar={setConfirmacion} />
+          )}
+          {seccion === 'establecimiento' && establecimiento && (
+            <SeccionEstablecimiento key={establecimiento.nombre} establecimiento={establecimiento} ocupado={ocupado} ejecutar={ejecutar} />
           )}
         </section>
       )}
@@ -307,6 +314,88 @@ const SeccionFondo: React.FC<{ fondo: FondoCambio; ocupado: boolean; ejecutar: E
         Guardar fondo de cambio
       </Button>
     </form>
+  );
+};
+
+// --- Establecimiento (multiinquilino) ------------------------------------------------------------------------------
+
+const SeccionEstablecimiento: React.FC<{ establecimiento: Establecimiento; ocupado: boolean; ejecutar: Ejecutar }> = ({
+  establecimiento,
+  ocupado,
+  ejecutar,
+}) => {
+  const [form, setForm] = useState({
+    nombre: establecimiento.nombre,
+    domicilio: establecimiento.domicilio ?? '',
+    telefono: establecimiento.telefono ?? '',
+    leyenda_comprobante: establecimiento.leyenda_comprobante ?? '',
+  });
+  const set = (clave: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+    setForm((prev) => ({ ...prev, [clave]: e.target.value }));
+
+  const guardar = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await ejecutar(
+      () => api.setEstablecimiento(form),
+      'Datos del establecimiento guardados: el próximo comprobante ya los usa.',
+      'No se pudieron guardar los datos del establecimiento.',
+    );
+  };
+
+  return (
+    <div className="grid gap-6 lg:grid-cols-2">
+      <form onSubmit={guardar} className="space-y-4">
+        <h2 className="text-base font-semibold text-ink">Datos del establecimiento</h2>
+        <Field label="Nombre" htmlFor="est_nombre">
+          <input id="est_nombre" required maxLength={80} className={campo} value={form.nombre} onChange={set('nombre')} />
+        </Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Domicilio" htmlFor="est_domicilio">
+            <input id="est_domicilio" maxLength={120} className={campo} value={form.domicilio} onChange={set('domicilio')} />
+          </Field>
+          <Field label="Teléfono" htmlFor="est_telefono">
+            <input id="est_telefono" maxLength={40} className={campo} value={form.telefono} onChange={set('telefono')} />
+          </Field>
+        </div>
+        <Field
+          label="Leyenda del comprobante de arqueo"
+          htmlFor="est_leyenda"
+          hint="Aparece al pie del PDF que se imprime y firma en cada cierre de caja (RF-10)."
+        >
+          <textarea
+            id="est_leyenda"
+            rows={3}
+            maxLength={200}
+            className={inputClass}
+            value={form.leyenda_comprobante}
+            onChange={set('leyenda_comprobante')}
+          />
+        </Field>
+        <Button type="submit" disabled={ocupado || !form.nombre.trim()} className="h-11">
+          Guardar datos
+        </Button>
+      </form>
+
+      <dl className="space-y-3 rounded-md border border-line bg-surface-2 p-4 text-sm">
+        <div>
+          <dt className="text-xs text-muted">Código de ingreso</dt>
+          <dd className="font-mono text-base font-medium text-ink">{establecimiento.codigo}</dd>
+          <dd className="mt-1 text-xs text-subtle">
+            Lo escriben los conserjes al ingresar. No cambia: lo asigna la plataforma.
+          </dd>
+        </div>
+        <div>
+          <dt className="text-xs text-muted">En el sistema desde</dt>
+          <dd className="text-ink">{formatDateTime(establecimiento.creado_en)}</dd>
+        </div>
+        <div>
+          <dt className="text-xs text-muted">Aislamiento</dt>
+          <dd className="text-ink">
+            Los datos de este motel solo los ven sus usuarios: la base lo garantiza con Row Level Security.
+          </dd>
+        </div>
+      </dl>
+    </div>
   );
 };
 

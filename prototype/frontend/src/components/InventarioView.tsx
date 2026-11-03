@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowDown, ArrowUp, Plus, Search } from 'lucide-react';
+import { ArrowDown, ArrowUp, PackagePlus, Plus, Search } from 'lucide-react';
 import { Articulo } from '../types';
-import { api, getErrorMessage } from '../services/api';
+import { api, EVENTO_RECONECTADO, getErrorMessage } from '../services/api';
 import { formatMoney } from '../utils/format';
 import Button from './ui/Button';
 import Field, { inputClass } from './ui/Field';
@@ -31,9 +31,17 @@ const COLUMNAS: { key: SortKey; label: string; align?: 'right' }[] = [
 
 const FORM_VACIO = { codigo: '', descripcion: '', categoria: '', precio: '', stock: '' };
 
-// El conserje y la gerencia dan de alta artículos: el conserje no depende de la gerencia para cargar uno nuevo.
-const InventarioView: React.FC = () => {
+interface InventarioViewProps {
+  // El conserje ve el aviso de que lo que carga queda en el registro de la gerencia.
+  esConserje: boolean;
+}
+
+// El conserje y la gerencia dan de alta artículos y reponen stock: el conserje no depende de la gerencia para cargar
+// lo que llega a la ventanilla. Cada alta y reposición queda en el registro de actividad de la gerencia, a su nombre.
+const InventarioView: React.FC<InventarioViewProps> = ({ esConserje }) => {
   const { toast } = useToast();
+  const [reponiendo, setReponiendo] = useState<Articulo | null>(null);
+  const [cantidad, setCantidad] = useState('');
   const [articulos, setArticulos] = useState<Articulo[]>([]);
   const [estado, setEstado] = useState<'cargando' | 'ok' | 'error'>('cargando');
   const [busqueda, setBusqueda] = useState('');
@@ -56,7 +64,29 @@ const InventarioView: React.FC = () => {
 
   useEffect(() => {
     void cargar();
+    // RNF-09: al volver la conexión, la lista se actualiza sola.
+    const alReconectar = () => void cargar();
+    window.addEventListener(EVENTO_RECONECTADO, alReconectar);
+    return () => window.removeEventListener(EVENTO_RECONECTADO, alReconectar);
   }, [cargar]);
+
+  const aviso = esConserje ? ' Queda registrado a su nombre para la gerencia.' : '';
+
+  const reponer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reponiendo) return;
+    setGuardando(true);
+    try {
+      const actualizado = await api.reponerArticulo(reponiendo.id, parseInt(cantidad, 10));
+      toast(`Stock de ${actualizado.descripcion}: ${actualizado.stock_actual} unidades.${aviso}`, 'success');
+      setReponiendo(null);
+      await cargar();
+    } catch (err) {
+      toast(getErrorMessage(err, 'No se pudo registrar la reposición.'), 'error');
+    } finally {
+      setGuardando(false);
+    }
+  };
 
   const categorias = useMemo(() => {
     const mapa = new Map<string, { items: number; unidades: number; bajos: number; sin: number }>();
@@ -123,7 +153,7 @@ const InventarioView: React.FC = () => {
         precio_unitario: parseFloat(form.precio),
         stock_actual: parseInt(form.stock, 10),
       });
-      toast('Artículo creado.', 'success');
+      toast(`Artículo creado.${aviso}`, 'success');
       setModalAbierto(false);
       await cargar();
     } catch (err) {
@@ -296,6 +326,9 @@ const InventarioView: React.FC = () => {
                       </button>
                     </th>
                   ))}
+                  <th scope="col" className="px-4 py-2.5 text-right">
+                    <span className="sr-only">Acciones</span>
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
@@ -312,11 +345,25 @@ const InventarioView: React.FC = () => {
                       {esSin(a) && <span className="ml-2 text-xs text-danger">Sin stock</span>}
                       {esBajo(a) && <span className="ml-2 text-xs text-warn">Stock bajo</span>}
                     </td>
+                    <td className="px-4 py-1.5 text-right">
+                      <Button
+                        variant="secondary"
+                        className="h-11"
+                        aria-label={`Reponer ${a.descripcion}`}
+                        onClick={() => {
+                          setCantidad('');
+                          setReponiendo(a);
+                        }}
+                      >
+                        <PackagePlus className="h-4 w-4" aria-hidden="true" />
+                        Reponer
+                      </Button>
+                    </td>
                   </tr>
                 ))}
                 {visibles.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="px-4 py-12 text-center text-muted">
+                    <td colSpan={6} className="px-4 py-12 text-center text-muted">
                       {articulos.length === 0
                         ? 'Todavía no hay artículos cargados.'
                         : 'Ningún artículo coincide con los filtros aplicados.'}
@@ -369,6 +416,51 @@ const InventarioView: React.FC = () => {
                 <input id="stock" type="number" inputMode="numeric" step="1" min="0" required placeholder="0" className={`${inputClass} tabular-nums`} value={form.stock} onChange={setCampo('stock')} />
               </Field>
             </div>
+            {esConserje && (
+              <p className="text-xs text-subtle">El alta queda registrada a su nombre y la gerencia la revisa.</p>
+            )}
+          </form>
+        </Modal>
+      )}
+
+      {reponiendo && (
+        <Modal
+          title={`Reponer ${reponiendo.descripcion}`}
+          onClose={() => setReponiendo(null)}
+          footer={
+            <div className="flex justify-end gap-3">
+              <Button variant="secondary" onClick={() => setReponiendo(null)} disabled={guardando}>
+                Cancelar
+              </Button>
+              <Button type="submit" form="form-reposicion" disabled={guardando || !(parseInt(cantidad, 10) > 0)}>
+                Sumar al stock
+              </Button>
+            </div>
+          }
+        >
+          <form id="form-reposicion" onSubmit={reponer} className="space-y-4">
+            <p className="text-sm text-muted">
+              Stock actual: <span className="font-medium tabular-nums text-ink">{reponiendo.stock_actual}</span> unidades ·
+              precio {formatMoney(reponiendo.precio_unitario)} (lo cambia la gerencia).
+            </p>
+            <Field label="Unidades que llegaron" htmlFor="cantidad">
+              <input
+                id="cantidad"
+                data-autofocus
+                type="number"
+                inputMode="numeric"
+                step="1"
+                min="1"
+                max="10000"
+                required
+                className={`${inputClass} h-11 tabular-nums`}
+                value={cantidad}
+                onChange={(e) => setCantidad(e.target.value)}
+              />
+            </Field>
+            {esConserje && (
+              <p className="text-xs text-subtle">La reposición queda registrada a su nombre y la gerencia la revisa.</p>
+            )}
           </form>
         </Modal>
       )}
