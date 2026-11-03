@@ -79,6 +79,12 @@ BEGIN
     PERFORM set_config('app.establecimiento_id', otro::text, true);
     SELECT count(*) INTO filas FROM novedades;
     IF filas <> 0 THEN RAISE EXCEPTION 'Un establecimiento vio las novedades de otro'; END IF;
+
+    -- 8. La plataforma da de alta un motel con todas las columnas que inserta la aplicacion (incluidas las de 009).
+    PERFORM set_config('app.establecimiento_id', '0', true);
+    INSERT INTO establecimientos (codigo, nombre, domicilio, telefono, leyenda_comprobante, activo, creado_en,
+                                  color_marca, eslogan, aviso_por_vencer_min, alertas_sonoras)
+    VALUES ('verif-alta', 'Alta', NULL, NULL, NULL, true, now(), NULL, NULL, 10, false);
     RAISE NOTICE 'verify_personalizacion_novedades: apariencia propia y novedades de solo agregado verificadas';
 END $$;
 ROLLBACK;

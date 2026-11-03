@@ -14,6 +14,8 @@ ALTER TABLE establecimientos
     ADD COLUMN alertas_sonoras BOOLEAN NOT NULL DEFAULT FALSE;
 
 GRANT UPDATE (color_marca, eslogan, aviso_por_vencer_min, alertas_sonoras) ON establecimientos TO motel_app;
+-- El alta de un motel por la plataforma (migracion 006) inserta todas las columnas del modelo, tambien estas.
+GRANT INSERT (color_marca, eslogan, aviso_por_vencer_min, alertas_sonoras) ON establecimientos TO motel_app;
 
 -- ---------------------------------------------------------------------------------------------------
 -- Novedades de guardia: lo que el personal deja escrito para el turno siguiente y para la gerencia ("la 7 tiene la
