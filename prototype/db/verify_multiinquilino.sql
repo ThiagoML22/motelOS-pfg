@@ -31,6 +31,8 @@ BEGIN
     SELECT otro, hab_otra, t.id, 9000, 9000, 'Anulado', conserje_otro, guardia_otra
       FROM tarifas t WHERE t.establecimiento_id = otro
     RETURNING id INTO turno_otro;
+    INSERT INTO operadores (establecimiento_id, usuario, nombre_visible, hash_clave, rol)
+    VALUES (NULL, 'verif.plataforma', 'Plataforma', 'x', 'PLATAFORMA');
     PERFORM set_config('app.establecimiento_id', '1', true);
     INSERT INTO operadores (usuario, nombre_visible, hash_clave, rol)
     VALUES ('verif.gerencia', 'Gerencia', 'x', 'ADMINISTRADOR') RETURNING id INTO gerencia_1;
@@ -83,6 +85,15 @@ BEGIN
     IF cantidad <> 0 THEN RAISE EXCEPTION 'RLS: la plataforma vio turnos'; END IF;
     SELECT count(*) INTO cantidad FROM operadores WHERE rol <> 'PLATAFORMA';
     IF cantidad <> 0 THEN RAISE EXCEPTION 'RLS: la plataforma vio usuarios de un establecimiento'; END IF;
+    -- La plataforma registra el acceso de sus usuarios, pero no crea usuarios (el rol queda en OPERADOR).
+    UPDATE operadores SET ultimo_acceso = now() WHERE rol = 'PLATAFORMA';
+    GET DIAGNOSTICS filas = ROW_COUNT;
+    IF filas <> 1 THEN RAISE EXCEPTION 'La plataforma no pudo registrar el acceso de su usuario'; END IF;
+    bloqueado := false;
+    BEGIN INSERT INTO operadores (establecimiento_id, usuario, nombre_visible, hash_clave)
+          VALUES (NULL, 'verif.intrusa', 'X', 'x');
+    EXCEPTION WHEN check_violation OR insufficient_privilege THEN bloqueado := true; END;
+    IF NOT bloqueado THEN RAISE EXCEPTION 'La plataforma creo un usuario sin establecimiento'; END IF;
     -- pero si obtiene el resumen (solo cantidades) ...
     SELECT count(*) INTO cantidad FROM resumen_plataforma();
     IF cantidad < 2 THEN RAISE EXCEPTION 'El resumen de la plataforma no incluyo los establecimientos'; END IF;

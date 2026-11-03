@@ -171,11 +171,13 @@ BEGIN
     END LOOP;
 END $$;
 
--- En operadores, la plataforma (establecimiento 0) ve solo a los usuarios de la plataforma.
+-- En operadores, la plataforma (establecimiento 0) ve y actualiza (intentos, ultimo acceso) solo a los usuarios de la
+-- plataforma. No puede crear uno: el alta no escribe el rol, que queda en OPERADOR, y un OPERADOR sin establecimiento
+-- lo rechaza la restriccion operador_de_un_establecimiento.
 ALTER TABLE operadores ENABLE ROW LEVEL SECURITY;
 CREATE POLICY aislamiento_establecimiento ON operadores TO motel_app
     USING (coalesce(establecimiento_id, 0) = app_establecimiento())
-    WITH CHECK (establecimiento_id = app_establecimiento());
+    WITH CHECK (coalesce(establecimiento_id, 0) = app_establecimiento());
 
 -- Los establecimientos se leen sin restriccion (el inicio de sesion busca el codigo antes de saber el
 -- establecimiento; solo son nombres y datos de contacto). Los crea la plataforma; los modifica la plataforma o
