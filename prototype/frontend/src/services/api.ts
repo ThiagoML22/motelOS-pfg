@@ -301,8 +301,17 @@ export const api = {
   getTablero: async (): Promise<Tablero> => (await http.get('/inteligencia/tablero')).data,
 
   // Asistente de todo el personal: ayuda y estado de la ventanilla; a la gerencia, además, el análisis de datos.
-  preguntar: async (texto: string): Promise<RespuestaAsistente> =>
-    (await http.post('/asistente/pregunta', { texto })).data,
+  // `anterior` y `anterior_intencion` permiten seguimientos («¿y la semana pasada?», «¿y la 7?»); `pantalla` es la
+  // sección abierta, para responder «¿qué hago acá?».
+  preguntar: async (texto: string, anterior?: string, anterior_intencion?: string, pantalla?: string): Promise<RespuestaAsistente> =>
+    (
+      await http.post('/asistente/pregunta', {
+        texto,
+        anterior: anterior ?? null,
+        anterior_intencion: anterior_intencion ?? null,
+        pantalla: pantalla ?? null,
+      })
+    ).data,
 
   getArqueosMeses: async (operador_id?: number): Promise<ResumenMes[]> =>
     (await http.get('/arqueos/meses', { params: { operador_id } })).data,

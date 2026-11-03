@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { BedDouble, LogOut, MessageSquarePlus, Moon, UserRound, WifiOff } from 'lucide-react';
+import { BedDouble, Keyboard, LogOut, MessageSquarePlus, Moon, UserRound, WifiOff } from 'lucide-react';
 import { Arqueo, Categoria, HabitacionConDetalles, Novedad, RoomStatus, Sesion, TipoCliente } from './types';
 import { AsistenteFlotante, AsistenteProvider, useAsistente } from './components/Asistente';
+import AtajosTeclado, { escribiendo } from './components/AtajosTeclado';
 import CentroAvisos from './components/CentroAvisos';
 import PaletaComandos, { Comando } from './components/PaletaComandos';
 import { NovedadesCard, NuevaNovedadModal } from './components/NovedadesPanel';
@@ -27,6 +28,7 @@ import PanelGerencia from './components/PanelGerencia';
 import ConfiguracionView from './components/ConfiguracionView';
 import Button from './components/ui/Button';
 import { useToast } from './components/ui/Toast';
+import { EstadoVacio, EsqueletoGrilla } from './components/ui/Carga';
 import { ESTADOS_ORDEN, ESTADO_META } from './components/ui/status';
 
 const POLL_MS = 10000;
@@ -138,6 +140,7 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
   const [novedades, setNovedades] = useState<Novedad[]>([]);
   const [nuevaNovedad, setNuevaNovedad] = useState(false);
   const [paleta, setPaleta] = useState(false);
+  const [atajos, setAtajos] = useState(false);
   // Panel flotante del asistente (gerencia); la paleta de comandos lo abre con una pregunta.
   const [asistenteAbierto, setAsistenteAbierto] = useState(false);
   const asistente = useAsistente();
@@ -175,17 +178,30 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
     }
   }, [esGerencia]);
 
-  // Ctrl+K (⌘K en Mac) abre y cierra la paleta de comandos.
+  // Ctrl+K (⌘K en Mac) abre y cierra la paleta de comandos. Fuera de los campos de texto también hay teclas sueltas:
+  // «/» busca, «?» muestra los atajos, «A» abre el asistente, «N» deja una novedad y los números van a cada sección.
+  const seccionesDelRol = useMemo(() => ITEMS.filter((i) => i.roles.includes(sesion.operador.rol)), [sesion.operador.rol]);
   useEffect(() => {
     const teclas = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         setPaleta((v) => !v);
+        return;
       }
+      if (e.ctrlKey || e.metaKey || e.altKey || escribiendo(e)) return;
+      const tecla = e.key.toLowerCase();
+      const seccion = /^[1-9]$/.test(tecla) ? seccionesDelRol[Number(tecla) - 1] : undefined;
+      if (tecla === '/') setPaleta(true);
+      else if (tecla === '?') setAtajos(true);
+      else if (tecla === 'a') setAsistenteAbierto((v) => !v);
+      else if (tecla === 'n' && conGuardiaPropia) setNuevaNovedad(true);
+      else if (seccion) setActiveView(seccion.view);
+      else return;
+      e.preventDefault();
     };
     window.addEventListener('keydown', teclas);
     return () => window.removeEventListener('keydown', teclas);
-  }, []);
+  }, [seccionesDelRol, conGuardiaPropia]);
 
   // RNF-09: al volver la conexión se traen la sesión, la grilla y el contador del registro (en menos de 5 s).
   const conexion = useConexion(async () => {
@@ -274,6 +290,7 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
       claves: 'tema oscuro claro luna',
       accion: () => elegirTema(modoActual() === 'oscuro' ? 'claro' : 'oscuro'),
     });
+    lista.push({ id: 'atajos', titulo: 'Atajos de teclado', detalle: '?', grupo: 'Acciones', icono: Keyboard, claves: 'teclas rapidas ayuda', accion: () => setAtajos(true) });
     lista.push({ id: 'salir', titulo: 'Cerrar sesión', grupo: 'Acciones', icono: LogOut, claves: 'salir', accion: onSalir });
     return lista;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -282,7 +299,14 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
   // Botones que propone el asistente: ir a una pantalla permitida para el rol o abrir una habitación.
   const habitacionesRef = useRef(habitaciones);
   habitacionesRef.current = habitaciones;
-  const { registrarAcciones } = asistente;
+  const { registrarAcciones, fijarPantalla } = asistente;
+
+  // El asistente sabe qué sección está a la vista; sin guardia propia, el conserje está en «Abrir su guardia».
+  const enApertura = !conGuardiaPropia && !mostrandoComprobante && activeView !== 'inventario' && activeView !== 'perfil';
+  useEffect(() => {
+    if (enApertura) fijarPantalla('guardia', 'abrir la guardia');
+    else fijarPantalla(activeView, ITEMS.find((i) => i.view === activeView)?.label ?? 'Mi perfil');
+  }, [activeView, enApertura, fijarPantalla]);
   useEffect(() => {
     const permitidas = new Set<string>([...ITEMS.filter((i) => i.roles.includes(sesion.operador.rol)).map((i) => i.view), 'perfil']);
     registrarAcciones((accion) => {
@@ -370,8 +394,9 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
 
       {!conexion.conectado && <AvisoSinConexion desde={conexion.sinConexionDesde} onReintentar={conexion.reintentar} />}
 
-      <main className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col px-4 py-6 sm:px-6">
-        {!conGuardiaPropia && !mostrandoComprobante && activeView !== 'inventario' && activeView !== 'perfil' && (
+      {/* Cada sección entra con una transición corta al cambiar de vista (la clave reinicia la animación). */}
+      <main key={activeView} className="mx-auto flex w-full max-w-[1600px] flex-1 animate-vista flex-col px-4 py-6 sm:px-6">
+        {enApertura && (
           <GuardiaView sesion={sesion} onGuardiaAbierta={onRefrescarSesion} onSalir={onSalir} />
         )}
 
@@ -474,7 +499,7 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
 
             <NovedadesCard novedades={novedades} onNueva={() => setNuevaNovedad(true)} />
 
-            {carga === 'cargando' && <p className="py-16 text-center text-sm text-muted">Cargando habitaciones…</p>}
+            {carga === 'cargando' && <EsqueletoGrilla />}
 
             {carga === 'error' && (
               <div className="flex flex-col items-center gap-3 rounded-lg border border-line bg-surface py-16">
@@ -486,7 +511,7 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
             )}
 
             {carga === 'ok' && visibles.length === 0 && (
-              <p className="py-16 text-center text-sm text-muted">No hay habitaciones con este estado.</p>
+              <EstadoVacio icono={BedDouble} titulo="No hay habitaciones con este filtro" texto="Probá con otro estado o con todas las categorías." />
             )}
 
             {carga === 'ok' && visibles.length > 0 && (
@@ -540,6 +565,36 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
             setAsistenteAbierto(true);
             void asistente.preguntar(texto);
           }}
+        />
+      )}
+
+      {atajos && (
+        <AtajosTeclado
+          onClose={() => setAtajos(false)}
+          grupos={[
+            {
+              titulo: 'General',
+              atajos: [
+                { teclas: ['Ctrl K', '/'], descripcion: 'Buscar una sección, una habitación o una acción' },
+                { teclas: ['A'], descripcion: 'Abrir o cerrar el asistente' },
+                ...(conGuardiaPropia ? [{ teclas: ['N'], descripcion: 'Dejar una novedad para la próxima guardia' }] : []),
+                { teclas: ['?'], descripcion: 'Ver estos atajos' },
+                { teclas: ['Esc'], descripcion: 'Cerrar el diálogo o el panel abierto' },
+              ],
+            },
+            {
+              titulo: 'Secciones',
+              atajos: seccionesDelRol.map((s, i) => ({ teclas: [String(i + 1)], descripcion: `Ir a ${s.label}` })),
+            },
+            {
+              titulo: 'En las listas y el asistente',
+              atajos: [
+                { teclas: ['Tab'], descripcion: 'Pasar de una habitación a la siguiente' },
+                { teclas: ['Enter'], descripcion: 'Abrir la habitación elegida o enviar la pregunta' },
+                { teclas: ['↑'], descripcion: 'Recuperar la pregunta anterior en el asistente' },
+              ],
+            },
+          ]}
         />
       )}
 

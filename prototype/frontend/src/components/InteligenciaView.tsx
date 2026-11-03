@@ -16,6 +16,7 @@ import {
 import { AlertaIA, Severidad, SugerenciaTarifa, Tablero } from '../types';
 import { ChatAsistente } from './Asistente';
 import { BotonNuevoPedido } from './PedidosReposicion';
+import { Cifra, EsqueletoTablero } from './ui/Carga';
 import { api, EVENTO_RECONECTADO, getErrorMessage } from '../services/api';
 import { formatMoney, parseUtc } from '../utils/format';
 import { formatMinutos } from '../utils/turno';
@@ -127,7 +128,7 @@ const InteligenciaView: React.FC = () => {
           botón flotante (AsistenteFlotante), que comparte la misma conversación. */}
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_24rem]">
         <div className="min-w-0 space-y-5">
-          {estado === 'cargando' && <p className="py-16 text-center text-sm text-muted">Analizando los datos…</p>}
+          {estado === 'cargando' && <EsqueletoTablero />}
           {estado === 'error' && (
             <div className="flex flex-col items-center gap-3 rounded-lg border border-line bg-surface py-16">
               <p className="text-sm text-muted">No se pudo calcular el análisis.</p>
@@ -213,13 +214,16 @@ const Resumen: React.FC<{ tablero: Tablero }> = ({ tablero }) => (
 
 const Indicadores: React.FC<{ tablero: Tablero }> = ({ tablero }) => {
   const k = tablero.indicadores;
-  const tiles: { etiqueta: string; valor: string; nota?: string | null; variacion?: number | null }[] = [
-    { etiqueta: 'Ocupadas ahora', valor: `${k.ocupadas_ahora} de ${k.habitaciones}` },
-    { etiqueta: 'Turnos · 7 días', valor: String(k.turnos_7d), variacion: k.turnos_7d_variacion },
-    { etiqueta: 'Ingresos · 7 días', valor: formatMoney(k.ingresos_7d), variacion: k.ingresos_7d_variacion },
-    { etiqueta: 'Ticket promedio', valor: formatMoney(k.ticket_7d) },
-    { etiqueta: 'Ocupación · 7 días', valor: porcentaje(k.ocupacion_7d) },
-    { etiqueta: 'TDC · 30 días', valor: porcentaje(k.tdc_30d), nota: `${k.arqueos_30d} arqueos` },
+  // Las cifras cuentan hasta su valor al aparecer (Cifra); las que no hay, un guion.
+  const dinero = (v: number) => formatMoney(Math.round(v));
+  const pct = (v: number) => `${Math.round(v * 100)}%`;
+  const tiles: { etiqueta: string; valor: React.ReactNode; nota?: string | null; variacion?: number | null }[] = [
+    { etiqueta: 'Ocupadas ahora', valor: <><Cifra valor={k.ocupadas_ahora} /> de {k.habitaciones}</> },
+    { etiqueta: 'Turnos · 7 días', valor: <Cifra valor={k.turnos_7d} />, variacion: k.turnos_7d_variacion },
+    { etiqueta: 'Ingresos · 7 días', valor: <Cifra valor={k.ingresos_7d} formato={dinero} />, variacion: k.ingresos_7d_variacion },
+    { etiqueta: 'Ticket promedio', valor: <Cifra valor={k.ticket_7d} formato={dinero} /> },
+    { etiqueta: 'Ocupación · 7 días', valor: k.ocupacion_7d === null ? '—' : <Cifra valor={k.ocupacion_7d} formato={pct} /> },
+    { etiqueta: 'TDC · 30 días', valor: k.tdc_30d === null ? '—' : <Cifra valor={k.tdc_30d} formato={pct} />, nota: `${k.arqueos_30d} arqueos` },
   ];
   return (
     <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-line bg-line sm:grid-cols-3 2xl:grid-cols-6">

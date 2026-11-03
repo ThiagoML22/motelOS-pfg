@@ -8,6 +8,7 @@ import Field, { inputClass } from './ui/Field';
 import Modal from './ui/Modal';
 import { useToast } from './ui/Toast';
 import { BotonNuevoPedido, SeccionPedidos } from './PedidosReposicion';
+import { EsqueletoTabla } from './ui/Carga';
 
 const STOCK_BAJO = 5;
 const SIN_CATEGORIA = 'General';
@@ -193,7 +194,7 @@ const InventarioView: React.FC<InventarioViewProps> = ({ esConserje }) => {
       {/* Pedidos a proveedores (migración 010): solo aparece si hay alguno; el conserje los recibe. */}
       <SeccionPedidos esGerencia={!esConserje} onStockCambiado={() => void cargar()} version={versionPedidos} />
 
-      {estado === 'cargando' && <p className="py-16 text-center text-sm text-muted">Cargando inventario…</p>}
+      {estado === 'cargando' && <EsqueletoTabla filas={8} etiqueta="Cargando inventario…" />}
 
       {estado === 'error' && (
         <div className="flex flex-col items-center gap-3 rounded-lg border border-line bg-surface py-16">

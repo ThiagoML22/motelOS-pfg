@@ -285,11 +285,14 @@ TEMAS: tuple[Tema, ...] = (
     Tema(
         "atajos",
         "Buscar y moverse rápido",
-        (r"\batajo", r"ctrl ?k", r"\bbuscar\b", r"teclado"),
+        (r"\batajo", r"ctrl ?k", r"\bbuscar\b", r"teclado", r"\bteclas?\b"),
         (
-            "Ctrl+K (o la lupa del encabezado) abre el buscador.",
+            "Ctrl+K o «/» (o la lupa del encabezado) abre el buscador.",
             "Escribí una sección, el número de una habitación («7») o una acción («novedad», «oscuro»).",
             "Con las flechas elegís y con Enter vas.",
+            "Fuera de los campos: «A» abre el asistente, «N» deja una novedad y los números 1, 2, 3… "
+            "van a cada sección.",
+            "«?» muestra todos los atajos.",
         ),
         None,
     ),
@@ -528,6 +531,183 @@ class Respuesta:
             "pasos": self.pasos,
             "acciones": self.acciones,
         }
+
+
+@dataclass(frozen=True)
+class Pantalla:
+    titulo: str
+    que_es: str
+    se_puede: tuple[str, ...]
+    preguntas: tuple[str, ...]
+    preguntas_gerencia: tuple[str, ...] = ()
+    roles: str = TODOS
+
+
+# Cada sección del sistema: qué es, qué se hace ahí y qué conviene preguntar. Responde «¿qué hago acá?».
+PANTALLAS = {
+    "guardia": Pantalla(
+        "Abrir su guardia",
+        "Todavía no tenés tu guardia abierta: hasta abrirla no podés operar la ventanilla (RF-08). Hay una sola "
+        "ventanilla, así que solo opera quien tiene la guardia.",
+        (
+            "Leé las novedades que dejaron las guardias anteriores.",
+            "Tocá «Abrir guardia»: tu caja empieza con el fondo de cambio.",
+            "Si la guardia abierta es de otro conserje, primero la cierra él con su arqueo (o la gerencia con un "
+            "cierre supervisado).",
+        ),
+        (
+            "¿Cómo abro la guardia?",
+            "¿Qué novedades hay?",
+            "No me deja operar, ¿qué hago?",
+            "¿Qué es el fondo de cambio?",
+        ),
+    ),
+    "dashboard": Pantalla(
+        "Habitaciones",
+        "Es la ventanilla: cada tarjeta es una habitación con su estado (verde disponible, azul ocupada, limpieza o "
+        "mantenimiento) y, si está ocupada, el cronómetro del turno, que se pone amarillo por vencer y rojo excedido.",
+        (
+            "Tocá una disponible para abrir un turno.",
+            "En una ocupada, «+ consumo» carga el minibar; abriéndola, cobrás y cerrás el turno.",
+            "«Liberar» la deja disponible cuando terminó la limpieza; el menú ⋮ la pone en mantenimiento.",
+            "Arriba filtrás por estado o categoría y ordenás por número o por vencimiento.",
+            "Las novedades de la guardia están sobre la grilla; «Dejar novedad» agrega una.",
+        ),
+        ("¿Cómo abro un turno?", "¿Cuál vence primero?", "¿Qué habitaciones están libres?", "¿Qué es el sobreturno?"),
+        (
+            "¿Cómo está la ventanilla?",
+            "¿Quién está de guardia?",
+            "¿Qué habitaciones están ocupadas?",
+            "¿Qué es el sobreturno?",
+        ),
+    ),
+    "inventario": Pantalla(
+        "Inventario",
+        "Es la lista de artículos del minibar con su precio y su stock; los que quedan por debajo del mínimo se "
+        "marcan. Abajo están los pedidos a proveedores.",
+        (
+            "«Nuevo artículo» da de alta uno; «Reponer» suma las unidades que llegaron.",
+            "En «Pedidos a proveedores», «Recibir» carga lo que llegó de un pedido y lo suma al stock.",
+            "Cada movimiento queda a tu nombre y la gerencia lo ve en Actividad.",
+        ),
+        ("¿Qué artículos tienen poco stock?", "Llegó mercadería, ¿qué hago?", "¿Cómo recibo un pedido?"),
+        ("¿Qué artículos tienen poco stock?", "¿Cómo armo un pedido?", "¿Cómo recibo un pedido?", "¿Qué pedidos hay?"),
+    ),
+    "caja": Pantalla(
+        "Cierre de caja",
+        "Es donde cerrás tu guardia con el arqueo ciego: contás la gaveta y declarás lo que hay sin ver el total que "
+        "espera el sistema (RN-RES-03).",
+        (
+            "Declará efectivo, POSNET y Mercado Pago.",
+            "Al confirmar, el sistema calcula la diferencia (correcto, faltante o sobrante) y cierra tu guardia.",
+            "Descargá el comprobante en PDF para firmarlo.",
+        ),
+        (
+            "¿Cómo cierro la caja?",
+            "¿Por qué no veo el total de la caja?",
+            "Me equivoqué en el arqueo, ¿qué hago?",
+            "¿Qué es el fondo de cambio?",
+        ),
+    ),
+    "gerencia": Pantalla(
+        "Control de caja",
+        "Es el control de la gerencia sobre las guardias: la guardia abierta ahora, los arqueos agrupados por mes y "
+        "por día, la TDC y los faltantes por conserje.",
+        (
+            "Si un conserje se fue sin cerrar, arriba aparece su guardia con «Cierre supervisado».",
+            "Abrí un mes para ver sus días; tocá un arqueo para ver sus cobros y descargar el PDF.",
+            "Cada mes se exporta en PDF (informe) o Excel (planilla); el filtro por conserje se respeta.",
+        ),
+        (),
+        (
+            "¿Cómo exporto los arqueos del mes?",
+            "¿Quién tuvo más faltantes en los últimos 30 días?",
+            "¿Qué es la TDC?",
+            "¿Cómo hago un cierre supervisado?",
+        ),
+        GERENCIA,
+    ),
+    "configuracion": Pantalla(
+        "Configuración",
+        "Es donde la gerencia ajusta el motel: categorías y tarifas, habitaciones, artículos, conserjes, fondo de "
+        "cambio y apariencia. Cada cambio queda en Actividad.",
+        (
+            "«Categorías y tarifas»: la tarifa de cada categoría, con el simulador de lo que paga el cliente.",
+            "«Habitaciones» y «Artículos»: altas, bajas, números, categorías y precios.",
+            "«Conserjes»: altas, bajas y clave restablecida.",
+            "«Fondo de cambio» y «Apariencia y avisos»: el fondo de cada guardia, el color, el eslogan y las alertas.",
+        ),
+        (),
+        (
+            "¿Cómo cambio una tarifa?",
+            "¿Cómo agrego una habitación?",
+            "¿Cómo doy de alta un conserje?",
+            "¿Cómo cambio el fondo de cambio?",
+        ),
+        GERENCIA,
+    ),
+    "actividad": Pantalla(
+        "Actividad",
+        "Es el registro de cada cambio de inventario y de configuración: quién lo hizo, en qué guardia y qué valor "
+        "tenía antes.",
+        (
+            "Lo que cargan los conserjes queda «por revisar» hasta que lo marcás como visto.",
+            "Filtrá por tipo o por persona y exportá a CSV.",
+        ),
+        (),
+        ("¿Cómo veo quién cambió qué?", "¿Quién está de guardia?", "¿Qué novedades hay?"),
+        GERENCIA,
+    ),
+    "inteligencia": Pantalla(
+        "Inteligencia",
+        "Es el análisis del motel calculado en su propio servidor, sin internet: resumen, alertas, pronóstico de "
+        "turnos, demanda por hora, sugerencias de tarifa y reposición sugerida. Solo usa lo ya arqueado.",
+        (
+            "Elegí el período arriba; los gráficos muestran cada valor al pasar el mouse.",
+            "«Ver y aplicar» en una sugerencia de tarifa muestra el efecto estimado antes de confirmar.",
+            "«Armar pedido con esto» convierte la reposición sugerida en un pedido al proveedor.",
+            "A la derecha está el asistente: preguntale por los datos con tus palabras.",
+        ),
+        (),
+        (
+            "¿Cuántos turnos esperamos mañana?",
+            "¿Qué categoría deja más plata?",
+            "¿Cómo aplico una sugerencia de tarifa?",
+            "¿Cómo armo un pedido?",
+        ),
+        GERENCIA,
+    ),
+    "perfil": Pantalla(
+        "Mi perfil",
+        "Son tus datos: el nombre que ven los demás, tu clave y la apariencia de la pantalla en este puesto.",
+        (
+            "Cambiá tu nombre visible o tu clave (te pide la actual).",
+            "Elegí modo claro, oscuro o el del sistema operativo.",
+        ),
+        ("¿Cómo cambio mi clave?", "¿Cómo activo el modo oscuro?", "¿Qué atajos de teclado hay?"),
+    ),
+}
+
+# «¿Qué hago acá?», «¿para qué sirve esta pantalla?», «explicame esto»: preguntas sobre la sección abierta.
+SOBRE_PANTALLA = re.compile(
+    r"\b(esta (pantalla|seccion|pagina|vista|parte|solapa)|(que|como) (hago|puedo hacer|se hace|hay|veo|uso)"
+    r" (aca|aqui|esto)|para que (sirve|es) (esto|aca)|que es esto|como (uso|funciona) esto|como hago esto"
+    r"|donde estoy|explica(me)? (esto|aca)|que significa esto|no entiendo (nada|esto|esta)|estoy perdid[oa]"
+    r"|me perdi)\b|^(ayuda|necesito ayuda|no entiendo)$"
+)
+
+
+def _pantalla(vista: str | None, es_gerencia: bool) -> Respuesta | None:
+    pantalla = PANTALLAS.get(vista or "")
+    if pantalla is None or (pantalla.roles == GERENCIA and not es_gerencia):
+        return None
+    preguntas = (pantalla.preguntas_gerencia if es_gerencia else ()) or pantalla.preguntas
+    return Respuesta(
+        f"Estás en {pantalla.titulo}. {pantalla.que_es}",
+        f"pantalla:{vista}",
+        pasos=list(pantalla.se_puede),
+        sugerencias=list(preguntas),
+    )
 
 
 def _ir(vista: str | None) -> list[dict]:
@@ -899,7 +1079,8 @@ def _charla(tipo: str, es_gerencia: bool) -> dict:
     texto = (
         "Soy el asistente de MotelOS y funciono acá mismo, sin internet. Te explico cómo usar cualquier parte del "
         "sistema y qué significa cada cosa («¿qué es la tolerancia?»), y te digo cómo está la ventanilla ahora "
-        "(libres, ocupadas, vencimientos, la cuenta de una habitación, stock, novedades, pedidos)."
+        "(libres, ocupadas, vencimientos, la cuenta de una habitación, stock, novedades, pedidos). Si me preguntás "
+        "«¿qué hago acá?», te explico la pantalla en la que estás."
     )
     if es_gerencia:
         texto += (
@@ -927,11 +1108,12 @@ async def responder(
     pregunta: str,
     anterior_pregunta: str | None = None,
     anterior_intencion: str | None = None,
+    pantalla: str | None = None,
 ) -> tuple[dict | None, str]:
     """La respuesta del asistente para todo el personal, y la pregunta ya corregida.
 
     Devuelve (None, texto) cuando es una pregunta de análisis de la gerencia: la responde services.asistente con el
-    texto corregido (y la pregunta anterior, si es un seguimiento).
+    texto corregido (y la pregunta anterior, si es un seguimiento). `pantalla` es la sección abierta en la ventanilla.
     """
     es_gerencia = operador.rol == ROL_ADMINISTRADOR
     ventanilla = Ventanilla(db)
@@ -944,6 +1126,10 @@ async def responder(
     for patron, tipo in CHARLA:
         if patron.search(original):
             return _charla(tipo, es_gerencia), original
+    # «¿Qué hago acá?»: la sección abierta, con lo que se puede hacer en ella.
+    sobre_pantalla = _pantalla(pantalla, es_gerencia) if SOBRE_PANTALLA.search(original) else None
+    if sobre_pantalla is not None:
+        return sobre_pantalla.como_dict(), original
     texto = conocimiento.corregir(original, ENTRADAS, ventanilla.palabras_propias())
 
     # 1. Situaciones conocidas («me equivoqué en el arqueo») y «¿qué es…?», «¿para qué sirve…?»: el glosario.
@@ -1007,8 +1193,14 @@ async def responder(
         "No encontré cómo ayudarte con eso. Probá preguntarme cómo hacer algo («¿cómo cobro un turno?»), qué significa "
         "algo («¿qué es la tolerancia?») o cómo está la ventanilla («¿qué habitaciones están libres?»).",
         "desconocida",
-        sugerencias=[_como_pregunta(e) for _, e in parecidas] or SUGERENCIAS_CONSERJE,
+        sugerencias=[_como_pregunta(e) for _, e in parecidas] or _sugerencias_de(pantalla, es_gerencia),
     ).como_dict(), texto
+
+
+def _sugerencias_de(pantalla: str | None, es_gerencia: bool) -> list[str]:
+    """Si no se entendió la pregunta, se proponen las de la sección abierta (o las generales)."""
+    respuesta = _pantalla(pantalla, es_gerencia)
+    return respuesta.sugerencias if respuesta else SUGERENCIAS_CONSERJE
 
 
 async def _ventanilla_ahora(

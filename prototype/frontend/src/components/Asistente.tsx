@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
-import { ArrowRight, Bot, Send, X } from 'lucide-react';
+import { ArrowRight, Bot, RotateCcw, Send, X } from 'lucide-react';
 import { AccionAsistente, RespuestaAsistente } from '../types';
 import { api, getErrorMessage } from '../services/api';
 import Button from './ui/Button';
@@ -8,8 +8,10 @@ import Button from './ui/Button';
 // el análisis de los datos del motel; todo calculado en su servidor. La conversación vive en un contexto: la misma se
 // ve en el costado de Inteligencia y en el botón flotante de cualquier pantalla, y la paleta (Ctrl+K) le manda preguntas.
 
+// La primera sugerencia explica la sección abierta (el servidor sabe en qué pantalla se pregunta).
 const SUGERENCIAS: Record<'gerencia' | 'conserje', string[]> = {
   gerencia: [
+    '¿Qué puedo hacer en esta pantalla?',
     '¿Cuánto facturamos la semana pasada?',
     '¿Cuántos turnos esperamos mañana?',
     '¿Qué categoría deja más plata?',
@@ -18,6 +20,7 @@ const SUGERENCIAS: Record<'gerencia' | 'conserje', string[]> = {
     '¿Qué habitaciones están libres?',
   ],
   conserje: [
+    '¿Qué puedo hacer en esta pantalla?',
     '¿Cómo abro un turno?',
     '¿Qué habitaciones están libres?',
     '¿Cuál vence primero?',
@@ -38,6 +41,8 @@ interface Mensaje {
   de: 'usuario' | 'asistente';
   texto: string;
   respuesta?: RespuestaAsistente;
+  // La respuesta recién llegada se escribe de a poco (las anteriores ya están completas).
+  nuevo?: boolean;
 }
 
 interface Conversacion {
@@ -49,7 +54,45 @@ interface Conversacion {
   // La ventanilla registra cómo ejecutar los botones que propone el asistente (ir a una pantalla, abrir una habitación).
   registrarAcciones: (manejador: (accion: AccionAsistente) => void) => void;
   ejecutar: (accion: AccionAsistente) => void;
+  reiniciar: () => void;
+  preguntasHechas: string[];
+  // La ventanilla avisa qué sección está abierta: viaja con cada pregunta y se nombra en el campo de texto.
+  fijarPantalla: (vista: string, titulo: string) => void;
+  tituloPantalla: string | null;
 }
+
+// Escribe el texto de a poco (unos 600 ms en total), como si el asistente lo estuviera redactando. Sin animaciones
+// (prefers-reduced-motion) aparece completo.
+const TextoAnimado: React.FC<{ texto: string; animar: boolean }> = ({ texto, animar }) => {
+  const [visible, setVisible] = useState(animar ? 0 : texto.length);
+  useEffect(() => {
+    if (!animar || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      setVisible(texto.length);
+      return;
+    }
+    let cuadro = 0;
+    const inicio = performance.now();
+    const duracion = Math.min(900, 250 + texto.length * 3);
+    const paso = (ahora: number) => {
+      const avance = Math.min(1, (ahora - inicio) / duracion);
+      setVisible(Math.ceil(texto.length * avance));
+      if (avance < 1) cuadro = requestAnimationFrame(paso);
+    };
+    cuadro = requestAnimationFrame(paso);
+    // Respaldo: si la pestaña está en segundo plano el navegador pausa los cuadros; el texto aparece completo igual.
+    const seguro = setTimeout(() => setVisible(texto.length), duracion + 150);
+    return () => {
+      cancelAnimationFrame(cuadro);
+      clearTimeout(seguro);
+    };
+  }, [texto, animar]);
+  return (
+    <>
+      {texto.slice(0, visible)}
+      {visible < texto.length && <span className="ml-0.5 inline-block h-3.5 w-1.5 animate-pulse rounded-sm bg-accent/60 align-middle" />}
+    </>
+  );
+};
 
 const ContextoAsistente = createContext<Conversacion | null>(null);
 
@@ -70,6 +113,14 @@ export const AsistenteProvider: React.FC<{ esGerencia: boolean; children: React.
     manejador.current = fn;
   }, []);
   const ejecutar = useCallback((accion: AccionAsistente) => manejador.current?.(accion), []);
+  // La última pregunta y su intención viajan con la siguiente: así el servidor entiende «¿y la semana pasada?».
+  const ultima = useRef<{ pregunta: string; intencion: string } | null>(null);
+  const pantalla = useRef<string | undefined>(undefined);
+  const [tituloPantalla, setTituloPantalla] = useState<string | null>(null);
+  const fijarPantalla = useCallback((vista: string, titulo: string) => {
+    pantalla.current = vista;
+    setTituloPantalla(titulo);
+  }, []);
 
   const preguntar = useCallback(async (texto: string) => {
     const limpia = texto.trim();
@@ -78,8 +129,9 @@ export const AsistenteProvider: React.FC<{ esGerencia: boolean; children: React.
     setMensajes((m) => [...m, { de: 'usuario', texto: limpia }]);
     setPensando(true);
     try {
-      const respuesta = await api.preguntar(limpia);
-      setMensajes((m) => [...m, { de: 'asistente', texto: respuesta.respuesta, respuesta }]);
+      const respuesta = await api.preguntar(limpia, ultima.current?.pregunta, ultima.current?.intencion, pantalla.current);
+      ultima.current = { pregunta: limpia, intencion: respuesta.intencion };
+      setMensajes((m) => [...m, { de: 'asistente', texto: respuesta.respuesta, respuesta, nuevo: true }]);
       if (respuesta.sugerencias.length) setSugeridas(respuesta.sugerencias);
     } catch (err) {
       setMensajes((m) => [...m, { de: 'asistente', texto: getErrorMessage(err, 'No pude responder ahora. Probá de nuevo.') }]);
@@ -89,8 +141,30 @@ export const AsistenteProvider: React.FC<{ esGerencia: boolean; children: React.
     }
   }, []);
 
+  const reiniciar = useCallback(() => {
+    ultima.current = null;
+    setMensajes([{ de: 'asistente', texto: SALUDO[perfil] }]);
+    setSugeridas(SUGERENCIAS[perfil]);
+  }, [perfil]);
+
+  const preguntasHechas = mensajes.filter((m) => m.de === 'usuario').map((m) => m.texto);
+
   return (
-    <ContextoAsistente.Provider value={{ mensajes, pensando, sugeridas, esGerencia, preguntar, registrarAcciones, ejecutar }}>
+    <ContextoAsistente.Provider
+      value={{
+        mensajes,
+        pensando,
+        sugeridas,
+        esGerencia,
+        preguntar,
+        registrarAcciones,
+        ejecutar,
+        reiniciar,
+        preguntasHechas,
+        fijarPantalla,
+        tituloPantalla,
+      }}
+    >
       {children}
     </ContextoAsistente.Provider>
   );
@@ -102,7 +176,7 @@ interface ChatAsistenteProps {
 }
 
 export const ChatAsistente: React.FC<ChatAsistenteProps> = ({ className = 'h-[min(78vh,46rem)]', onCerrar }) => {
-  const { mensajes, pensando, sugeridas, esGerencia, preguntar, ejecutar } = useAsistente();
+  const { mensajes, pensando, sugeridas, esGerencia, preguntar, ejecutar, reiniciar, preguntasHechas, tituloPantalla } = useAsistente();
   const [texto, setTexto] = useState('');
   const lista = useRef<HTMLDivElement>(null);
   const entrada = useRef<HTMLInputElement>(null);
@@ -133,6 +207,17 @@ export const ChatAsistente: React.FC<ChatAsistenteProps> = ({ className = 'h-[mi
             {esGerencia ? 'Ayuda y datos del motel, sin internet' : 'Te ayuda a usar el sistema, sin internet'}
           </p>
         </div>
+        {mensajes.length > 1 && (
+          <button
+            type="button"
+            onClick={reiniciar}
+            aria-label="Empezar una conversación nueva"
+            title="Empezar de nuevo"
+            className="press hit rounded-md p-1.5 text-muted hover:bg-surface-2 hover:text-ink"
+          >
+            <RotateCcw className="h-4 w-4" aria-hidden="true" />
+          </button>
+        )}
         {onCerrar && (
           <button
             type="button"
@@ -146,15 +231,17 @@ export const ChatAsistente: React.FC<ChatAsistenteProps> = ({ className = 'h-[mi
       </header>
       <div ref={lista} className="flex-1 space-y-3 overflow-y-auto px-4 py-4" aria-live="polite">
         {mensajes.map((m, i) => (
-          <div key={i} className={`flex ${m.de === 'usuario' ? 'justify-end' : 'justify-start'}`}>
+          <div key={i} className={`flex animate-pop-in ${m.de === 'usuario' ? 'justify-end' : 'justify-start'}`}>
             <div
               className={`max-w-[92%] rounded-lg px-3 py-2 text-sm ${
-                m.de === 'usuario' ? 'rounded-br-sm bg-accent text-accent-fg' : 'rounded-bl-sm bg-surface-2 text-ink'
+                m.de === 'usuario' ? 'origin-bottom-right rounded-br-sm bg-accent text-accent-fg' : 'origin-bottom-left rounded-bl-sm bg-surface-2 text-ink'
               }`}
             >
-              <p className="whitespace-pre-line">{m.texto}</p>
+              <p className="whitespace-pre-line">
+                {m.de === 'asistente' ? <TextoAnimado texto={m.texto} animar={Boolean(m.nuevo) && i === mensajes.length - 1} /> : m.texto}
+              </p>
               {m.respuesta?.pasos && m.respuesta.pasos.length > 0 && (
-                <ol className="mt-2 space-y-1.5">
+                <ol className="mt-2 space-y-1.5 animate-fade-in">
                   {m.respuesta.pasos.map((paso, j) => (
                     <li key={j} className="flex gap-2">
                       <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-accent text-[11px] font-semibold text-accent-fg">
@@ -249,8 +336,15 @@ export const ChatAsistente: React.FC<ChatAsistenteProps> = ({ className = 'h-[mi
             ref={entrada}
             value={texto}
             onChange={(e) => setTexto(e.target.value)}
+            onKeyDown={(e) => {
+              // ↑ con el campo vacío trae la última pregunta, para corregirla o repetirla.
+              if (e.key === 'ArrowUp' && !texto && preguntasHechas.length) {
+                e.preventDefault();
+                setTexto(preguntasHechas[preguntasHechas.length - 1]);
+              }
+            }}
             maxLength={300}
-            placeholder="Escribí tu pregunta…"
+            placeholder={tituloPantalla ? `Preguntá sobre ${tituloPantalla}…` : 'Escribí tu pregunta…'}
             aria-label="Pregunta para el asistente"
             className="min-w-0 flex-1 rounded-md border border-line-strong bg-surface px-3 py-2 text-sm text-ink placeholder:text-subtle focus:border-accent focus:ring-1 focus:ring-accent focus-visible:outline-none"
           />
@@ -286,7 +380,9 @@ export const AsistenteFlotante: React.FC<AsistenteFlotanteProps> = ({ abierto, o
         aria-expanded={abierto}
         aria-label={abierto ? 'Cerrar el asistente' : 'Abrir el asistente'}
         title="Asistente"
-        className="press fixed bottom-6 right-6 z-40 flex h-14 items-center gap-2 rounded-full bg-accent px-5 text-sm font-medium text-accent-fg shadow-panel hover:bg-accent-hover"
+        className={`press fixed bottom-6 right-6 z-40 flex h-14 items-center gap-2 rounded-full bg-accent px-5 text-sm font-medium text-accent-fg shadow-panel transition-transform hover:-translate-y-0.5 hover:bg-accent-hover ${
+          abierto ? '' : 'animate-llamado'
+        }`}
       >
         {abierto ? <X className="h-5 w-5" aria-hidden="true" /> : <Bot className="h-5 w-5" aria-hidden="true" />}
         <span className="hidden sm:inline">{abierto ? 'Cerrar' : pensando ? 'Pensando…' : 'Asistente'}</span>

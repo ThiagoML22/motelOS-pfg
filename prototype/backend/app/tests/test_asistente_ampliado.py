@@ -3,13 +3,16 @@ parecido."""
 
 import pytest
 
+from app.services import ayuda
 from scripts.cargar_historial import generar_historial
 
 PREGUNTA = "/api/v1/asistente/pregunta"
 
 
-async def _preguntar(cliente, texto: str, anterior: str | None = None, anterior_intencion: str | None = None) -> dict:
-    cuerpo = {"texto": texto, "anterior": anterior, "anterior_intencion": anterior_intencion}
+async def _preguntar(
+    cliente, texto: str, anterior: str | None = None, anterior_intencion: str | None = None, pantalla: str | None = None
+) -> dict:
+    cuerpo = {"texto": texto, "anterior": anterior, "anterior_intencion": anterior_intencion, "pantalla": pantalla}
     resp = await cliente.post(PREGUNTA, json=cuerpo)
     assert resp.status_code == 200, resp.text
     return resp.json()
@@ -125,6 +128,37 @@ async def test_temas_de_la_gerencia(cliente_como):
         ("quiero cambiar el fondo de cambio", "ayuda:config_fondo"),
     ):
         assert (await _preguntar(gerencia, pregunta))["intencion"] == intencion, pregunta
+
+
+async def test_la_pantalla_abierta(client, cliente_como):
+    caja = await _preguntar(client, "¿qué hago acá?", pantalla="caja")
+    assert caja["intencion"] == "pantalla:caja" and caja["respuesta"].startswith("Estás en Cierre de caja")
+    assert caja["pasos"] and "¿Cómo cierro la caja?" in caja["sugerencias"]
+    assert (await _preguntar(client, "para que sirve esta pantalla", pantalla="inventario"))[
+        "intencion"
+    ] == "pantalla:inventario"
+    assert (await _preguntar(client, "ayuda", pantalla="dashboard"))["intencion"] == "pantalla:dashboard"
+    # Una sección de la gerencia no se le explica al conserje, y sin pantalla la pregunta sigue su camino.
+    assert (await _preguntar(client, "¿qué hago acá?", pantalla="configuracion"))[
+        "intencion"
+    ] != "pantalla:configuracion"
+    assert not (await _preguntar(client, "¿qué hago acá?"))["intencion"].startswith("pantalla:")
+    gerencia = await cliente_como("gerencia")
+    config = await _preguntar(gerencia, "explicame esta seccion", pantalla="configuracion")
+    assert config["intencion"] == "pantalla:configuracion" and "¿Cómo cambio una tarifa?" in config["sugerencias"]
+    # Lo que no se entiende propone las preguntas de la sección abierta.
+    nada = await _preguntar(client, "xyzzy plugh", pantalla="caja")
+    assert "¿Cómo cierro la caja?" in nada["sugerencias"]
+
+
+async def test_las_preguntas_sugeridas_de_cada_pantalla_tienen_respuesta(db, client, cliente_como):
+    await generar_historial(db, dias=28, semilla=4)
+    gerencia = await cliente_como("gerencia")
+    for vista, pantalla in ayuda.PANTALLAS.items():
+        for cliente, preguntas in ((client, pantalla.preguntas), (gerencia, pantalla.preguntas_gerencia)):
+            for pregunta in preguntas:
+                datos = await _preguntar(cliente, pregunta, pantalla=vista)
+                assert datos["intencion"] not in ("desconocida", "fuera_de_alcance"), (vista, pregunta, datos)
 
 
 async def test_busqueda_por_parecido(client):

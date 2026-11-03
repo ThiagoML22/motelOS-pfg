@@ -91,7 +91,8 @@ export const Columnas: React.FC<ColumnasProps> = ({ columnas, alto = 180, format
               <g key={c.clave}>
                 <path
                   d={barra(cx - anchoBarra / 2, tope, anchoBarra, margen.arr + internoY - tope)}
-                  className={`fill-viz-1 transition-opacity ${activa !== null && activa !== i ? 'opacity-40' : ''} ${c.resaltada ? '' : ''}`}
+                  className={`animate-crecer fill-viz-1 transition-opacity ${activa !== null && activa !== i ? 'opacity-40' : ''}`}
+                  style={{ transformOrigin: 'bottom', transformBox: 'fill-box', animationDelay: `${Math.min(i * 18, 500)}ms` }}
                 />
                 {c.rango && c.rango[1] > c.rango[0] && (
                   <line x1={cx} x2={cx} y1={y(c.rango[0])} y2={y(c.rango[1])} className="stroke-ink/30" strokeWidth={1} />
@@ -163,8 +164,16 @@ export const Linea: React.FC<LineaProps> = ({ valores, etiquetas, limite, etique
           <text x={margen.izq - 6} y={y(limite)} dy="0.32em" textAnchor="end" className="fill-subtle text-[10px] tabular-nums">
             {limite}
           </text>
-          <path d={area} className="fill-viz-1/10" />
-          <path d={trazo} className="stroke-viz-1" strokeWidth={2} fill="none" strokeLinejoin="round" />
+          <path d={area} className="animate-fade-in fill-viz-1/10" style={{ animationDuration: '900ms' }} />
+          <path
+            d={trazo}
+            pathLength={1}
+            strokeDasharray="1"
+            className="animate-dibujar stroke-viz-1"
+            strokeWidth={2}
+            fill="none"
+            strokeLinejoin="round"
+          />
           {etiquetas.map(
             (e, i) =>
               e && (

@@ -397,6 +397,8 @@
   *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
+    /* Sin la espera de las entradas escalonadas (tarjetas, barras), que dejarían elementos invisibles un momento. */
+    animation-delay: 0ms !important;
     transition-duration: 0.01ms !important;
   }
 }

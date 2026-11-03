@@ -16,6 +16,8 @@ class Pregunta(BaseModel):
     # La pregunta anterior de la conversación y su intención, para entender seguimientos («¿y la semana pasada?»).
     anterior: str | None = Field(default=None, max_length=300)
     anterior_intencion: str | None = Field(default=None, max_length=60)
+    # La pantalla en la que está quien pregunta: «¿qué hago acá?» se responde según la sección abierta.
+    pantalla: str | None = Field(default=None, max_length=30)
 
 
 @router.get("/tablero")

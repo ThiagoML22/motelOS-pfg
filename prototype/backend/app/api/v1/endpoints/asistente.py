@@ -19,7 +19,7 @@ async def preguntar(
     pregunta: Pregunta, db: AsyncSession = Depends(get_db), operador: Operador = Depends(operador_actual)
 ) -> dict:
     respuesta, texto = await ayuda.responder(
-        db, operador, pregunta.texto, pregunta.anterior, pregunta.anterior_intencion
+        db, operador, pregunta.texto, pregunta.anterior, pregunta.anterior_intencion, pregunta.pantalla
     )
     if respuesta is not None:
         return respuesta
