@@ -6,6 +6,7 @@ import { useConexion } from './hooks/useConexion';
 import { useNow } from './hooks/useNow';
 import { formatClock, formatRoomNumber } from './utils/format';
 import ActividadView from './components/ActividadView';
+import InteligenciaView from './components/InteligenciaView';
 import PerfilView from './components/PerfilView';
 import PlataformaView from './components/PlataformaView';
 import TopNav, { View } from './components/TopNav';
@@ -95,7 +96,7 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
   const esGerencia = sesion.operador.rol === 'ADMINISTRADOR';
   // El conserje opera solo con su propia guardia abierta (RF-08).
   const conGuardiaPropia = esGerencia || Boolean(sesion.guardia?.es_propia);
-  const [activeView, setActiveView] = useState<View>(esGerencia ? 'gerencia' : 'dashboard');
+  const [activeView, setActiveView] = useState<View>(esGerencia ? 'inteligencia' : 'dashboard');
   const [habitaciones, setHabitaciones] = useState<HabitacionConDetalles[]>([]);
   const [carga, setCarga] = useState<Carga>('cargando');
   const [filtro, setFiltro] = useState<Filtro>('Todas');
@@ -351,6 +352,8 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
         {(conGuardiaPropia || mostrandoComprobante) && activeView === 'caja' && !esGerencia && (
           <CierreCajaView sesion={sesion} resultado={ultimoArqueo} onConfirmado={setUltimoArqueo} onFinalizar={onSalir} />
         )}
+
+        {esGerencia && activeView === 'inteligencia' && <InteligenciaView />}
 
         {esGerencia && activeView === 'gerencia' && <PanelGerencia onCambioGuardia={onRefrescarSesion} />}
 

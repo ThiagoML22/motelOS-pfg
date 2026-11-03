@@ -25,7 +25,9 @@ import {
   OperadorEstado,
   Perfil,
   ResumenCategoria,
+  RespuestaAsistente,
   Sesion,
+  Tablero,
   Tarifa,
   TarifaDatos,
   Turno,
@@ -261,6 +263,12 @@ export const api = {
     enlace.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   },
+
+  // --- Inteligencia local de la gerencia (todo se calcula en el servidor del motel) ---
+  getTablero: async (): Promise<Tablero> => (await http.get('/inteligencia/tablero')).data,
+
+  preguntar: async (texto: string): Promise<RespuestaAsistente> =>
+    (await http.post('/inteligencia/pregunta', { texto })).data,
 
   // --- Plataforma (multiinquilino) ---
   getEstablecimientos: async (): Promise<EstablecimientoResumen[]> => (await http.get('/plataforma/establecimientos')).data,

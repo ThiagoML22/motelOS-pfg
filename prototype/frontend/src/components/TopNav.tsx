@@ -1,10 +1,18 @@
 import React from 'react';
-import { BarChart3, ClipboardList, LayoutGrid, Lock, LogOut, Package, Settings } from 'lucide-react';
+import { BarChart3, ClipboardList, LayoutGrid, Lock, LogOut, Package, Settings, Sparkles } from 'lucide-react';
 import { Sesion } from '../types';
 import { formatClock, parseUtc } from '../utils/format';
 import ThemeToggle from './ui/ThemeToggle';
 
-export type View = 'dashboard' | 'inventario' | 'caja' | 'gerencia' | 'configuracion' | 'actividad' | 'perfil';
+export type View =
+  | 'inteligencia'
+  | 'dashboard'
+  | 'inventario'
+  | 'caja'
+  | 'gerencia'
+  | 'configuracion'
+  | 'actividad'
+  | 'perfil';
 
 interface TopNavProps {
   sesion: Sesion;
@@ -18,6 +26,7 @@ interface TopNavProps {
 }
 
 const ITEMS: { view: View; label: string; icon: React.ElementType; roles: string[] }[] = [
+  { view: 'inteligencia', label: 'Inteligencia', icon: Sparkles, roles: ['ADMINISTRADOR'] },
   { view: 'dashboard', label: 'Habitaciones', icon: LayoutGrid, roles: ['OPERADOR', 'ADMINISTRADOR'] },
   { view: 'inventario', label: 'Inventario', icon: Package, roles: ['OPERADOR', 'ADMINISTRADOR'] },
   { view: 'caja', label: 'Cierre de caja', icon: Lock, roles: ['OPERADOR'] },

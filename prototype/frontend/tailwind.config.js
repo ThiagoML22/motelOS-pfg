@@ -31,6 +31,7 @@ export default {
         mant: { DEFAULT: token('mant'), soft: token('mant-soft') },
         warn: { DEFAULT: token('warn'), soft: token('warn-soft') },
         danger: { DEFAULT: token('danger'), soft: token('danger-soft') },
+        viz: { 1: token('viz-1'), 2: token('viz-2'), 3: token('viz-3'), grid: token('viz-grid'), axis: token('viz-axis') },
       },
       boxShadow: {
         panel: '0 8px 24px rgb(15 23 42 / 0.12)',

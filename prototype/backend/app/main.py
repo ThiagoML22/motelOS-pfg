@@ -14,6 +14,7 @@ from app.api.v1.endpoints import (
     configuracion,
     guardias,
     habitaciones,
+    inteligencia,
     operadores,
     perfil,
     plataforma,
@@ -91,6 +92,9 @@ app.include_router(arqueos.router, prefix="/api/v1/arqueos", tags=["gerencia"], 
 app.include_router(operadores.router, prefix="/api/v1/operadores", tags=["gerencia"], dependencies=solo_gerencia)
 app.include_router(
     configuracion.router, prefix="/api/v1/configuracion", tags=["gerencia"], dependencies=solo_gerencia
+)
+app.include_router(
+    inteligencia.router, prefix="/api/v1/inteligencia", tags=["gerencia"], dependencies=solo_gerencia
 )
 # Plataforma (multiinquilino): alta, suspensión y resumen de establecimientos. Solo el rol PLATAFORMA.
 app.include_router(
