@@ -33,6 +33,8 @@ class TurnoResponse(TurnoBase):
     total_general: float
     # RNF-04: quién abrió el turno (útil en el recambio, cuando lo cobra la guardia siguiente).
     abierto_por: str | None = None
+    # Estadía base de la tarifa del turno (migración 008: depende de la categoría): marca el exceso en la grilla.
+    estadia_base_min: int | None = None
 
 
 class TarifaDelTurno(BaseModel):

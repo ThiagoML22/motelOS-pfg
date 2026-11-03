@@ -6,7 +6,7 @@ from app.core.database import get_db
 from app.models.habitacion import Habitacion
 from app.models.turno import Turno
 from app.schemas.habitacion import HabitacionEstadoUpdate, HabitacionResponse
-from app.services.estadia import cargar_nombres_de_apertura, cargar_patentes
+from app.services.estadia import cargar_estadia_base, cargar_nombres_de_apertura, cargar_patentes
 from app.services.liquidacion import liquidar_turno
 
 router = APIRouter()
@@ -21,6 +21,7 @@ async def get_habitaciones(db: AsyncSession = Depends(get_db)):
     lista_activos = turnos_result.scalars().all()
     await cargar_patentes(db, lista_activos)
     await cargar_nombres_de_apertura(db, lista_activos)
+    await cargar_estadia_base(db, lista_activos)
     turnos_activos = {t.habitacion_id: t for t in lista_activos}
 
     response_list = []

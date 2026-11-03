@@ -29,7 +29,7 @@ from app.schemas.turno import (
 )
 from app.services.caja import guardia_del_operador
 from app.services.configuracion import tarifa_vigente
-from app.services.estadia import cargar_nombres_de_apertura, cargar_patentes
+from app.services.estadia import cargar_estadia_base, cargar_nombres_de_apertura, cargar_patentes
 from app.services.liquidacion import liquidar_turno
 
 router = APIRouter()
@@ -90,6 +90,7 @@ async def create_turno(
     await db.refresh(nuevo_turno)
     nuevo_turno.identificador_vehicular = patente
     nuevo_turno.abierto_por = operador.nombre_visible
+    nuevo_turno.estadia_base_min = tarifa.estadia_base_min
     return nuevo_turno
 
 
@@ -162,6 +163,7 @@ async def get_resumen(turno_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
 
     await cargar_patentes(db, [turno])
     await cargar_nombres_de_apertura(db, [turno])
+    await cargar_estadia_base(db, [turno])
     resumen_dict = turno.__dict__.copy()
     resumen_dict["minutos_transcurridos"] = liquidacion.minutos_transcurridos
     resumen_dict["total_pagado"] = liquidacion.total_pagado
