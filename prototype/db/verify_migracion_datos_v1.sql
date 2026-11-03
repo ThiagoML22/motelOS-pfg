@@ -3,6 +3,9 @@
 -- exige atribucion. Lo usa el canal en una base descartable.
 -- Paso 1 (antes de 002): psql -v fase=antes -f db/verify_migracion_datos_v1.sql
 -- Paso 2 (despues de 002): psql -v fase=despues -f db/verify_migracion_datos_v1.sql
+-- Multiinquilino (migracion 006): las filas de esta verificacion son del establecimiento 1. Lo usan los
+-- valores por defecto de establecimiento_id y las politicas de RLS de motel_app.
+SET app.establecimiento_id = '1';
 \if :{?fase}
 \else
 \set fase antes
