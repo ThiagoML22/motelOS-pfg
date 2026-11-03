@@ -1,21 +1,20 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   AlertOctagon,
   AlertTriangle,
   BedDouble,
-  Bot,
   CalendarDays,
   Info,
   Lightbulb,
   Package,
   RefreshCw,
-  Send,
   Sparkles,
   TrendingDown,
   TrendingUp,
   Wallet,
 } from 'lucide-react';
-import { AlertaIA, RespuestaAsistente, Severidad, SugerenciaTarifa, Tablero } from '../types';
+import { AlertaIA, Severidad, SugerenciaTarifa, Tablero } from '../types';
+import { ChatAsistente } from './Asistente';
 import { api, EVENTO_RECONECTADO, getErrorMessage } from '../services/api';
 import { formatMoney, parseUtc } from '../utils/format';
 import { formatMinutos } from '../utils/turno';
@@ -79,8 +78,7 @@ const Tarjeta: React.FC<{ titulo: string; icono?: React.ElementType; extra?: Rea
 );
 
 // Inteligencia local: todo se calcula en el servidor del motel con los turnos de guardias ya arqueadas (RN-RES-03).
-// `pregunta` llega desde la paleta de comandos (Ctrl+K) y el asistente la responde al abrir la vista.
-const InteligenciaView: React.FC<{ pregunta?: { texto: string; id: number } | null }> = ({ pregunta }) => {
+const InteligenciaView: React.FC = () => {
   const { toast } = useToast();
   const [tablero, setTablero] = useState<Tablero | null>(null);
   const [estado, setEstado] = useState<'cargando' | 'ok' | 'error'>('cargando');
@@ -124,19 +122,21 @@ const InteligenciaView: React.FC<{ pregunta?: { texto: string; id: number } | nu
         </div>
       </div>
 
-      {estado === 'cargando' && <p className="py-16 text-center text-sm text-muted">Analizando los datos…</p>}
-      {estado === 'error' && (
-        <div className="flex flex-col items-center gap-3 rounded-lg border border-line bg-surface py-16">
-          <p className="text-sm text-muted">No se pudo calcular el análisis.</p>
-          <Button variant="secondary" onClick={() => void cargar()}>
-            Reintentar
-          </Button>
-        </div>
-      )}
-
-      {estado === 'ok' && tablero && (
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_24rem]">
-          <div className="min-w-0 space-y-5">
+      {/* El asistente no espera al tablero: con pantalla ancha va al costado; en pantallas más angostas está en el
+          botón flotante (AsistenteFlotante), que comparte la misma conversación. */}
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_24rem]">
+        <div className="min-w-0 space-y-5">
+          {estado === 'cargando' && <p className="py-16 text-center text-sm text-muted">Analizando los datos…</p>}
+          {estado === 'error' && (
+            <div className="flex flex-col items-center gap-3 rounded-lg border border-line bg-surface py-16">
+              <p className="text-sm text-muted">No se pudo calcular el análisis.</p>
+              <Button variant="secondary" onClick={() => void cargar()}>
+                Reintentar
+              </Button>
+            </div>
+          )}
+          {estado === 'ok' && tablero && (
+          <>
             <Resumen tablero={tablero} />
             <Indicadores tablero={tablero} />
             {tablero.alertas.length > 0 && <Alertas alertas={tablero.alertas} />}
@@ -167,12 +167,13 @@ const InteligenciaView: React.FC<{ pregunta?: { texto: string; id: number } | nu
                 )}
               </Tarjeta>
             </div>
-          </div>
-          <aside className="xl:sticky xl:top-20 xl:self-start">
-            <Asistente pregunta={pregunta} />
-          </aside>
+          </>
+          )}
         </div>
-      )}
+        <aside className="hidden xl:sticky xl:top-20 xl:block xl:self-start">
+          <ChatAsistente />
+        </aside>
+      </div>
 
       {aplicando && aplicando.propuesta && (
         <AplicarTarifa
@@ -605,169 +606,6 @@ const ReposicionCard: React.FC<{ tablero: Tablero }> = ({ tablero }) => {
         packs de 6.
       </p>
     </Tarjeta>
-  );
-};
-
-// --- Asistente ------------------------------------------------------------------------------------------------------
-
-const SUGERENCIAS_INICIALES = [
-  '¿Cuánto facturamos la semana pasada?',
-  '¿Cuántos turnos esperamos mañana?',
-  '¿Qué categoría deja más plata?',
-  '¿Quién tuvo más faltantes en los últimos 30 días?',
-  '¿A qué hora hay más demanda los sábados?',
-  '¿Cuál es la habitación menos usada?',
-];
-
-interface Mensaje {
-  de: 'usuario' | 'asistente';
-  texto: string;
-  respuesta?: RespuestaAsistente;
-}
-
-const Asistente: React.FC<{ pregunta?: { texto: string; id: number } | null }> = ({ pregunta }) => {
-  const [mensajes, setMensajes] = useState<Mensaje[]>([
-    {
-      de: 'asistente',
-      texto:
-        'Hola. Preguntame lo que quieras saber del motel: ingresos, turnos, ocupación, horarios, categorías, caja, stock o lo que se espera para mañana.',
-    },
-  ]);
-  const [texto, setTexto] = useState('');
-  const [pensando, setPensando] = useState(false);
-  const [sugeridas, setSugeridas] = useState(SUGERENCIAS_INICIALES);
-  const lista = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    lista.current?.scrollTo({ top: lista.current.scrollHeight, behavior: 'smooth' });
-  }, [mensajes, pensando]);
-
-  const preguntar = async (consulta: string) => {
-    const limpia = consulta.trim();
-    if (!limpia || pensando) return;
-    setTexto('');
-    setMensajes((m) => [...m, { de: 'usuario', texto: limpia }]);
-    setPensando(true);
-    try {
-      const respuesta = await api.preguntar(limpia);
-      setMensajes((m) => [...m, { de: 'asistente', texto: respuesta.respuesta, respuesta }]);
-      if (respuesta.sugerencias.length) setSugeridas(respuesta.sugerencias);
-    } catch (err) {
-      setMensajes((m) => [...m, { de: 'asistente', texto: getErrorMessage(err, 'No pude responder ahora. Probá de nuevo.') }]);
-    } finally {
-      setPensando(false);
-    }
-  };
-
-  // Pregunta enviada desde la paleta de comandos: se responde una sola vez.
-  const respondida = useRef<number | null>(null);
-  useEffect(() => {
-    if (pregunta && respondida.current !== pregunta.id) {
-      respondida.current = pregunta.id;
-      void preguntar(pregunta.texto);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pregunta]);
-
-  return (
-    <section className="flex h-[min(78vh,46rem)] flex-col overflow-hidden rounded-lg border border-line bg-surface" aria-label="Asistente">
-      <header className="flex items-center gap-2.5 border-b border-line px-4 py-3">
-        <span className="grid h-8 w-8 place-items-center rounded-full bg-accent text-accent-fg">
-          <Bot className="h-4 w-4" aria-hidden="true" />
-        </span>
-        <div>
-          <p className="text-sm font-semibold text-ink">Asistente</p>
-          <p className="text-xs text-muted">Responde con los datos del motel, sin internet</p>
-        </div>
-      </header>
-      <div ref={lista} className="flex-1 space-y-3 overflow-y-auto px-4 py-4" aria-live="polite">
-        {mensajes.map((m, i) => (
-          <div key={i} className={`flex ${m.de === 'usuario' ? 'justify-end' : 'justify-start'}`}>
-            <div
-              className={`max-w-[92%] rounded-lg px-3 py-2 text-sm ${
-                m.de === 'usuario' ? 'rounded-br-sm bg-accent text-accent-fg' : 'rounded-bl-sm bg-surface-2 text-ink'
-              }`}
-            >
-              <p className="whitespace-pre-line">{m.texto}</p>
-              {m.respuesta?.tabla && m.respuesta.tabla.filas.length > 0 && (
-                <div className="mt-2 overflow-x-auto rounded border border-line bg-surface">
-                  <table className="w-full text-left text-xs">
-                    <thead>
-                      <tr className="border-b border-line text-subtle">
-                        {m.respuesta.tabla.columnas.map((c) => (
-                          <th key={c} className="px-2 py-1 font-medium">
-                            {c}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody className="tabular-nums">
-                      {m.respuesta.tabla.filas.slice(0, 8).map((fila, j) => (
-                        <tr key={j} className="border-b border-line last:border-0">
-                          {fila.map((celda, k) => (
-                            <td key={k} className="px-2 py-1">
-                              {celda}
-                            </td>
-                          ))}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-              {(m.respuesta?.periodo || m.respuesta?.detalle) && (
-                <p className="mt-1.5 text-[11px] text-muted">
-                  {m.respuesta.periodo && <>Período: {m.respuesta.periodo}. </>}
-                  {m.respuesta.detalle}
-                </p>
-              )}
-            </div>
-          </div>
-        ))}
-        {pensando && (
-          <div className="flex justify-start">
-            <div className="flex gap-1 rounded-lg rounded-bl-sm bg-surface-2 px-3 py-3" aria-label="Pensando">
-              {[0, 1, 2].map((i) => (
-                <span key={i} className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted" style={{ animationDelay: `${i * 150}ms` }} />
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-      <div className="border-t border-line px-3 py-3">
-        <div className="mb-2 flex gap-1.5 overflow-x-auto pb-1">
-          {sugeridas.map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => void preguntar(s)}
-              className="press shrink-0 rounded-full border border-line-strong bg-surface px-2.5 py-1 text-xs text-muted hover:border-accent hover:text-accent"
-            >
-              {s}
-            </button>
-          ))}
-        </div>
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            void preguntar(texto);
-          }}
-          className="flex gap-2"
-        >
-          <input
-            value={texto}
-            onChange={(e) => setTexto(e.target.value)}
-            maxLength={300}
-            placeholder="Escribí tu pregunta…"
-            aria-label="Pregunta para el asistente"
-            className="min-w-0 flex-1 rounded-md border border-line-strong bg-surface px-3 py-2 text-sm text-ink placeholder:text-subtle focus:border-accent focus:ring-1 focus:ring-accent focus-visible:outline-none"
-          />
-          <Button type="submit" disabled={!texto.trim() || pensando} aria-label="Enviar pregunta">
-            <Send className="h-4 w-4" aria-hidden="true" />
-          </Button>
-        </form>
-      </div>
-    </section>
   );
 };
 

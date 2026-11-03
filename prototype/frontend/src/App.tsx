@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BedDouble, LogOut, MessageSquarePlus, Moon, UserRound, WifiOff } from 'lucide-react';
 import { Arqueo, Categoria, HabitacionConDetalles, Novedad, RoomStatus, Sesion, TipoCliente } from './types';
+import { AsistenteFlotante, AsistenteProvider, useAsistente } from './components/Asistente';
 import CentroAvisos from './components/CentroAvisos';
 import PaletaComandos, { Comando } from './components/PaletaComandos';
 import { NovedadesCard, NuevaNovedadModal } from './components/NovedadesPanel';
@@ -94,8 +95,11 @@ function App() {
   if (sesion.operador.rol === 'PLATAFORMA') {
     return <PlataformaView sesion={sesion} onRefrescarSesion={refrescarSesion} onSalir={() => void salir()} />;
   }
+  // La conversación con el asistente de la gerencia vive mientras dura la sesión, en cualquier pantalla.
   return (
-    <Ventanilla key={sesion.operador.id} sesion={sesion} onRefrescarSesion={refrescarSesion} onSalir={() => void salir()} />
+    <AsistenteProvider key={sesion.operador.id}>
+      <Ventanilla sesion={sesion} onRefrescarSesion={refrescarSesion} onSalir={() => void salir()} />
+    </AsistenteProvider>
   );
 }
 
@@ -124,7 +128,9 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
   const [novedades, setNovedades] = useState<Novedad[]>([]);
   const [nuevaNovedad, setNuevaNovedad] = useState(false);
   const [paleta, setPaleta] = useState(false);
-  const [preguntaIA, setPreguntaIA] = useState<{ texto: string; id: number } | null>(null);
+  // Panel flotante del asistente (gerencia); la paleta de comandos lo abre con una pregunta.
+  const [asistenteAbierto, setAsistenteAbierto] = useState(false);
+  const asistente = useAsistente();
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [openAddProduct, setOpenAddProduct] = useState(false);
   // Arqueo recién confirmado: el comprobante queda a la vista hasta que el conserje finaliza, aunque el
@@ -461,7 +467,7 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
           <CierreCajaView sesion={sesion} resultado={ultimoArqueo} onConfirmado={setUltimoArqueo} onFinalizar={onSalir} />
         )}
 
-        {esGerencia && activeView === 'inteligencia' && <InteligenciaView pregunta={preguntaIA} />}
+        {esGerencia && activeView === 'inteligencia' && <InteligenciaView />}
 
         {esGerencia && activeView === 'gerencia' && <PanelGerencia onCambioGuardia={onRefrescarSesion} />}
 
@@ -492,11 +498,19 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
           onPreguntar={
             esGerencia
               ? (texto) => {
-                  setActiveView('inteligencia');
-                  setPreguntaIA({ texto, id: Date.now() });
+                  setAsistenteAbierto(true);
+                  void asistente.preguntar(texto);
                 }
               : undefined
           }
+        />
+      )}
+
+      {esGerencia && (
+        <AsistenteFlotante
+          abierto={asistenteAbierto}
+          onCambiar={setAsistenteAbierto}
+          ocultarEnPantallaAncha={activeView === 'inteligencia'}
         />
       )}
 
