@@ -3,14 +3,20 @@ import {
   Arqueo,
   ArqueoDetalle,
   Articulo,
+  ArticuloCambios,
+  ConserjeAlta,
   ConstanciaCobro,
   DeclaracionCaja,
+  FondoCambio,
   Guardia,
   HabitacionConDetalles,
+  HabitacionConfiguracion,
   MedioPago,
   MetricasCaja,
   OperadorEstado,
   Sesion,
+  Tarifa,
+  TarifaDatos,
   Turno,
   TurnoCreate,
   TurnoResumen,
@@ -90,6 +96,37 @@ export const api = {
 
   cierreSupervisado: async (guardiaId: number, declaracion: DeclaracionCaja & { observacion: string }): Promise<Arqueo> =>
     (await http.post(`/arqueos/guardias/${guardiaId}/cierre-supervisado`, declaracion)).data,
+
+  // --- Panel de configuración de la gerencia (RF-11) ---
+  getTarifas: async (): Promise<Tarifa[]> => (await http.get('/configuracion/tarifas')).data,
+
+  nuevaTarifa: async (tarifa: TarifaDatos): Promise<Tarifa> => (await http.post('/configuracion/tarifas', tarifa)).data,
+
+  getFondoCambio: async (): Promise<FondoCambio> => (await http.get('/configuracion/caja')).data,
+
+  setFondoCambio: async (fondo_cambio: number): Promise<FondoCambio> =>
+    (await http.patch('/configuracion/caja', { fondo_cambio })).data,
+
+  getArticulosConfiguracion: async (): Promise<Articulo[]> => (await http.get('/configuracion/articulos')).data,
+
+  configurarArticulo: async (id: number, cambios: ArticuloCambios): Promise<Articulo> =>
+    (await http.patch(`/configuracion/articulos/${id}`, cambios)).data,
+
+  getHabitacionesConfiguracion: async (): Promise<HabitacionConfiguracion[]> =>
+    (await http.get('/configuracion/habitaciones')).data,
+
+  altaHabitacion: async (numero: number): Promise<HabitacionConfiguracion> =>
+    (await http.post('/configuracion/habitaciones', { numero })).data,
+
+  configurarHabitacion: async (
+    id: number,
+    cambios: { numero?: number; activa?: boolean },
+  ): Promise<HabitacionConfiguracion> => (await http.patch(`/configuracion/habitaciones/${id}`, cambios)).data,
+
+  altaConserje: async (conserje: ConserjeAlta): Promise<OperadorEstado> => (await http.post('/operadores/', conserje)).data,
+
+  setOperadorActivo: async (id: number, activo: boolean): Promise<OperadorEstado> =>
+    (await http.patch(`/operadores/${id}`, { activo })).data,
 
   // --- Operación de la ventanilla ---
   getHabitaciones: async (): Promise<HabitacionConDetalles[]> => (await http.get('/habitaciones/')).data,

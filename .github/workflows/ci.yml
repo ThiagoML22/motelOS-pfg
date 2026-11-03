@@ -86,6 +86,13 @@ jobs:
         run: |
           psql -h localhost -U postgres -d motel_schema -v ON_ERROR_STOP=1 -f db/verify_caja.sql
 
+      - name: Verificar el panel de configuración con el rol de la aplicación (RF-11, RN-DER-06)
+        working-directory: ./prototype
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h localhost -U postgres -d motel_schema -v ON_ERROR_STOP=1 -f db/verify_configuracion.sql
+
       - name: Verificar la migración desde una base v1.2 con datos
         working-directory: ./prototype
         env:
@@ -102,7 +109,7 @@ jobs:
 
       # De punta a punta: la API corre con el rol motel_app sobre el esquema migrado (triggers y permisos
       # reales). Las claves son de un solo uso, generadas en esta corrida.
-      - name: Recorrido de punta a punta y latencia (RF-08, RF-09, RNF-04, RNF-02)
+      - name: Recorrido de punta a punta, latencia y panel de configuración (RF-08, RF-09, RF-11, RNF-04, RNF-02)
         env:
           JWT_SECRET: ${{ github.run_id }}-${{ github.run_attempt }}-clave-efimera-del-canal
         run: |
@@ -114,6 +121,7 @@ jobs:
           for i in $(seq 1 30); do curl -sf http://localhost:8000/health && break; sleep 1; done
           python -m scripts.recorrido_v2 --api http://localhost:8000
           python -m scripts.medir_latencia --api http://localhost:8000 --salida medicion_latencia_RNF-02.csv
+          python -m scripts.recorrido_panel --api http://localhost:8000
 
       - name: Guardar la medición de latencia
         if: always()

@@ -28,6 +28,7 @@ from app.models.arqueo import ArqueoCaja
 from app.models.guardia import Guardia
 from app.models.operador import Operador
 from app.models.pago import Pago
+from app.services.configuracion import fondo_de_cambio
 from app.services.liquidacion import con_zona
 
 CORRECTO = "Correcto"
@@ -116,7 +117,9 @@ async def abrir_guardia(db: AsyncSession, operador: Operador, ahora: datetime | 
     guardia = Guardia(
         operador_id=operador.id,
         franja=franja_para(momento),
-        fondo_inicial=settings.FONDO_INICIAL_CAJA,
+        # La guardia copia el fondo de cambio vigente; si la gerencia lo cambia después, esta guardia conserva
+        # el suyo (RF-11, RN-DER-06).
+        fondo_inicial=await fondo_de_cambio(db),
         abierta_en=momento,
         estado="Abierta",
     )

@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.api.deps import operador_actual, solo_administrador
-from app.api.v1.endpoints import arqueos, articulos, auth, guardias, habitaciones, operadores, turnos
+from app.api.v1.endpoints import arqueos, articulos, auth, configuracion, guardias, habitaciones, operadores, turnos
 from app.core.config import settings
 from app.services.estadia import ciclo_depuracion
 
@@ -73,6 +73,9 @@ app.include_router(guardias.router, prefix="/api/v1/guardias", tags=["caja"], de
 solo_gerencia = [Depends(solo_administrador)]
 app.include_router(arqueos.router, prefix="/api/v1/arqueos", tags=["gerencia"], dependencies=solo_gerencia)
 app.include_router(operadores.router, prefix="/api/v1/operadores", tags=["gerencia"], dependencies=solo_gerencia)
+app.include_router(
+    configuracion.router, prefix="/api/v1/configuracion", tags=["gerencia"], dependencies=solo_gerencia
+)
 
 
 @app.get("/health")

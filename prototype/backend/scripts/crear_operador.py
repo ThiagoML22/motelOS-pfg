@@ -1,7 +1,8 @@
 """Alta de un operador o restablecimiento de su clave (RNF-04).
 
 Corre con el usuario dueño de las tablas (DATABASE_URL de administración), porque el rol de la
-aplicación no puede crear operadores ni cambiar claves o roles. La clave se pide por teclado o se
+aplicación no puede crear gerentes ni cambiar claves o roles (los conserjes también se dan de alta
+desde el panel de la gerencia, RF-11). La clave se pide por teclado o se
 toma de la variable OPERADOR_CLAVE; nunca se pasa como argumento (quedaría en el historial).
 
 Uso (Docker):
@@ -13,18 +14,14 @@ import argparse
 import asyncio
 import getpass
 import os
-import re
 import sys
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.core.config import settings
-from app.core.seguridad import hashear_clave
+from app.core.seguridad import LARGO_MINIMO_CLAVE, PATRON_USUARIO, hashear_clave
 from app.models.operador import ROL_ADMINISTRADOR, ROL_OPERADOR, Operador
-
-LARGO_MINIMO_CLAVE = 10
-PATRON_USUARIO = re.compile(r"^[a-z0-9._-]{3,40}$")
 
 
 def validar_clave(clave: str) -> None:

@@ -70,12 +70,12 @@ Para detener: `docker compose down`. Para empezar de cero (borra la base): `dock
 | `ENTORNO` | `desarrollo` o `produccion`. En producción se exige un `JWT_SECRET` propio de 32 caracteres o más y `COOKIE_SECURE=True`, y no se publica `/docs` | `desarrollo` |
 | `JWT_SECRET` | Clave de firma de las sesiones | valor de desarrollo |
 | `COOKIE_SECURE` | La cookie de sesión viaja solo por HTTPS | `False` en local |
-| `FONDO_INICIAL_CAJA` | Fondo de cambio que recibe cada caja, en pesos (acta del 19/10/2026) | `25000` |
+| `FONDO_INICIAL_CAJA` | Fondo de cambio de respaldo, en pesos. Desde la migración 005 el fondo vive en la base (`configuracion_caja`, $25.000) y la gerencia lo cambia desde **Configuración**; esta variable rige solo si esa fila falta | `25000` |
 | `DEMO_CLAVE_GERENCIA` / `DEMO_CLAVE_CONSERJES` | Claves de los operadores de demostración | vacías (se generan) |
 
 Otros parámetros con valor por defecto en `backend/app/core/config.py`: duración de la sesión (9 h), bloqueo tras 5 intentos fallidos durante 15 min, zona horaria del motel, retención de la patente (24 h).
 
-Alta de un operador real o cambio de clave (con el usuario dueño; la clave se pide por teclado):
+Los conserjes se dan de alta y de baja desde **Configuración → Conserjes** (RF-11). El alta de un gerente y el cambio de clave se hacen con el usuario dueño (la clave se pide por teclado):
 ```bash
 docker compose --profile admin run --rm admin scripts.crear_operador --usuario conserje3 --nombre "Conserje 3"
 docker compose --profile admin run --rm admin scripts.crear_operador --usuario conserje3 --restablecer-clave
@@ -94,6 +94,7 @@ docker compose --profile admin run --rm admin scripts.crear_operador --usuario c
 3. **Cierre ciego:** en **Cierre de caja**, cargar el efectivo total (con el fondo de $25.000) y los comprobantes. La pantalla no muestra el total del sistema. Al confirmar aparece el comprobante con lo declarado, lo registrado y la diferencia clasificada, que se puede imprimir.
 4. **Recambio:** entrar como `conserje2`, abrir la guardia siguiente y cobrar un turno que abrió `conserje1`: el cobro entra a la caja de `conserje2` (RN-DER-04).
 5. **Gerencia:** entrar como `gerencia`, en **Control de caja**: arqueos, detalle de cobros, métricas por conserje y TDC.
+6. **Configuración (RF-11):** como `gerencia`, en **Configuración**: cambiar la tarifa (el historial muestra la anterior), el fondo de cambio, el precio de un artículo; agregar la habitación 14 (aparece en la grilla) y dar de alta y de baja un conserje. Los turnos, consumos y guardias ya registrados conservan sus valores (RN-DER-06).
 
 ### C. Verificación automática
 ```bash
@@ -106,6 +107,7 @@ powershell -File db/verificar_local.ps1
 # Recorrido de punta a punta y latencia contra la API levantada (base recién creada y operadores de demostración)
 cd backend && python -m scripts.recorrido_v2 --api http://localhost:8000
 cd backend && python -m scripts.medir_latencia --api http://localhost:8000 --salida latencia.csv
+cd backend && python -m scripts.recorrido_panel --api http://localhost:8000
 ```
 
 Comprobación de RN-RES-02 desde SQL (el motor rechaza la sentencia):
@@ -118,7 +120,7 @@ docker compose exec db psql -U postgres -d motel_db -c "UPDATE arqueos_caja SET 
 ## 7. Canal de integración continua
 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml), en cada `push` y `pull_request` sobre `main`:
 
-* **Backend (Python 3.12 y PostgreSQL 16):** Ruff; `pip-audit` (falla si hay vulnerabilidades publicadas); pruebas sobre PostgreSQL con corte de cobertura en 70 % (RNF-07); migraciones y verificaciones SQL de inmutabilidad (`verify_inmutabilidad.sql`), permisos del rol de la aplicación (`verify_roles.sql`), cierre de caja (`verify_caja.sql`) y migración desde una base v1.2 con datos; y un recorrido de punta a punta con la API corriendo como `motel_app` sobre el esquema migrado, más la medición de latencia de RNF-02, que se guarda como artefacto de la corrida.
+* **Backend (Python 3.12 y PostgreSQL 16):** Ruff; `pip-audit` (falla si hay vulnerabilidades publicadas); pruebas sobre PostgreSQL con corte de cobertura en 70 % (RNF-07); migraciones y verificaciones SQL de inmutabilidad (`verify_inmutabilidad.sql`), permisos del rol de la aplicación (`verify_roles.sql`), cierre de caja (`verify_caja.sql`), panel de configuración (`verify_configuracion.sql`) y migración desde una base v1.2 con datos; y un recorrido de punta a punta con la API corriendo como `motel_app` sobre el esquema migrado (cierre ciego y panel de configuración), más la medición de latencia de RNF-02, que se guarda como artefacto de la corrida.
 * **Frontend (Node 20):** `npm audit` de las dependencias de producción, verificación de tipos y compilación.
 
 ---
@@ -139,5 +141,6 @@ Conforme al Protocolo de Uso Autorizado de Inteligencia Artificial:
 
 * **Herramienta:** Claude Code, la única herramienta de asistencia que usa el autor. Todos los commits del prototipo se hacen con ella y llevan el trailer `Co-Authored-By: Claude Code`.
 * **Uso en el v2:** implementación de la migración 002 y las verificaciones SQL, la autenticación, el servicio de caja y los reportes, las pantallas de ingreso, guardia, cierre de caja y gerencia, las pruebas, los scripts de recorrido y de latencia, y este archivo.
+* **Uso en el v3 (en curso):** migración 005, rutas, pruebas, recorrido y pantalla del panel de configuración (RF-11). Decisiones del autor: el alcance de cinco puntos aprobado por la gerencia el 27/10/2026, los permisos por columna en lugar de funciones SECURITY DEFINER o un segundo rol, y la baja lógica.
 * **Decisiones del autor:** el cierre ciego por guardia, la imputación del cobro a la guardia que atiende, los roles, la separación entre el dueño de las tablas y el rol de la aplicación y las preguntas abiertas para la gerencia.
 * **Verificación:** 127 pruebas automáticas (SQLite y PostgreSQL 16), cuatro verificaciones SQL, el recorrido de punta a punta contra la API en Docker, la medición de latencia y una prueba manual en el navegador a 1366 × 768. El detalle por commit (herramienta, función, fecha y verificación) está en la bitácora individual.

@@ -44,6 +44,8 @@ export interface Articulo {
   precio_unitario: number;
   stock_actual: number;
   categoria?: string | null;
+  // RF-11: la ventanilla solo recibe artículos activos; el panel de configuración los ve todos.
+  activo?: boolean;
 }
 
 export interface TurnoResumen extends Turno {
@@ -168,6 +170,48 @@ export interface MetricaCaja {
   total_faltante: number;
   total_sobrante: number;
   tdc: number;
+}
+
+// --- Panel de configuración de la gerencia (RF-11, prototipo v3) ---
+
+export interface TarifaDatos {
+  tarifa_base: number;
+  estadia_base_min: number;
+  fraccion_min: number;
+  tarifa_fraccion: number;
+}
+
+export interface Tarifa extends TarifaDatos {
+  id: number;
+  nombre: string;
+  vigente: boolean;
+  vigente_desde: string;
+}
+
+export interface FondoCambio {
+  fondo_cambio: number;
+  actualizado_en?: string | null;
+}
+
+export interface HabitacionConfiguracion {
+  id: number;
+  numero: number;
+  estado: RoomStatus;
+  activa: boolean;
+}
+
+export interface ArticuloCambios {
+  descripcion?: string;
+  categoria?: string | null;
+  precio_unitario?: number;
+  stock_actual?: number;
+  activo?: boolean;
+}
+
+export interface ConserjeAlta {
+  usuario: string;
+  nombre_visible: string;
+  clave: string;
 }
 
 export interface MetricasCaja {

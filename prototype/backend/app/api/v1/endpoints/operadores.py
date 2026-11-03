@@ -1,14 +1,23 @@
-"""Consulta de operadores para la gerencia (solo lectura: el alta se hace con scripts/crear_operador.py)."""
+"""Operadores para la gerencia: consulta, y alta y baja de conserjes desde el panel (RF-11, acta del 27/10/2026).
+
+El alta crea siempre un conserje: la aplicación no elige el rol (migración 005). Los gerentes y el cambio de
+claves siguen a cargo del dueño de las tablas, con scripts/crear_operador.py. La baja es lógica: las guardias,
+los arqueos y los turnos a nombre del conserje quedan intactos, y su sesión deja de valer (deps.operador_actual).
+"""
 
 from datetime import datetime
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.models.operador import Operador
+from app.core.seguridad import hashear_clave
+from app.models.guardia import Guardia
+from app.models.operador import ROL_ADMINISTRADOR, Operador
 from app.schemas.auth import OperadorPublico
+from app.schemas.configuracion import ConserjeAlta, OperadorActivo
 
 router = APIRouter()
 
@@ -22,3 +31,46 @@ class OperadorEstado(OperadorPublico):
 @router.get("/", response_model=list[OperadorEstado])
 async def listar(db: AsyncSession = Depends(get_db)):
     return (await db.execute(select(Operador).order_by(Operador.nombre_visible))).scalars().all()
+
+
+@router.post("/", response_model=OperadorEstado, status_code=status.HTTP_201_CREATED)
+async def alta_conserje(datos: ConserjeAlta, db: AsyncSession = Depends(get_db)):
+    existente = (await db.execute(select(Operador).where(Operador.usuario == datos.usuario))).scalars().first()
+    if existente is not None:
+        raise HTTPException(status_code=409, detail=f"El usuario {datos.usuario} ya existe.")
+    # Sin rol: lo pone la base (OPERADOR). motel_app no tiene permiso sobre esa columna.
+    conserje = Operador(
+        usuario=datos.usuario, nombre_visible=datos.nombre_visible.strip(), hash_clave=hashear_clave(datos.clave)
+    )
+    db.add(conserje)
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(status_code=409, detail=f"El usuario {datos.usuario} ya existe.") from None
+    await db.refresh(conserje)
+    return conserje
+
+
+@router.patch("/{operador_id}", response_model=OperadorEstado)
+async def cambiar_activo(operador_id: int, datos: OperadorActivo, db: AsyncSession = Depends(get_db)):
+    operador = await db.get(Operador, operador_id)
+    if operador is None:
+        raise HTTPException(status_code=404, detail="Operador no encontrado")
+    # La base aplica las mismas dos reglas (trigger_operador_baja, migración 005).
+    if operador.rol == ROL_ADMINISTRADOR:
+        raise HTTPException(status_code=409, detail="La gerencia no se da de alta ni de baja desde el panel.")
+    if not datos.activo:
+        abierta = (
+            await db.execute(select(Guardia).where(Guardia.operador_id == operador.id, Guardia.estado == "Abierta"))
+        ).scalars().first()
+        if abierta is not None:
+            raise HTTPException(
+                status_code=409,
+                detail="El conserje tiene su guardia abierta: se cierra (o se usa el cierre supervisado) antes de "
+                "darlo de baja.",
+            )
+    operador.activo = datos.activo
+    await db.commit()
+    await db.refresh(operador)
+    return operador

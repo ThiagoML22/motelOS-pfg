@@ -25,7 +25,7 @@ try {
         Write-Host "Aplicando $($m.Name)"
         Invoke-Psql 'motel_schema' @('-f', "/db/migraciones/$($m.Name)")
     }
-    foreach ($v in 'verify_inmutabilidad.sql', 'verify_roles.sql', 'verify_caja.sql') {
+    foreach ($v in 'verify_inmutabilidad.sql', 'verify_roles.sql', 'verify_caja.sql', 'verify_configuracion.sql') {
         Write-Host "Verificando $v"
         Invoke-Psql 'motel_schema' @('-f', "/db/$v")
     }

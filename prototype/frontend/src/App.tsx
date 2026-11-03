@@ -11,6 +11,7 @@ import LoginView from './components/LoginView';
 import GuardiaView from './components/GuardiaView';
 import CierreCajaView from './components/CierreCajaView';
 import PanelGerencia from './components/PanelGerencia';
+import ConfiguracionView from './components/ConfiguracionView';
 import Button from './components/ui/Button';
 import { useToast } from './components/ui/Toast';
 import { ESTADOS_ORDEN, ESTADO_META } from './components/ui/status';
@@ -274,6 +275,8 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
         )}
 
         {esGerencia && activeView === 'gerencia' && <PanelGerencia onCambioGuardia={onRefrescarSesion} />}
+
+        {esGerencia && activeView === 'configuracion' && <ConfiguracionView onCambioHabitaciones={fetchHabitaciones} />}
       </main>
 
       {selectedRoom && (
