@@ -853,7 +853,7 @@ def sugerencias_de_tarifa(ctx: Contexto, dias: int = 28) -> list[dict]:
         if len(en_periodo) < 15:
             titulo = "Pocos datos todavía"
             explicacion = f"Solo {len(en_periodo)} turnos en {dias} días: se necesitan más para sugerir un cambio."
-        elif o_pico is not None and o_pico >= 0.75:
+        elif o_pico is not None and o_pico >= 0.7:
             accion, cambio, elasticidad = "subir", 0.10, ELASTICIDAD_PICO
             propuesta = ParametrosTarifa(
                 tarifa_base=Decimal(_redondear(float(actual.tarifa_base) * 1.1)),
