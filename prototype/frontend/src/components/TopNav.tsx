@@ -41,7 +41,7 @@ const TopNav: React.FC<TopNavProps> = ({ sesion, activeView, setActiveView, onli
           <img src="/logo.png" alt="MotelOS" className="h-7 object-contain" />
           {establecimiento && (
             <span
-              className="hidden max-w-[12rem] truncate rounded-md border border-line bg-surface-2 px-2 py-1 text-xs font-medium text-ink md:inline"
+              className="hidden max-w-[14rem] truncate whitespace-nowrap rounded-md border border-line bg-surface-2 px-2 py-1 text-xs font-medium text-ink md:inline"
               title={`Establecimiento: ${establecimiento.nombre} (${establecimiento.codigo})`}
             >
               {establecimiento.nombre}
@@ -59,7 +59,7 @@ const TopNav: React.FC<TopNavProps> = ({ sesion, activeView, setActiveView, onli
                 onClick={() => setActiveView(view)}
                 aria-current={active ? 'page' : undefined}
                 aria-label={view === 'actividad' && pendientes > 0 ? `${label}: ${pendientes} por revisar` : label}
-                className={`press flex items-center gap-2 border-b-2 px-2.5 text-sm sm:px-3 ${
+                className={`press flex items-center gap-2 whitespace-nowrap border-b-2 px-2.5 text-sm sm:px-3 ${
                   active ? 'border-accent font-medium text-ink' : 'border-transparent text-muted hover:text-ink'
                 }`}
               >
@@ -76,7 +76,8 @@ const TopNav: React.FC<TopNavProps> = ({ sesion, activeView, setActiveView, onli
         </nav>
 
         <div className="ml-auto flex items-center gap-4 text-sm">
-          <span className="hidden text-right leading-tight lg:block">
+          {/* Con el menú de la gerencia (seis secciones) el nombre y la guardia se muestran desde 1536 px. */}
+          <span className={`hidden text-right leading-tight ${items.length > 4 ? '2xl:block' : 'lg:block'}`}>
             <span className="block font-medium text-ink">{operador.nombre_visible}</span>
             <span className="block text-xs text-muted">
               {guardia
