@@ -6,10 +6,18 @@ import { parseUtc } from './format';
 // total) es responsabilidad del backend: acá solo se señala visualmente el exceso.
 export const ESTADIA_BASE_MIN = 120;
 
-export type FaseEstadia = 'normal' | 'excedido';
+// Minutos antes del fin de la estadía base en que la tarjeta avisa que el turno está por vencer.
+export const AVISO_POR_VENCER_MIN = 10;
 
-export const faseEstadia = (transcurridoMs: number, baseMin: number = ESTADIA_BASE_MIN): FaseEstadia =>
-  transcurridoMs > baseMin * 60000 ? 'excedido' : 'normal';
+export type FaseEstadia = 'normal' | 'por_vencer' | 'excedido';
+
+export const faseEstadia = (transcurridoMs: number, baseMin: number = ESTADIA_BASE_MIN): FaseEstadia => {
+  if (transcurridoMs > baseMin * 60000) return 'excedido';
+  return transcurridoMs > (baseMin - AVISO_POR_VENCER_MIN) * 60000 ? 'por_vencer' : 'normal';
+};
+
+export const minutosRestantes = (transcurridoMs: number, baseMin: number = ESTADIA_BASE_MIN): number =>
+  Math.max(0, Math.ceil((baseMin * 60000 - transcurridoMs) / 60000));
 
 export const minutosExcedidos = (transcurridoMs: number, baseMin: number = ESTADIA_BASE_MIN): number =>
   Math.max(0, Math.ceil((transcurridoMs - baseMin * 60000) / 60000));

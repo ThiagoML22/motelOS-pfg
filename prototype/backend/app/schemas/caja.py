@@ -90,6 +90,21 @@ class MetricaCaja(BaseModel):
     tdc: float
 
 
+class ResumenCategoria(BaseModel):
+    """Turnos cobrados e ingresos de una categoría de habitación en el período, y su ocupación ahora (migración 008)."""
+
+    categoria_id: int
+    nombre: str
+    color: str
+    turnos: int
+    ingresos: float
+    consumos: float
+    minutos_promedio: int
+    ticket_promedio: float
+    habitaciones: int
+    ocupadas: int
+
+
 class MetricasCaja(BaseModel):
     desde: date | None
     hasta: date | None

@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Bike, Car, CheckCircle2, Footprints, MoreVertical, Sparkles, Wrench } from 'lucide-react';
 import { Categoria, HabitacionConDetalles, RoomStatus } from '../types';
 import { formatDuration, formatMoney, formatRoomNumber } from '../utils/format';
-import { elapsedMs, faseEstadia, formatMinutos, minutosExcedidos } from '../utils/turno';
+import { elapsedMs, faseEstadia, formatMinutos, minutosExcedidos, minutosRestantes } from '../utils/turno';
 import { ChipCategoria } from './CategoriasConfig';
 import Button from './ui/Button';
 import { ESTADO_META, FASE_META } from './ui/status';
@@ -90,6 +90,9 @@ const RoomCard: React.FC<RoomCardProps> = ({ room, categoria, now, onClick, onAd
             <p className="mt-0.5 min-h-[1rem] text-xs text-muted">
               {fase === 'excedido' && (
                 <span className="font-medium text-danger">Excedido +{minutosExcedidos(transcurrido, baseMin)} min</span>
+              )}
+              {fase === 'por_vencer' && (
+                <span className="font-medium text-warn">Vence en {minutosRestantes(transcurrido, baseMin)} min</span>
               )}
               {turno.total_consumos > 0 && (
                 <span className={fase !== 'normal' ? 'ml-2' : ''}>Consumos {formatMoney(turno.total_consumos)}</span>

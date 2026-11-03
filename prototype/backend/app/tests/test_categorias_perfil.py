@@ -246,3 +246,36 @@ async def test_la_plataforma_tambien_tiene_perfil(session_factory):
         perfil = (await plataforma.get("/api/v1/perfil/")).json()
         assert perfil["rol"] == "PLATAFORMA" and perfil["establecimiento_nombre"] is None
         assert (await plataforma.patch("/api/v1/perfil/", json={"nombre_visible": "Soporte"})).status_code == 200
+
+
+# --- Reporte por categoría --------------------------------------------------------------------------------------------
+
+
+async def test_la_gerencia_ve_ingresos_y_ocupacion_por_categoria(client: AsyncClient, cliente_como):
+    gerencia = await cliente_como("gerencia")
+    vip = (await gerencia.post(CATEGORIAS, json=VIP)).json()
+    await gerencia.patch("/api/v1/configuracion/habitaciones/2", json={"categoria_id": vip["id"]})
+    cobrado = (await client.post("/api/v1/turnos/", json={"habitacion_id": 2, "tipo_cliente": "Auto"})).json()
+    cobro = await client.post(
+        f"/api/v1/turnos/{cobrado['id']}/cerrar", json={"pagos": [{"monto": 15000, "medio_pago": "EFECTIVO"}]}
+    )
+    assert cobro.status_code == 200, cobro.text
+
+    # RN-RES-03: mientras la guardia está abierta, su cobro no aparece (revelaría el total antes del cierre ciego).
+    resumen = {c["nombre"]: c for c in (await gerencia.get("/api/v1/arqueos/por-categoria")).json()}
+    assert resumen["VIP"]["turnos"] == 0 and resumen["VIP"]["ingresos"] == 0
+    otro = await client.post("/api/v1/turnos/", json={"habitacion_id": 1, "tipo_cliente": "Auto"})
+    await client.post(
+        f"/api/v1/turnos/{otro.json()['id']}/cerrar", json={"pagos": [{"monto": 8000, "medio_pago": "EFECTIVO"}]}
+    )
+    assert (await client.post("/api/v1/guardias/actual/arqueo", json={"efectivo": 23000})).status_code == 201
+    await client.post("/api/v1/guardias/")  # guardia siguiente
+    resumen = {c["nombre"]: c for c in (await gerencia.get("/api/v1/arqueos/por-categoria")).json()}
+    assert resumen["VIP"]["turnos"] == 1 and resumen["VIP"]["ingresos"] == 15000
+    assert resumen["VIP"]["ticket_promedio"] == 15000 and resumen["VIP"]["habitaciones"] == 1
+    # El turno en curso no suma ingresos, pero la habitación cuenta como ocupada.
+    await client.patch("/api/v1/habitaciones/1/liberar")
+    await client.post("/api/v1/turnos/", json={"habitacion_id": 1, "tipo_cliente": "Auto"})  # queda en curso
+    resumen = {c["nombre"]: c for c in (await gerencia.get("/api/v1/arqueos/por-categoria")).json()}
+    assert resumen["Simple"]["turnos"] == 1 and resumen["Simple"]["ocupadas"] == 1
+    assert (await client.get("/api/v1/arqueos/por-categoria")).status_code == 403

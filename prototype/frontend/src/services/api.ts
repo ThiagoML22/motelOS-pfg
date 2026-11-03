@@ -24,6 +24,7 @@ import {
   MetricasCaja,
   OperadorEstado,
   Perfil,
+  ResumenCategoria,
   Sesion,
   Tarifa,
   TarifaDatos,
@@ -163,6 +164,9 @@ export const api = {
 
   getMetricas: async (filtro: { desde?: string; hasta?: string }): Promise<MetricasCaja> =>
     (await http.get('/arqueos/metricas', { params: filtro })).data,
+
+  getPorCategoria: async (filtro: { desde?: string; hasta?: string }): Promise<ResumenCategoria[]> =>
+    (await http.get('/arqueos/por-categoria', { params: filtro })).data,
 
   getOperadores: async (): Promise<OperadorEstado[]> => (await http.get('/operadores/')).data,
 

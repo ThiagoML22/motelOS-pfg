@@ -10,7 +10,7 @@ from app.core.database import get_db
 from app.models.arqueo import ArqueoCaja
 from app.models.establecimiento import Establecimiento
 from app.models.operador import Operador
-from app.schemas.caja import ArqueoDetalle, ArqueoResultado, DeclaracionSupervisada, MetricasCaja
+from app.schemas.caja import ArqueoDetalle, ArqueoResultado, DeclaracionSupervisada, MetricasCaja, ResumenCategoria
 from app.services import caja, reportes
 from app.services.comprobante import comprobante_arqueo
 
@@ -35,6 +35,12 @@ async def metricas(
     db: AsyncSession = Depends(get_db),
 ):
     return await reportes.metricas(db, desde, hasta)
+
+
+@router.get("/por-categoria", response_model=list[ResumenCategoria])
+async def por_categoria(desde: date | None = None, hasta: date | None = None, db: AsyncSession = Depends(get_db)):
+    """Turnos cobrados, ingresos y ocupación por categoría de habitación (migración 008)."""
+    return await reportes.por_categoria(db, desde, hasta)
 
 
 @router.get("/{arqueo_id}", response_model=ArqueoDetalle)

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { CheckCheck, Eye } from 'lucide-react';
+import { CheckCheck, Download, Eye } from 'lucide-react';
 import { Actividad, CategoriaActividad } from '../types';
 import { api, EVENTO_RECONECTADO, getErrorMessage } from '../services/api';
 import { formatDateTime } from '../utils/format';
@@ -13,6 +13,7 @@ const CATEGORIAS: { id: CategoriaActividad; label: string }[] = [
   { id: 'HABITACION', label: 'Habitaciones' },
   { id: 'PERSONAL', label: 'Personal' },
   { id: 'ESTABLECIMIENTO', label: 'Establecimiento' },
+  { id: 'PERFIL', label: 'Perfil' },
 ];
 const ETIQUETA = Object.fromEntries(CATEGORIAS.map((c) => [c.id, c.label])) as Record<CategoriaActividad, string>;
 
@@ -78,10 +79,16 @@ const ActividadView: React.FC<ActividadViewProps> = ({ onCambioPendientes }) => 
             borran.
           </p>
         </div>
-        <Button onClick={() => void revisar()} disabled={ocupado || !hayPendientes} className="h-11">
-          <CheckCheck className="h-4 w-4" aria-hidden="true" />
-          Marcar todo como visto
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="secondary" onClick={() => exportarCsv(entradas)} disabled={entradas.length === 0} className="h-11">
+            <Download className="h-4 w-4" aria-hidden="true" />
+            Exportar CSV
+          </Button>
+          <Button onClick={() => void revisar()} disabled={ocupado || !hayPendientes} className="h-11">
+            <CheckCheck className="h-4 w-4" aria-hidden="true" />
+            Marcar todo como visto
+          </Button>
+        </div>
       </div>
 
       <div className="mb-4 flex flex-wrap items-center gap-1.5" role="group" aria-label="Filtrar el registro">
@@ -176,6 +183,35 @@ const ActividadView: React.FC<ActividadViewProps> = ({ onCambioPendientes }) => 
       )}
     </div>
   );
+};
+
+// Exporta las entradas visibles (con los filtros aplicados) a un CSV que abre Excel: separador «;» y BOM UTF-8 para que
+// respete las tildes.
+const exportarCsv = (entradas: Actividad[]) => {
+  const celda = (valor: unknown) => `"${String(valor ?? '').replace(/"/g, '""')}"`;
+  const filas = [
+    ['Fecha', 'Quién', 'Guardia', 'Categoría', 'Acción', 'Descripción', 'Antes', 'Después', 'Revisión'],
+    ...entradas.map((e) => [
+      formatDateTime(e.creado_en),
+      e.operador_nombre,
+      e.guardia_id ?? '',
+      ETIQUETA[e.categoria],
+      e.accion,
+      e.descripcion,
+      e.valor_anterior,
+      e.valor_nuevo,
+      e.revisado_en ? `Visto por ${e.revisado_por_nombre}` : e.requiere_revision ? 'Por revisar' : 'Gerencia',
+    ]),
+  ];
+  const texto = '﻿' + filas.map((f) => f.map(celda).join(';')).join('\r\n');
+  const url = URL.createObjectURL(new Blob([texto], { type: 'text/csv;charset=utf-8' }));
+  const enlace = document.createElement('a');
+  enlace.href = url;
+  enlace.download = `actividad-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(enlace);
+  enlace.click();
+  enlace.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 };
 
 const Filtro: React.FC<{ activo: boolean; onClick: () => void; children: React.ReactNode }> = ({

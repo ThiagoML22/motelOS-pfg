@@ -286,6 +286,20 @@ export interface ConserjeAlta {
   clave: string;
 }
 
+// Turnos cobrados (en guardias ya arqueadas), ingresos y ocupación de una categoría de habitación.
+export interface ResumenCategoria {
+  categoria_id: number;
+  nombre: string;
+  color: string;
+  turnos: number;
+  ingresos: number;
+  consumos: number;
+  minutos_promedio: number;
+  ticket_promedio: number;
+  habitaciones: number;
+  ocupadas: number;
+}
+
 export interface MetricasCaja {
   desde?: string | null;
   hasta?: string | null;
