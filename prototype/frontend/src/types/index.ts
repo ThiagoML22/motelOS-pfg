@@ -539,6 +539,13 @@ export interface Tablero {
   mas_vendidos: { articulo_id: number; descripcion: string; unidades: number; importe: number }[];
 }
 
+// Botón que propone el asistente: ir a una pantalla o abrir una habitación.
+export interface AccionAsistente {
+  etiqueta: string;
+  vista: string | null;
+  habitacion_id: number | null;
+}
+
 export interface RespuestaAsistente {
   respuesta: string;
   intencion: string;
@@ -546,4 +553,21 @@ export interface RespuestaAsistente {
   detalle: string | null;
   tabla: { columnas: string[]; filas: (string | number)[][] } | null;
   sugerencias: string[];
+  // Ayuda para usar el sistema (services/ayuda.py): pasos a seguir y botones para ir.
+  pasos?: string[];
+  acciones?: AccionAsistente[];
+}
+
+// Arqueos de un mes (por el día en que se abrió cada guardia).
+export interface ResumenMes {
+  mes: string;
+  desde: string;
+  hasta: string;
+  arqueos: number;
+  correctos: number;
+  faltantes: number;
+  sobrantes: number;
+  total_faltante: number;
+  total_sobrante: number;
+  tdc: number;
 }

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { BarChart3, DoorOpen, FileDown, RefreshCw, Tags } from 'lucide-react';
-import { Arqueo, ArqueoDetalle, Guardia, MetricasCaja, ResumenCategoria } from '../types';
+import { ArqueoDetalle, Guardia, MetricasCaja, ResumenCategoria } from '../types';
 import { api, getErrorMessage } from '../services/api';
 import { formatDateTime, formatMoney, formatRoomNumber } from '../utils/format';
 import { CATEGORIA_META, NOMBRE_FRANJA, formatPorcentaje } from '../utils/caja';
@@ -9,6 +9,7 @@ import Field, { inputClass } from './ui/Field';
 import Modal from './ui/Modal';
 import { useToast } from './ui/Toast';
 import CierreSupervisadoModal from './CierreSupervisadoModal';
+import HistorialArqueos from './HistorialArqueos';
 
 // Línea de base de la AE1: 1 de cada 10 recambios con faltante o sobrante.
 const TDC_LINEA_DE_BASE = 0.1;
@@ -39,7 +40,8 @@ const PanelGerencia: React.FC<PanelGerenciaProps> = ({ onCambioGuardia }) => {
   const [operadorId, setOperadorId] = useState<number | ''>('');
   const [metricas, setMetricas] = useState<MetricasCaja | null>(null);
   const [porCategoria, setPorCategoria] = useState<ResumenCategoria[]>([]);
-  const [arqueos, setArqueos] = useState<Arqueo[]>([]);
+  // Cambia en cada recarga del panel: el historial de arqueos vuelve a pedir sus meses.
+  const [version, setVersion] = useState(0);
   const [estado, setEstado] = useState<'cargando' | 'ok' | 'error'>('cargando');
   const [detalle, setDetalle] = useState<ArqueoDetalle | null>(null);
   const [guardiaAbierta, setGuardiaAbierta] = useState<Guardia | null>(null);
@@ -48,22 +50,17 @@ const PanelGerencia: React.FC<PanelGerenciaProps> = ({ onCambioGuardia }) => {
   const cargar = useCallback(async () => {
     const desde = desdeRango(rango);
     try {
-      const [m, a, g, c] = await Promise.all([
-        api.getMetricas({ desde }),
-        api.getArqueos({ desde, operador_id: operadorId === '' ? undefined : operadorId }),
-        api.getGuardiaActual(),
-        api.getPorCategoria({ desde }),
-      ]);
+      const [m, g, c] = await Promise.all([api.getMetricas({ desde }), api.getGuardiaActual(), api.getPorCategoria({ desde })]);
       setPorCategoria(c);
       setMetricas(m);
-      setArqueos(a);
+      setVersion((v) => v + 1);
       setGuardiaAbierta(g);
       setEstado('ok');
     } catch (err) {
       setEstado('error');
       toast(getErrorMessage(err, 'No se pudo cargar el panel de caja.'), 'error');
     }
-  }, [rango, operadorId, toast]);
+  }, [rango, toast]);
 
   useEffect(() => {
     void cargar();
@@ -280,63 +277,8 @@ const PanelGerencia: React.FC<PanelGerenciaProps> = ({ onCambioGuardia }) => {
             </section>
           )}
 
-          <section aria-labelledby="titulo-arqueos">
-            <h2 id="titulo-arqueos" className="mb-2 text-sm font-semibold text-ink">
-              Arqueos
-            </h2>
-            <div className="overflow-x-auto rounded-lg border border-line bg-surface">
-              <table className="w-full min-w-[48rem] text-left text-sm">
-                <thead>
-                  <tr className="border-b border-line bg-surface-2 text-xs font-medium uppercase tracking-wide text-subtle">
-                    <th scope="col" className="px-4 py-2.5">Confirmado</th>
-                    <th scope="col" className="px-4 py-2.5">Guardia</th>
-                    <th scope="col" className="px-4 py-2.5">Conserje</th>
-                    <th scope="col" className="px-4 py-2.5 text-right">Declarado</th>
-                    <th scope="col" className="px-4 py-2.5 text-right">Sistema</th>
-                    <th scope="col" className="px-4 py-2.5 text-right">Diferencia</th>
-                    <th scope="col" className="px-4 py-2.5">Resultado</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-line">
-                  {arqueos.map((a) => (
-                    <tr
-                      key={a.id}
-                      tabIndex={0}
-                      onClick={() => void abrirDetalle(a.id)}
-                      onKeyDown={(e) => e.key === 'Enter' && void abrirDetalle(a.id)}
-                      className="cursor-pointer transition-colors hover:bg-surface-2 focus-visible:bg-surface-2"
-                    >
-                      <td className="px-4 py-2.5 tabular-nums text-muted">{formatDateTime(a.confirmado_en)}</td>
-                      <td className="px-4 py-2.5">{a.franja}</td>
-                      <td className="px-4 py-2.5 font-medium text-ink">{a.operador_nombre}</td>
-                      <td className="px-4 py-2.5 text-right tabular-nums">{formatMoney(a.total_declarado)}</td>
-                      <td className="px-4 py-2.5 text-right tabular-nums">{formatMoney(a.total_sistema)}</td>
-                      <td className={`px-4 py-2.5 text-right tabular-nums ${a.diferencia < 0 ? 'text-danger' : ''}`}>
-                        {formatMoney(a.diferencia)}
-                      </td>
-                      <td className="px-4 py-2.5">
-                        <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${CATEGORIA_META[a.categoria].clase}`}>
-                          {a.categoria}
-                        </span>
-                        {a.supervisado && (
-                          <span className="ml-2 text-xs text-muted" title={a.observacion ?? undefined}>
-                            supervisado
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                  {arqueos.length === 0 && (
-                    <tr>
-                      <td colSpan={7} className="px-4 py-12 text-center text-muted">
-                        No hay arqueos confirmados en este período.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </section>
+          {/* Historial segmentado por mes y por día (independiente del período de arriba; respeta el conserje). */}
+          <HistorialArqueos operadorId={operadorId} version={version} onAbrir={(id) => void abrirDetalle(id)} />
         </>
       )}
 

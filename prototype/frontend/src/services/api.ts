@@ -27,6 +27,7 @@ import {
   OperadorEstado,
   Perfil,
   ResumenCategoria,
+  ResumenMes,
   RespuestaAsistente,
   Sesion,
   Tablero,
@@ -285,8 +286,12 @@ export const api = {
   // --- Inteligencia local de la gerencia (todo se calcula en el servidor del motel) ---
   getTablero: async (): Promise<Tablero> => (await http.get('/inteligencia/tablero')).data,
 
+  // Asistente de todo el personal: ayuda y estado de la ventanilla; a la gerencia, además, el análisis de datos.
   preguntar: async (texto: string): Promise<RespuestaAsistente> =>
-    (await http.post('/inteligencia/pregunta', { texto })).data,
+    (await http.post('/asistente/pregunta', { texto })).data,
+
+  getArqueosMeses: async (operador_id?: number): Promise<ResumenMes[]> =>
+    (await http.get('/arqueos/meses', { params: { operador_id } })).data,
 
   // --- Plataforma (multiinquilino) ---
   getEstablecimientos: async (): Promise<EstablecimientoResumen[]> => (await http.get('/plataforma/establecimientos')).data,

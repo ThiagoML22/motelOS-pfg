@@ -26,6 +26,7 @@ from app.schemas.caja import (
     MetricasCaja,
     PagoDetalle,
     ResumenCategoria,
+    ResumenMes,
 )
 from app.services.caja import FALTANTE, SOBRANTE
 from app.services.liquidacion import con_zona
@@ -140,13 +141,13 @@ async def por_categoria(db: AsyncSession, desde: date | None, hasta: date | None
         if hora_fin:
             datos["minutos"] += (con_zona(hora_fin) - con_zona(hora_inicio)).total_seconds() / 60
     habitaciones = (
-        await db.execute(
-            select(Habitacion.categoria_id, Habitacion.estado).where(Habitacion.activa.is_(True))
-        )
+        await db.execute(select(Habitacion.categoria_id, Habitacion.estado).where(Habitacion.activa.is_(True)))
     ).all()
     categorias = (
-        await db.execute(select(CategoriaHabitacion).order_by(CategoriaHabitacion.orden, CategoriaHabitacion.id))
-    ).scalars().all()
+        (await db.execute(select(CategoriaHabitacion).order_by(CategoriaHabitacion.orden, CategoriaHabitacion.id)))
+        .scalars()
+        .all()
+    )
     resumen = []
     for c in categorias:
         datos = acumulado.get(c.id, {"turnos": 0, "ingresos": 0.0, "consumos": 0.0, "minutos": 0.0})
@@ -186,6 +187,32 @@ def _metrica(arqueos: list[ArqueoCaja], operador_id: int | None = None, nombre: 
         total_sobrante=float(sum((a.diferencia for a in sobrantes), 0)),
         tdc=round((len(faltantes) + len(sobrantes)) / cantidad, 4) if cantidad else 0.0,
     )
+
+
+async def resumen_por_mes(db: AsyncSession, operador_id: int | None = None) -> list[ResumenMes]:
+    """Arqueos agrupados por mes, del más reciente al más antiguo. El mes es el del día (hora local) en que se abrió
+    la guardia: la de la noche del 31 cuenta en ese mes aunque se arquee el 1.º a la mañana."""
+    zona = ZoneInfo(settings.ZONA_HORARIA)
+    consulta = select(ArqueoCaja, Guardia.abierta_en).join(Guardia, Guardia.id == ArqueoCaja.guardia_id)
+    if operador_id:
+        consulta = consulta.where(ArqueoCaja.operador_id == operador_id)
+    grupos: dict[tuple[int, int], list[ArqueoCaja]] = {}
+    for arqueo, abierta_en in (await db.execute(consulta)).all():
+        local = con_zona(abierta_en).astimezone(zona)
+        grupos.setdefault((local.year, local.month), []).append(arqueo)
+    resultado = []
+    for (anio, mes), lista in sorted(grupos.items(), reverse=True):
+        primero = date(anio, mes, 1)
+        siguiente = date(anio + mes // 12, mes % 12 + 1, 1)
+        resultado.append(
+            ResumenMes(
+                **_metrica(lista).model_dump(),
+                mes=f"{anio}-{mes:02d}",
+                desde=primero,
+                hasta=siguiente - timedelta(days=1),
+            )
+        )
+    return resultado
 
 
 async def metricas(db: AsyncSession, desde: date | None, hasta: date | None) -> MetricasCaja:

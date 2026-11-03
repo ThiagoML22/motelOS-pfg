@@ -97,7 +97,7 @@ function App() {
   }
   // La conversación con el asistente de la gerencia vive mientras dura la sesión, en cualquier pantalla.
   return (
-    <AsistenteProvider key={sesion.operador.id}>
+    <AsistenteProvider key={sesion.operador.id} esGerencia={sesion.operador.rol === 'ADMINISTRADOR'}>
       <Ventanilla sesion={sesion} onRefrescarSesion={refrescarSesion} onSalir={() => void salir()} />
     </AsistenteProvider>
   );
@@ -268,6 +268,25 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
     return lista;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sesion.operador.rol, conGuardiaPropia, habitaciones, categorias, onSalir, paleta]);
+
+  // Botones que propone el asistente: ir a una pantalla permitida para el rol o abrir una habitación.
+  const habitacionesRef = useRef(habitaciones);
+  habitacionesRef.current = habitaciones;
+  const { registrarAcciones } = asistente;
+  useEffect(() => {
+    const permitidas = new Set<string>([...ITEMS.filter((i) => i.roles.includes(sesion.operador.rol)).map((i) => i.view), 'perfil']);
+    registrarAcciones((accion) => {
+      const habitacion = habitacionesRef.current.find((h) => h.id === accion.habitacion_id);
+      if (habitacion) {
+        setActiveView('dashboard');
+        setAsistenteAbierto(false);
+        setSelectedId(habitacion.id);
+        setOpenAddProduct(false);
+      } else if (accion.vista && permitidas.has(accion.vista)) {
+        setActiveView(accion.vista as View);
+      }
+    });
+  }, [registrarAcciones, sesion.operador.rol]);
 
   const selectedRoom = habitaciones.find((h) => h.id === selectedId) ?? null;
 
@@ -495,24 +514,19 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
         <PaletaComandos
           comandos={comandos}
           onClose={() => setPaleta(false)}
-          onPreguntar={
-            esGerencia
-              ? (texto) => {
-                  setAsistenteAbierto(true);
-                  void asistente.preguntar(texto);
-                }
-              : undefined
-          }
+          onPreguntar={(texto) => {
+            setAsistenteAbierto(true);
+            void asistente.preguntar(texto);
+          }}
         />
       )}
 
-      {esGerencia && (
-        <AsistenteFlotante
-          abierto={asistenteAbierto}
-          onCambiar={setAsistenteAbierto}
-          ocultarEnPantallaAncha={activeView === 'inteligencia'}
-        />
-      )}
+      {/* El asistente está para todo el personal; en Inteligencia, con pantalla ancha, ya está en el costado. */}
+      <AsistenteFlotante
+        abierto={asistenteAbierto}
+        onCambiar={setAsistenteAbierto}
+        ocultarEnPantallaAncha={esGerencia && activeView === 'inteligencia'}
+      />
 
       {selectedRoom && (
         <RoomDialog

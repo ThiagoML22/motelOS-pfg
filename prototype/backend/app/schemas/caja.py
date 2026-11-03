@@ -90,6 +90,14 @@ class MetricaCaja(BaseModel):
     tdc: float
 
 
+class ResumenMes(MetricaCaja):
+    """Los arqueos de un mes (por el día en que se abrió cada guardia), para el historial desplegable."""
+
+    mes: str  # «2026-11»
+    desde: date
+    hasta: date
+
+
 class ResumenCategoria(BaseModel):
     """Turnos cobrados e ingresos de una categoría de habitación en el período, y su ocupación ahora (migración 008)."""
 

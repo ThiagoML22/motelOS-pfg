@@ -1,21 +1,38 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
-import { Bot, Send, X } from 'lucide-react';
-import { RespuestaAsistente } from '../types';
+import { ArrowRight, Bot, Send, X } from 'lucide-react';
+import { AccionAsistente, RespuestaAsistente } from '../types';
 import { api, getErrorMessage } from '../services/api';
 import Button from './ui/Button';
 
-// Asistente de la gerencia: responde preguntas en español con los datos del motel, calculados en su servidor. La
-// conversación vive en un contexto: la misma se ve en el costado de Inteligencia y en el botón flotante de cualquier
-// pantalla, y la paleta de comandos (Ctrl+K) le puede mandar preguntas.
+// Asistente de todo el personal: ayuda para usar el sistema y el estado de la ventanilla, y para la gerencia además
+// el análisis de los datos del motel; todo calculado en su servidor. La conversación vive en un contexto: la misma se
+// ve en el costado de Inteligencia y en el botón flotante de cualquier pantalla, y la paleta (Ctrl+K) le manda preguntas.
 
-const SUGERENCIAS_INICIALES = [
-  '¿Cuánto facturamos la semana pasada?',
-  '¿Cuántos turnos esperamos mañana?',
-  '¿Qué categoría deja más plata?',
-  '¿Quién tuvo más faltantes en los últimos 30 días?',
-  '¿A qué hora hay más demanda los sábados?',
-  '¿Cuál es la habitación menos usada?',
-];
+const SUGERENCIAS: Record<'gerencia' | 'conserje', string[]> = {
+  gerencia: [
+    '¿Cuánto facturamos la semana pasada?',
+    '¿Cuántos turnos esperamos mañana?',
+    '¿Qué categoría deja más plata?',
+    '¿Quién tuvo más faltantes en los últimos 30 días?',
+    '¿Cómo cambio una tarifa?',
+    '¿Qué habitaciones están libres?',
+  ],
+  conserje: [
+    '¿Cómo abro un turno?',
+    '¿Qué habitaciones están libres?',
+    '¿Cuál vence primero?',
+    '¿Cómo cierro la caja?',
+    '¿Cuánto sale la VIP?',
+    'Se cortó la conexión, ¿qué hago?',
+  ],
+};
+
+const SALUDO = {
+  gerencia:
+    'Hola. Te ayudo a usar el sistema y a entender los datos del motel: ingresos, turnos, ocupación, horarios, categorías, caja, stock o lo que se espera para mañana.',
+  conserje:
+    'Hola. Te ayudo a usar el sistema («¿cómo cobro un turno?») y te digo cómo está la ventanilla («¿qué habitaciones están libres?», «¿cuánto debe la 5?»).',
+};
 
 interface Mensaje {
   de: 'usuario' | 'asistente';
@@ -27,7 +44,11 @@ interface Conversacion {
   mensajes: Mensaje[];
   pensando: boolean;
   sugeridas: string[];
+  esGerencia: boolean;
   preguntar: (texto: string) => Promise<void>;
+  // La ventanilla registra cómo ejecutar los botones que propone el asistente (ir a una pantalla, abrir una habitación).
+  registrarAcciones: (manejador: (accion: AccionAsistente) => void) => void;
+  ejecutar: (accion: AccionAsistente) => void;
 }
 
 const ContextoAsistente = createContext<Conversacion | null>(null);
@@ -38,17 +59,17 @@ export const useAsistente = (): Conversacion => {
   return contexto;
 };
 
-export const AsistenteProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [mensajes, setMensajes] = useState<Mensaje[]>([
-    {
-      de: 'asistente',
-      texto:
-        'Hola. Preguntame lo que quieras saber del motel: ingresos, turnos, ocupación, horarios, categorías, caja, stock o lo que se espera para mañana.',
-    },
-  ]);
+export const AsistenteProvider: React.FC<{ esGerencia: boolean; children: React.ReactNode }> = ({ esGerencia, children }) => {
+  const perfil = esGerencia ? 'gerencia' : 'conserje';
+  const [mensajes, setMensajes] = useState<Mensaje[]>([{ de: 'asistente', texto: SALUDO[perfil] }]);
   const [pensando, setPensando] = useState(false);
-  const [sugeridas, setSugeridas] = useState(SUGERENCIAS_INICIALES);
+  const [sugeridas, setSugeridas] = useState(SUGERENCIAS[perfil]);
   const ocupado = useRef(false);
+  const manejador = useRef<((accion: AccionAsistente) => void) | null>(null);
+  const registrarAcciones = useCallback((fn: (accion: AccionAsistente) => void) => {
+    manejador.current = fn;
+  }, []);
+  const ejecutar = useCallback((accion: AccionAsistente) => manejador.current?.(accion), []);
 
   const preguntar = useCallback(async (texto: string) => {
     const limpia = texto.trim();
@@ -69,7 +90,9 @@ export const AsistenteProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   }, []);
 
   return (
-    <ContextoAsistente.Provider value={{ mensajes, pensando, sugeridas, preguntar }}>{children}</ContextoAsistente.Provider>
+    <ContextoAsistente.Provider value={{ mensajes, pensando, sugeridas, esGerencia, preguntar, registrarAcciones, ejecutar }}>
+      {children}
+    </ContextoAsistente.Provider>
   );
 };
 
@@ -79,7 +102,7 @@ interface ChatAsistenteProps {
 }
 
 export const ChatAsistente: React.FC<ChatAsistenteProps> = ({ className = 'h-[min(78vh,46rem)]', onCerrar }) => {
-  const { mensajes, pensando, sugeridas, preguntar } = useAsistente();
+  const { mensajes, pensando, sugeridas, esGerencia, preguntar, ejecutar } = useAsistente();
   const [texto, setTexto] = useState('');
   const lista = useRef<HTMLDivElement>(null);
   const entrada = useRef<HTMLInputElement>(null);
@@ -106,7 +129,9 @@ export const ChatAsistente: React.FC<ChatAsistenteProps> = ({ className = 'h-[mi
         </span>
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-ink">Asistente</p>
-          <p className="text-xs text-muted">Responde con los datos del motel, sin internet</p>
+          <p className="text-xs text-muted">
+            {esGerencia ? 'Ayuda y datos del motel, sin internet' : 'Te ayuda a usar el sistema, sin internet'}
+          </p>
         </div>
         {onCerrar && (
           <button
@@ -128,6 +153,33 @@ export const ChatAsistente: React.FC<ChatAsistenteProps> = ({ className = 'h-[mi
               }`}
             >
               <p className="whitespace-pre-line">{m.texto}</p>
+              {m.respuesta?.pasos && m.respuesta.pasos.length > 0 && (
+                <ol className="mt-2 space-y-1.5">
+                  {m.respuesta.pasos.map((paso, j) => (
+                    <li key={j} className="flex gap-2">
+                      <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-accent text-[11px] font-semibold text-accent-fg">
+                        {j + 1}
+                      </span>
+                      <span>{paso}</span>
+                    </li>
+                  ))}
+                </ol>
+              )}
+              {m.respuesta?.acciones && m.respuesta.acciones.length > 0 && (
+                <div className="mt-2.5 flex flex-wrap gap-1.5">
+                  {m.respuesta.acciones.map((accion) => (
+                    <button
+                      key={accion.etiqueta}
+                      type="button"
+                      onClick={() => ejecutar(accion)}
+                      className="press inline-flex items-center gap-1 rounded-md border border-accent/40 bg-surface px-2.5 py-1 text-xs font-medium text-accent hover:bg-accent-soft"
+                    >
+                      {accion.etiqueta}
+                      <ArrowRight className="h-3 w-3" aria-hidden="true" />
+                    </button>
+                  ))}
+                </div>
+              )}
               {m.respuesta?.tabla && m.respuesta.tabla.filas.length > 0 && (
                 <div className="mt-2 overflow-x-auto rounded border border-line bg-surface">
                   <table className="w-full text-left text-xs">
@@ -174,7 +226,7 @@ export const ChatAsistente: React.FC<ChatAsistenteProps> = ({ className = 'h-[mi
         )}
       </div>
       <div className="border-t border-line px-3 py-3">
-        <div className="mb-2 flex gap-1.5 overflow-x-auto pb-1">
+        <div className="sin-barra mb-2 flex gap-1.5 overflow-x-auto pb-1">
           {sugeridas.map((s) => (
             <button
               key={s}
@@ -218,7 +270,7 @@ interface AsistenteFlotanteProps {
   ocultarEnPantallaAncha: boolean;
 }
 
-// Botón redondo abajo a la derecha que abre el asistente desde cualquier pantalla de la gerencia.
+// Botón redondo abajo a la derecha que abre el asistente desde cualquier pantalla, para todo el personal.
 export const AsistenteFlotante: React.FC<AsistenteFlotanteProps> = ({ abierto, onCambiar, ocultarEnPantallaAncha }) => {
   const { pensando } = useAsistente();
   return (
