@@ -181,7 +181,10 @@ const LoginView: React.FC<LoginViewProps> = ({ onIngreso, aviso }) => {
       <PanelNocturno marca={marca} esPlataforma={esPlataforma} />
 
       <div className="relative flex items-center justify-center px-4 py-12">
-        <ThemeToggle className="absolute right-4 top-4" />
+        {/* El contenedor ubica la lunita: la clase .tema-boton fija su propia posición (relative). */}
+        <div className="absolute right-4 top-4">
+          <ThemeToggle />
+        </div>
         <div className="w-full max-w-sm animate-pop-in">
           <img src="/logo.png" alt="MotelOS" className="logo mb-8 h-9 object-contain lg:hidden" />
           <h1 className="text-2xl font-semibold text-ink">Ingresar</h1>
