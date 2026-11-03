@@ -55,9 +55,11 @@ BEGIN
     IF NOT bloqueado THEN RAISE EXCEPTION 'motel_app dio de baja a un conserje con su guardia abierta'; END IF;
 
     -- Tarifas: una nueva reemplaza a la vigente; la anterior no se edita ni se borra.
+    -- (migracion 008: la tarifa es de una categoria; la nueva reemplaza a la de la misma categoria)
     SELECT id INTO tarifa_vieja FROM tarifas WHERE vigente;
     UPDATE tarifas SET vigente = false WHERE id = tarifa_vieja;
-    INSERT INTO tarifas (nombre, tarifa_base, tarifa_fraccion, creada_por_id) VALUES ('Verificacion', 9000, 2500, gerencia_id);
+    INSERT INTO tarifas (nombre, tarifa_base, tarifa_fraccion, creada_por_id, categoria_id)
+    SELECT 'Verificacion', 9000, 2500, gerencia_id, categoria_id FROM tarifas WHERE id = tarifa_vieja;
 
     bloqueado := false;
     BEGIN UPDATE tarifas SET tarifa_base = 1 WHERE id = tarifa_vieja;
@@ -75,7 +77,8 @@ BEGIN
     IF NOT bloqueado THEN RAISE EXCEPTION 'Quedaron dos tarifas vigentes'; END IF;
 
     -- Habitaciones: alta, baja logica; la ocupada no se da de baja ni cambia de numero; no se borran.
-    INSERT INTO habitaciones (numero, estado) VALUES (999, 'Libre') RETURNING id INTO hab_nueva;
+    INSERT INTO habitaciones (numero, estado, categoria_id)
+    SELECT 999, 'Libre', categoria_id FROM habitaciones WHERE id = 1 RETURNING id INTO hab_nueva;
     UPDATE habitaciones SET activa = false WHERE id = hab_nueva;
 
     bloqueado := false;

@@ -13,8 +13,9 @@ from sqlalchemy import func, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.inquilino import PLATAFORMA, SIN_FILTRO, fijar_establecimiento
+from app.core.inquilino import PLATAFORMA, SIN_FILTRO, fijar_establecimiento, funcion_disponible
 from app.core.seguridad import hashear_clave
+from app.models.categoria import CategoriaHabitacion
 from app.models.configuracion import ConfiguracionCaja
 from app.models.establecimiento import Establecimiento
 from app.models.guardia import Guardia
@@ -29,12 +30,8 @@ CENTAVO = Decimal("0.01")
 
 
 async def _con_funciones_de_la_base(db: AsyncSession) -> bool:
-    """True si la base tiene las funciones de la migración 006. Las pruebas crean el esquema desde los modelos
-    (SQLite, o PostgreSQL como dueño de las tablas) y no las tienen: ahí corre el mismo cálculo en Python."""
-    if db.get_bind().dialect.name != "postgresql":
-        return False
-    consulta = text("SELECT to_regprocedure('crear_gerencia_inicial(text,text,text)') IS NOT NULL")
-    return bool((await db.execute(consulta)).scalar())
+    """Las funciones de la migración 006; las pruebas no las tienen y hacen el mismo cálculo en Python."""
+    return await funcion_disponible(db, "crear_gerencia_inicial(text,text,text)")
 
 
 async def alta_establecimiento(db: AsyncSession, datos: EstablecimientoAlta) -> Establecimiento:
@@ -63,11 +60,17 @@ async def alta_establecimiento(db: AsyncSession, datos: EstablecimientoAlta) -> 
     # RLS (WITH CHECK) porque pertenece a él.
     await fijar_establecimiento(db, establecimiento.id)
     ahora = datetime.now(UTC)
+    # La categoría inicial (migración 008): todas las habitaciones arrancan en ella; la gerencia crea las demás.
+    simple = CategoriaHabitacion(nombre="Simple", descripcion="Habitación estándar", color="#244473", orden=1)
+    db.add(simple)
+    await db.flush()
     db.add_all(
-        [Habitacion(numero=n, estado="Libre", activa=True) for n in range(1, datos.habitaciones + 1)]
+        [Habitacion(numero=n, estado="Libre", activa=True, categoria_id=simple.id)
+         for n in range(1, datos.habitaciones + 1)]
         + [
             Tarifa(
-                nombre=f"Vigente desde {ahora:%Y-%m-%d %H:%M:%S.%f}",
+                nombre=f"Simple desde {ahora:%Y-%m-%d %H:%M:%S.%f}",
+                categoria_id=simple.id,
                 tarifa_base=Decimal(str(datos.tarifa_base)).quantize(CENTAVO),
                 estadia_base_min=datos.estadia_base_min,
                 tolerancia_min=0,
@@ -141,6 +144,7 @@ async def _resumen_postgresql(db: AsyncSession) -> dict[int, dict]:
             "turnos_ultimas_24h": f["turnos_ultimas_24h"],
             "cobrado_ultimas_24h": float(f["cobrado_ultimas_24h"]),
             "guardia_abierta": f["guardia_abierta"],
+            "categorias": f.get("categorias", 0),
         }
         for f in filas
     }
@@ -170,6 +174,9 @@ async def _resumen_sin_rls(db: AsyncSession) -> dict[int, dict]:
         Pago.establecimiento_id, Pago.created_at >= desde, agregado=func.sum(Pago.monto)
     )
     guardias = await por_establecimiento(Guardia.establecimiento_id, Guardia.estado == "Abierta")
+    categorias = await por_establecimiento(
+        CategoriaHabitacion.establecimiento_id, CategoriaHabitacion.activa.is_(True)
+    )
     ids = set(habitaciones) | set(usuarios)
     return {
         i: {
@@ -179,6 +186,7 @@ async def _resumen_sin_rls(db: AsyncSession) -> dict[int, dict]:
             "turnos_ultimas_24h": turnos.get(i, 0),
             "cobrado_ultimas_24h": float(cobrado.get(i) or 0),
             "guardia_abierta": bool(guardias.get(i)),
+            "categorias": categorias.get(i, 0),
         }
         for i in ids
     }

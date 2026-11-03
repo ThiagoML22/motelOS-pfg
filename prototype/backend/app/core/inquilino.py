@@ -21,6 +21,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session, declared_attr, with_loader_criteria
 
 CLAVE = "establecimiento_id"
+# Usuario de la sesión (migración 008): lo usan las funciones de la base que cambian una clave.
+CLAVE_OPERADOR = "operador_id"
 PLATAFORMA = 0
 # Opción de ejecución para las pocas consultas que recorren todos los establecimientos (resumen de la
 # plataforma en SQLite y depuración de patentes). En PostgreSQL esas consultas las resuelve la base.
@@ -48,14 +50,33 @@ async def fijar_establecimiento(db: AsyncSession, establecimiento_id: int) -> No
         )
 
 
+async def fijar_operador(db: AsyncSession, operador_id: int) -> None:
+    """Asocia la sesión al usuario autenticado (sale del token firmado, nunca del cuerpo de la petición)."""
+    db.info[CLAVE_OPERADOR] = operador_id
+    if db.get_bind().dialect.name == "postgresql":
+        await db.execute(text("SELECT set_config('app.operador_id', :valor, true)"), {"valor": str(operador_id)})
+
+
+async def funcion_disponible(db: AsyncSession, firma: str) -> bool:
+    """True si la base tiene la función de una migración (p. ej. 'cambiar_clave_propia(text)'). Las pruebas crean el
+    esquema desde los modelos (SQLite, o PostgreSQL como dueño de las tablas) y no las tienen: ahí la aplicación hace
+    el mismo cambio con el ORM."""
+    if db.get_bind().dialect.name != "postgresql":
+        return False
+    consulta = text("SELECT to_regprocedure(:firma) IS NOT NULL")
+    return bool((await db.execute(consulta, {"firma": firma})).scalar())
+
+
 @event.listens_for(Session, "after_begin")
 def _fijar_en_la_transaccion(session: Session, _transaction, connection) -> None:
-    establecimiento_id = session.info.get(CLAVE)
-    if establecimiento_id is not None and connection.dialect.name == "postgresql":
-        # El tercer argumento (true) limita el valor a la transacción: la conexión vuelve limpia al pool.
-        connection.execute(
-            text("SELECT set_config('app.establecimiento_id', :valor, true)"), {"valor": str(establecimiento_id)}
-        )
+    if connection.dialect.name != "postgresql":
+        return
+    # El tercer argumento (true) limita cada valor a la transacción: la conexión vuelve limpia al pool.
+    for clave, variable in ((CLAVE, "app.establecimiento_id"), (CLAVE_OPERADOR, "app.operador_id")):
+        valor = session.info.get(clave)
+        if valor is not None:
+            connection.execute(text("SELECT set_config(:variable, :valor, true)"), {"variable": variable,
+                                                                                     "valor": str(valor)})
 
 
 @event.listens_for(Session, "do_orm_execute")

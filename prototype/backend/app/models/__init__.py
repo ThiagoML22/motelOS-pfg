@@ -4,6 +4,7 @@ from app.models import (  # noqa: F401
     actividad,
     arqueo,
     articulo,
+    categoria,
     configuracion,
     consumo,
     establecimiento,
