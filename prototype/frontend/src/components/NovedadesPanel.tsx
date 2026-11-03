@@ -119,13 +119,13 @@ interface NovedadesCardProps {
   onNueva: () => void;
 }
 
-// Barra de una línea sobre la grilla: la novedad más importante de las últimas 24 horas. «Ver todas» abre la lista
-// superpuesta, así la grilla (lo principal de la ventanilla) no se corre hacia abajo.
+// Tarjeta compacta sobre la grilla: el título y las dos novedades más importantes de las últimas 24 horas, una línea
+// cada una. «Ver todas» abre la lista completa superpuesta, así la grilla (lo principal de la ventanilla) no se corre.
 export const NovedadesCard: React.FC<NovedadesCardProps> = ({ novedades, onNueva }) => {
   const [abierta, setAbierta] = useState(false);
   const contenedor = useRef<HTMLDivElement>(null);
   const ultimas = recientes(novedades).sort((a, b) => Number(b.importante) - Number(a.importante) || b.id - a.id);
-  const destacada = ultimas[0];
+  const visibles = ultimas.slice(0, 2);
 
   useEffect(() => {
     if (!abierta) return;
@@ -142,43 +142,21 @@ export const NovedadesCard: React.FC<NovedadesCardProps> = ({ novedades, onNueva
   }, [abierta]);
 
   return (
-    <div ref={contenedor} className="relative mb-4">
-      <div
-        className={`flex min-h-[2.75rem] items-center gap-3 rounded-lg border px-3 py-1.5 text-sm ${
-          destacada?.importante ? 'border-warn/40 bg-warn-soft' : 'border-line bg-surface'
-        }`}
-      >
-        {destacada?.importante ? (
-          <AlertTriangle className="h-4 w-4 shrink-0 text-warn" aria-label="Importante" />
-        ) : (
+    <section ref={contenedor} className="relative mb-4 rounded-lg border border-line bg-surface px-3 py-2.5" aria-labelledby="titulo-novedades">
+      <div className="flex items-center gap-2">
+        <h2 id="titulo-novedades" className="flex min-w-0 flex-1 items-center gap-2 text-sm font-semibold text-ink">
           <NotebookPen className="h-4 w-4 shrink-0 text-muted" aria-hidden="true" />
-        )}
-        {destacada ? (
-          <button
-            type="button"
-            onClick={() => setAbierta((v) => !v)}
-            aria-expanded={abierta}
-            className="min-w-0 flex-1 truncate text-left text-ink"
-            title={destacada.texto}
-          >
-            {destacada.texto}
-            <span className="text-muted">
-              {' '}
-              · {destacada.operador_nombre}
-              {destacada.habitacion_numero !== null && ` · ${formatRoomNumber(destacada.habitacion_numero)}`}
-            </span>
-          </button>
-        ) : (
-          <span className="min-w-0 flex-1 truncate text-muted">Sin novedades en las últimas 24 horas.</span>
-        )}
-        {ultimas.length > 1 && (
+          Novedades
+          <span className="font-normal text-subtle">· últimas 24 horas{ultimas.length > 0 && ` · ${ultimas.length}`}</span>
+        </h2>
+        {ultimas.length > 2 && (
           <button
             type="button"
             onClick={() => setAbierta((v) => !v)}
             aria-expanded={abierta}
             className="press inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-accent hover:bg-accent-soft"
           >
-            Ver las {ultimas.length}
+            Ver todas
             <ChevronDown className={`h-3.5 w-3.5 transition-transform ${abierta ? 'rotate-180' : ''}`} aria-hidden="true" />
           </button>
         )}
@@ -187,12 +165,35 @@ export const NovedadesCard: React.FC<NovedadesCardProps> = ({ novedades, onNueva
           <span className="hidden sm:inline">Dejar novedad</span>
         </Button>
       </div>
-      {abierta && ultimas.length > 0 && (
+      {visibles.length === 0 ? (
+        <p className="mt-1.5 text-sm text-muted">Nadie dejó novedades. Si algo necesita atención, dejalo escrito acá.</p>
+      ) : (
+        <ul className="mt-2 space-y-1">
+          {visibles.map((n) => (
+            <li
+              key={n.id}
+              className={`flex items-center gap-2 rounded-md px-2.5 py-1.5 text-sm ${
+                n.importante ? 'bg-warn-soft' : 'bg-surface-2'
+              }`}
+              title={n.texto}
+            >
+              {n.importante && <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-warn" aria-label="Importante" />}
+              <span className="min-w-0 flex-1 truncate text-ink">{n.texto}</span>
+              <span className="hidden shrink-0 text-xs text-muted md:inline">
+                {n.operador_nombre}
+                {n.habitacion_numero !== null && ` · ${formatRoomNumber(n.habitacion_numero)}`} ·{' '}
+                {parseUtc(n.creado_en).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {abierta && (
         <div className="absolute inset-x-0 top-full z-20 mt-2 max-h-[60vh] animate-pop-in overflow-y-auto rounded-lg border border-line bg-surface p-3 shadow-panel">
           <p className="mb-2 text-xs font-medium uppercase tracking-wide text-subtle">Novedades de las últimas 24 horas</p>
           <ListaNovedades novedades={ultimas} />
         </div>
       )}
-    </div>
+    </section>
   );
 };

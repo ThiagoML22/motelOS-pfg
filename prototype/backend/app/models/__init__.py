@@ -14,6 +14,7 @@ from app.models import (  # noqa: F401
     novedad,
     operador,
     pago,
+    pedido,
     tarifa,
     turno,
 )

@@ -558,6 +558,38 @@ export interface RespuestaAsistente {
   acciones?: AccionAsistente[];
 }
 
+// Pedidos de reposición a proveedores (migración 010).
+export interface PedidoItem {
+  articulo_id: number;
+  codigo: string;
+  descripcion: string;
+  cantidad: number;
+  recibida: number | null;
+  stock_actual: number;
+}
+
+export interface Pedido {
+  id: number;
+  creado_en: string;
+  creado_por_nombre: string;
+  proveedor: string | null;
+  nota: string | null;
+  estado: 'Pendiente' | 'Recibido' | 'Anulado';
+  cerrado_en: string | null;
+  cerrado_por_nombre: string | null;
+  items: PedidoItem[];
+}
+
+export interface SugeridoPedido {
+  articulo_id: number;
+  codigo: string;
+  descripcion: string;
+  stock: number;
+  por_dia: number;
+  dias_restantes: number | null;
+  sugerido: number;
+}
+
 // Arqueos de un mes (por el día en que se abrió cada guardia).
 export interface ResumenMes {
   mes: string;

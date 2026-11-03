@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { CalendarSearch, ChevronDown, ChevronsDownUp } from 'lucide-react';
+import { CalendarSearch, ChevronDown, ChevronsDownUp, FileDown, FileSpreadsheet } from 'lucide-react';
 import { Arqueo, ResumenMes } from '../types';
-import { api, getErrorMessage } from '../services/api';
+import { api, descargar, getErrorMessage } from '../services/api';
 import { formatMoney, parseUtc } from '../utils/format';
 import { CATEGORIA_META, formatPorcentaje } from '../utils/caja';
 import Button from './ui/Button';
@@ -99,6 +99,50 @@ const HistorialArqueos: React.FC<HistorialArqueosProps> = ({ operadorId, version
     return () => clearTimeout(fin);
   }, [resaltado, porMes]);
 
+  // Exportación del mes: el PDF lo arma el servidor; el CSV (separador «;» y BOM para que Excel respete las tildes),
+  // el navegador con los arqueos del mes.
+  const exportarPdf = async (mes: ResumenMes) => {
+    try {
+      await api.descargarInformeMes(mes.mes, operador);
+    } catch (err) {
+      toast(getErrorMessage(err, 'No se pudo generar el informe en PDF.'), 'error');
+    }
+  };
+
+  const exportarCsv = async (mes: ResumenMes) => {
+    try {
+      const cargados = porMes[mes.mes];
+      const lista = Array.isArray(cargados)
+        ? cargados
+        : (
+            await api.getArqueos({ desde: sumarDias(mes.desde, -1), hasta: sumarDias(mes.hasta, 1), operador_id: operador })
+          ).filter((a) => claveDia(parseUtc(a.abierta_en)).startsWith(mes.mes));
+      const celda = (valor: unknown) => `"${String(valor ?? '').replace(/"/g, '""')}"`;
+      const numero = (valor: number) => String(valor).replace('.', ',');
+      const filas = [
+        ['Día', 'Guardia', 'Conserje', 'Fondo inicial', 'Declarado', 'Sistema', 'Diferencia', 'Resultado', 'Supervisado', 'Observación'],
+        ...[...lista]
+          .sort((x, y) => parseUtc(x.abierta_en).getTime() - parseUtc(y.abierta_en).getTime())
+          .map((a) => [
+            claveDia(parseUtc(a.abierta_en)),
+            FRANJA[a.franja] ?? a.franja,
+            a.operador_nombre,
+            numero(a.fondo_inicial),
+            numero(a.total_declarado),
+            numero(a.total_sistema),
+            numero(a.diferencia),
+            a.categoria,
+            a.supervisado ? 'Sí' : 'No',
+            a.observacion ?? '',
+          ]),
+      ];
+      const texto = '﻿' + filas.map((f) => f.map(celda).join(';')).join('\r\n');
+      descargar(new Blob([texto], { type: 'text/csv;charset=utf-8' }), `arqueos-${mes.mes}.csv`);
+    } catch (err) {
+      toast(getErrorMessage(err, 'No se pudo exportar el mes.'), 'error');
+    }
+  };
+
   const alternar = (mes: string) =>
     setAbiertos((previo) => {
       const nuevo = new Set(previo);
@@ -161,11 +205,12 @@ const HistorialArqueos: React.FC<HistorialArqueosProps> = ({ operadorId, version
           const carga = porMes[mes.mes];
           return (
             <div key={mes.mes} className="overflow-hidden rounded-lg border border-line bg-surface">
+              <div className="flex items-center gap-2 pr-3 hover:bg-surface-2">
               <button
                 type="button"
                 onClick={() => alternar(mes.mes)}
                 aria-expanded={abierto}
-                className="flex w-full flex-wrap items-center gap-x-6 gap-y-1 px-4 py-3 text-left hover:bg-surface-2"
+                className="flex min-w-0 flex-1 flex-wrap items-center gap-x-6 gap-y-1 px-4 py-3 text-left"
               >
                 <span className="flex min-w-[11rem] items-center gap-2 font-semibold text-ink">
                   <ChevronDown className={`h-4 w-4 text-muted transition-transform ${abierto ? '' : '-rotate-90'}`} aria-hidden="true" />
@@ -180,6 +225,17 @@ const HistorialArqueos: React.FC<HistorialArqueosProps> = ({ operadorId, version
                 <Dato etiqueta="Faltantes" valor={`${mes.faltantes} · ${formatMoney(mes.total_faltante)}`} clase="text-danger" />
                 <Dato etiqueta="Sobrantes" valor={`${mes.sobrantes} · ${formatMoney(mes.total_sobrante)}`} clase="text-warn" />
               </button>
+              <div className="flex shrink-0 gap-1" role="group" aria-label={`Exportar ${nombreMes(mes.mes)}`}>
+                <Button variant="ghost" size="sm" title="Informe del mes en PDF" onClick={() => void exportarPdf(mes)}>
+                  <FileDown className="h-3.5 w-3.5" aria-hidden="true" />
+                  PDF
+                </Button>
+                <Button variant="ghost" size="sm" title="Arqueos del mes para Excel (CSV)" onClick={() => void exportarCsv(mes)}>
+                  <FileSpreadsheet className="h-3.5 w-3.5" aria-hidden="true" />
+                  Excel
+                </Button>
+              </div>
+              </div>
               {abierto && (
                 <div className="border-t border-line">
                   {carga === 'cargando' || carga === undefined ? (

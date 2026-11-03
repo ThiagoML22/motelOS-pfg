@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { AlertaIA, Severidad, SugerenciaTarifa, Tablero } from '../types';
 import { ChatAsistente } from './Asistente';
+import { BotonNuevoPedido } from './PedidosReposicion';
 import { api, EVENTO_RECONECTADO, getErrorMessage } from '../services/api';
 import { formatMoney, parseUtc } from '../utils/format';
 import { formatMinutos } from '../utils/turno';
@@ -601,10 +602,13 @@ const ReposicionCard: React.FC<{ tablero: Tablero }> = ({ tablero }) => {
           </tbody>
         </table>
       </div>
-      <p className="mt-2 text-xs text-subtle">
-        Ritmo de venta de los últimos 28 días (la última semana pesa el doble); el pedido completa dos semanas y redondea a
-        packs de 6.
-      </p>
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+        <p className="text-xs text-subtle">
+          Ritmo de venta de los últimos 28 días (la última semana pesa el doble); el pedido completa dos semanas y redondea a
+          packs de 6.
+        </p>
+        {aPedir.length > 0 && <BotonNuevoPedido etiqueta="Armar pedido con esto" />}
+      </div>
     </Tarjeta>
   );
 };

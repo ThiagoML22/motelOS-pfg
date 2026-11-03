@@ -122,6 +122,16 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
   // Categorías de habitación (Simple, Especial, VIP...) con su tarifa vigente, y el filtro de la grilla por categoría.
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [filtroCategoria, setFiltroCategoria] = useState<number | null>(null);
+  // Orden de la grilla: por número (como siempre) o, si el puesto lo elige, por vencimiento. Se recuerda en el puesto.
+  const [orden, setOrden] = useState<OrdenGrilla>(leerOrden);
+  const cambiarOrden = (valor: OrdenGrilla) => {
+    setOrden(valor);
+    try {
+      localStorage.setItem(CLAVE_ORDEN, valor);
+    } catch {
+      // sin almacenamiento local, vuelve a «por número» al recargar
+    }
+  };
   // Registro de actividad: entradas de los conserjes que la gerencia todavía no vio.
   const [pendientes, setPendientes] = useState(0);
   // Novedades de guardia (migración 009), la paleta de comandos y una pregunta enviada desde ella al asistente.
@@ -330,7 +340,8 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
 
   const deCategoria = filtroCategoria === null ? habitaciones : habitaciones.filter((h) => h.categoria_id === filtroCategoria);
   const conteo = (estado: RoomStatus) => deCategoria.filter((h) => h.estado === estado).length;
-  const visibles = filtro === 'Todas' ? deCategoria : deCategoria.filter((h) => h.estado === filtro);
+  const filtradas = filtro === 'Todas' ? deCategoria : deCategoria.filter((h) => h.estado === filtro);
+  const visibles = orden === 'numero' ? filtradas : ordenarPorVencimiento(filtradas, categorias, now);
   const categoriasConHabitaciones = categorias.filter((c) => habitaciones.some((h) => h.categoria_id === c.id));
 
   return (
@@ -404,6 +415,17 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
                     {ESTADO_META[estado].label} <span className="tabular-nums">{conteo(estado)}</span>
                   </button>
                 ))}
+                <label className="ml-1 flex items-center gap-1.5 text-xs text-muted">
+                  Ordenar
+                  <select
+                    value={orden}
+                    onChange={(e) => cambiarOrden(e.target.value as OrdenGrilla)}
+                    className="h-8 rounded-md border border-line-strong bg-surface px-2 text-sm text-ink focus:border-accent focus-visible:outline-none"
+                  >
+                    <option value="numero">por número</option>
+                    <option value="vencimiento">por vencimiento</option>
+                  </select>
+                </label>
               </div>
             </div>
 
@@ -543,6 +565,32 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
     </div>
   );
 }
+
+type OrdenGrilla = 'numero' | 'vencimiento';
+const CLAVE_ORDEN = 'motelos.orden-grilla';
+
+const leerOrden = (): OrdenGrilla => {
+  try {
+    return localStorage.getItem(CLAVE_ORDEN) === 'vencimiento' ? 'vencimiento' : 'numero';
+  } catch {
+    return 'numero';
+  }
+};
+
+// Por vencimiento: primero las ocupadas, de la que vence (o ya se excedió) antes a la que vence después; luego las de
+// limpieza, las disponibles y las de mantenimiento, cada grupo por número.
+const GRUPO: Record<RoomStatus, number> = { Ocupada: 0, 'En Limpieza': 1, Libre: 2, Mantenimiento: 3 };
+const ordenarPorVencimiento = (habitaciones: HabitacionConDetalles[], categorias: Categoria[], now: number) => {
+  const restante = (h: HabitacionConDetalles) => {
+    const turno = h.estado === 'Ocupada' ? h.turno_activo : null;
+    if (!turno) return Infinity;
+    const base = turno.estadia_base_min ?? categorias.find((c) => c.id === h.categoria_id)?.tarifa?.estadia_base_min ?? 120;
+    return base * 60000 - elapsedMs(turno, now);
+  };
+  return [...habitaciones].sort(
+    (a, b) => GRUPO[a.estado] - GRUPO[b.estado] || restante(a) - restante(b) || a.numero - b.numero,
+  );
+};
 
 // RNF-09: aviso fijo mientras dura el corte. Lo que no se confirmó antes del corte no quedó registrado.
 function AvisoSinConexion({ desde, onReintentar }: { desde: number | null; onReintentar: () => void }) {
