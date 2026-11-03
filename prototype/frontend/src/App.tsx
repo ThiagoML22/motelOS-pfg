@@ -115,7 +115,7 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
   const esGerencia = sesion.operador.rol === 'ADMINISTRADOR';
   // El conserje opera solo con su propia guardia abierta (RF-08).
   const conGuardiaPropia = esGerencia || Boolean(sesion.guardia?.es_propia);
-  const [activeView, setActiveView] = useState<View>(esGerencia ? 'inteligencia' : 'dashboard');
+  const [activeView, setActiveView] = useState<View>(esGerencia ? 'gerencia' : 'dashboard');
   const [habitaciones, setHabitaciones] = useState<HabitacionConDetalles[]>([]);
   const [carga, setCarga] = useState<Carga>('cargando');
   const [filtro, setFiltro] = useState<Filtro>('Todas');

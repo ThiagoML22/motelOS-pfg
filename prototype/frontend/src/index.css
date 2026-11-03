@@ -350,6 +350,15 @@
 }
 
 @layer components {
+  /* Desplazamiento horizontal sin barra visible (el menú del encabezado en pantallas angostas). */
+  .sin-barra {
+    scrollbar-width: none;
+  }
+
+  .sin-barra::-webkit-scrollbar {
+    display: none;
+  }
+
   /* Retroalimentación al presionar: leve hundimiento con transición suave. */
   .press {
     @apply transition duration-150 ease-out active:scale-[0.97];

@@ -170,7 +170,7 @@ const InteligenciaView: React.FC = () => {
           </>
           )}
         </div>
-        <aside className="hidden xl:sticky xl:top-20 xl:block xl:self-start">
+        <aside className="hidden xl:sticky xl:top-[7.5rem] xl:block xl:self-start">
           <ChatAsistente />
         </aside>
       </div>
