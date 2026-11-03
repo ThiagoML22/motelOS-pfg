@@ -21,6 +21,8 @@ export interface Turno {
   total_consumos: number;
   total_general: number;
   abierto_por?: string | null;
+  // Estadía base de la tarifa del turno (depende de la categoría de la habitación).
+  estadia_base_min?: number | null;
 }
 
 export interface TurnoCreate {
@@ -48,11 +50,23 @@ export interface Articulo {
   activo?: boolean;
 }
 
+export interface TarifaDelTurno {
+  categoria?: string | null;
+  color?: string | null;
+  tarifa_base: number;
+  estadia_base_min: number;
+  fraccion_min: number;
+  tarifa_fraccion: number;
+  tolerancia_min: number;
+  tope?: number | null;
+}
+
 export interface TurnoResumen extends Turno {
   minutos_transcurridos: number;
   total_pagado: number;
   saldo_pendiente: number;
   consumos: Consumo[];
+  tarifa?: TarifaDelTurno | null;
 }
 
 export interface PagoItem {
@@ -76,6 +90,7 @@ export interface ConstanciaCobro {
 }
 
 export interface HabitacionConDetalles extends Habitacion {
+  categoria_id?: number | null;
   turno_activo?: Turno | null;
 }
 
@@ -188,13 +203,60 @@ export interface TarifaDatos {
   estadia_base_min: number;
   fraccion_min: number;
   tarifa_fraccion: number;
+  // Minutos de gracia antes de la primera fracción y precio máximo de la estadía (pernocte). Migración 008.
+  tolerancia_min: number;
+  tope?: number | null;
+  categoria_id?: number;
 }
 
 export interface Tarifa extends TarifaDatos {
   id: number;
   nombre: string;
+  categoria_id: number;
   vigente: boolean;
   vigente_desde: string;
+}
+
+// Categoría de habitación (Simple, Especial, VIP...) con su tarifa vigente.
+export interface Categoria {
+  id: number;
+  nombre: string;
+  descripcion?: string | null;
+  color: string;
+  orden: number;
+  activa: boolean;
+  habitaciones: number;
+  tarifa?: Tarifa | null;
+}
+
+export interface CategoriaDatos {
+  nombre?: string;
+  descripcion?: string | null;
+  color?: string;
+  orden?: number;
+  activa?: boolean;
+}
+
+export interface CategoriaAlta {
+  nombre: string;
+  descripcion?: string | null;
+  color: string;
+  orden: number;
+  tarifa: TarifaDatos;
+}
+
+export interface Perfil {
+  id: number;
+  usuario: string;
+  nombre_visible: string;
+  rol: Rol;
+  establecimiento_nombre?: string | null;
+  establecimiento_codigo?: string | null;
+  creado_en: string;
+  ultimo_acceso?: string | null;
+  guardias_30_dias: number;
+  turnos_30_dias: number;
+  arqueos_30_dias: number;
 }
 
 export interface FondoCambio {
@@ -207,6 +269,7 @@ export interface HabitacionConfiguracion {
   numero: number;
   estado: RoomStatus;
   activa: boolean;
+  categoria_id: number;
 }
 
 export interface ArticuloCambios {
@@ -254,6 +317,7 @@ export interface EstablecimientoResumen extends Establecimiento {
   turnos_ultimas_24h: number;
   cobrado_ultimas_24h: number;
   guardia_abierta: boolean;
+  categorias: number;
 }
 
 export interface EstablecimientoAlta {
@@ -272,7 +336,14 @@ export interface EstablecimientoAlta {
   gerente_clave: string;
 }
 
-export type CategoriaActividad = 'INVENTARIO' | 'TARIFA' | 'CAJA' | 'HABITACION' | 'PERSONAL' | 'ESTABLECIMIENTO';
+export type CategoriaActividad =
+  | 'INVENTARIO'
+  | 'TARIFA'
+  | 'CAJA'
+  | 'HABITACION'
+  | 'PERSONAL'
+  | 'ESTABLECIMIENTO'
+  | 'PERFIL';
 
 export interface Actividad {
   id: number;

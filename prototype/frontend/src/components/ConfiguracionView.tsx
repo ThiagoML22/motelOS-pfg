@@ -1,17 +1,18 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { BedDouble, Building2, Coins, Package, Receipt, Users } from 'lucide-react';
-import { Articulo, Establecimiento, FondoCambio, HabitacionConfiguracion, OperadorEstado, Tarifa } from '../types';
+import { BedDouble, Building2, Coins, KeyRound, Package, Tags, Users } from 'lucide-react';
+import { Articulo, Categoria, Establecimiento, FondoCambio, HabitacionConfiguracion, OperadorEstado } from '../types';
 import { api, getErrorMessage } from '../services/api';
 import { formatDateTime, formatMoney, formatRoomNumber } from '../utils/format';
 import Button from './ui/Button';
 import Field, { inputClass } from './ui/Field';
 import Modal from './ui/Modal';
 import { useToast } from './ui/Toast';
+import SeccionCategorias, { ChipCategoria } from './CategoriasConfig';
 
 type Seccion = 'tarifa' | 'fondo' | 'articulos' | 'habitaciones' | 'conserjes' | 'establecimiento';
 
 const SECCIONES: { id: Seccion; label: string; icon: React.ElementType }[] = [
-  { id: 'tarifa', label: 'Tarifa', icon: Receipt },
+  { id: 'tarifa', label: 'Categorías y tarifas', icon: Tags },
   { id: 'fondo', label: 'Fondo de cambio', icon: Coins },
   { id: 'articulos', label: 'Artículos', icon: Package },
   { id: 'habitaciones', label: 'Habitaciones', icon: BedDouble },
@@ -38,7 +39,7 @@ interface ConfiguracionViewProps {
 const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({ onCambioHabitaciones }) => {
   const { toast } = useToast();
   const [seccion, setSeccion] = useState<Seccion>('tarifa');
-  const [tarifas, setTarifas] = useState<Tarifa[]>([]);
+  const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [fondo, setFondo] = useState<FondoCambio | null>(null);
   const [articulos, setArticulos] = useState<Articulo[]>([]);
   const [habitaciones, setHabitaciones] = useState<HabitacionConfiguracion[]>([]);
@@ -51,14 +52,14 @@ const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({ onCambioHabitacio
   const cargar = useCallback(async () => {
     try {
       const [t, f, a, h, o, e] = await Promise.all([
-        api.getTarifas(),
+        api.getCategoriasConfiguracion(),
         api.getFondoCambio(),
         api.getArticulosConfiguracion(),
         api.getHabitacionesConfiguracion(),
         api.getOperadores(),
         api.getEstablecimiento(),
       ]);
-      setTarifas(t);
+      setCategorias(t);
       setFondo(f);
       setArticulos(a);
       setHabitaciones(h);
@@ -132,7 +133,19 @@ const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({ onCambioHabitacio
 
       {estado === 'ok' && (
         <section className="rounded-lg border border-line bg-surface p-5">
-          {seccion === 'tarifa' && <SeccionTarifa tarifas={tarifas} ocupado={ocupado} ejecutar={ejecutar} />}
+          {seccion === 'tarifa' && (
+            <SeccionCategorias
+              categorias={categorias}
+              habitaciones={habitaciones}
+              ocupado={ocupado}
+              ejecutar={async (accion, exito, error) => {
+                const ok = await ejecutar(accion, exito, error);
+                if (ok) await onCambioHabitaciones();
+                return ok;
+              }}
+              confirmar={setConfirmacion}
+            />
+          )}
           {seccion === 'fondo' && fondo && <SeccionFondo fondo={fondo} ocupado={ocupado} ejecutar={ejecutar} />}
           {seccion === 'articulos' && (
             <SeccionArticulos articulos={articulos} ocupado={ocupado} ejecutar={ejecutar} confirmar={setConfirmacion} />
@@ -140,6 +153,7 @@ const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({ onCambioHabitacio
           {seccion === 'habitaciones' && (
             <SeccionHabitaciones
               habitaciones={habitaciones}
+              categorias={categorias}
               ocupado={ocupado}
               ejecutar={async (accion, exito, error) => {
                 const ok = await ejecutar(accion, exito, error);
@@ -190,97 +204,6 @@ const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({ onCambioHabitacio
 type Ejecutar = (accion: () => Promise<unknown>, exito: string, error: string) => Promise<boolean>;
 
 const numero = (valor: string): number => Number(valor.replace(',', '.'));
-
-// --- Tarifa ------------------------------------------------------------------------------------------------------
-
-const SeccionTarifa: React.FC<{ tarifas: Tarifa[]; ocupado: boolean; ejecutar: Ejecutar }> = ({
-  tarifas,
-  ocupado,
-  ejecutar,
-}) => {
-  const vigente = tarifas.find((t) => t.vigente);
-  const [form, setForm] = useState({
-    tarifa_base: String(vigente?.tarifa_base ?? ''),
-    estadia_base_min: String(vigente?.estadia_base_min ?? 120),
-    fraccion_min: String(vigente?.fraccion_min ?? 30),
-    tarifa_fraccion: String(vigente?.tarifa_fraccion ?? ''),
-  });
-  const set = (clave: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
-    setForm((prev) => ({ ...prev, [clave]: e.target.value }));
-
-  const guardar = async (e: React.FormEvent) => {
-    e.preventDefault();
-    await ejecutar(
-      () =>
-        api.nuevaTarifa({
-          tarifa_base: numero(form.tarifa_base),
-          estadia_base_min: numero(form.estadia_base_min),
-          fraccion_min: numero(form.fraccion_min),
-          tarifa_fraccion: numero(form.tarifa_fraccion),
-        }),
-      'Tarifa nueva vigente: rige para los turnos que se abran desde ahora.',
-      'No se pudo cambiar la tarifa.',
-    );
-  };
-
-  return (
-    <div className="grid gap-6 lg:grid-cols-2">
-      <form onSubmit={guardar} className="space-y-4">
-        <h2 className="text-base font-semibold text-ink">Tarifa vigente</h2>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Precio de la estadía base ($)" htmlFor="tarifa_base">
-            <input id="tarifa_base" inputMode="decimal" required className={campo} value={form.tarifa_base} onChange={set('tarifa_base')} />
-          </Field>
-          <Field label="Minutos que incluye" htmlFor="estadia_base_min">
-            <input id="estadia_base_min" inputMode="numeric" required className={campo} value={form.estadia_base_min} onChange={set('estadia_base_min')} />
-          </Field>
-          <Field label="Minutos de cada fracción" htmlFor="fraccion_min">
-            <input id="fraccion_min" inputMode="numeric" required className={campo} value={form.fraccion_min} onChange={set('fraccion_min')} />
-          </Field>
-          <Field label="Precio de cada fracción ($)" htmlFor="tarifa_fraccion">
-            <input id="tarifa_fraccion" inputMode="decimal" required className={campo} value={form.tarifa_fraccion} onChange={set('tarifa_fraccion')} />
-          </Field>
-        </div>
-        <p className="text-xs text-subtle">
-          La tarifa anterior no se modifica: los turnos abiertos o cerrados con ella la conservan.
-        </p>
-        <Button type="submit" disabled={ocupado} className="h-11">
-          Guardar tarifa nueva
-        </Button>
-      </form>
-
-      <div>
-        <h2 className="mb-3 text-base font-semibold text-ink">Historial</h2>
-        <table className="w-full text-sm">
-          <thead className="text-left text-xs text-muted">
-            <tr>
-              <th className="py-2 font-medium">Desde</th>
-              <th className="py-2 text-right font-medium">Estadía base</th>
-              <th className="py-2 text-right font-medium">Fracción</th>
-              <th className="py-2 text-right font-medium">Estado</th>
-            </tr>
-          </thead>
-          <tbody>
-            {tarifas.map((t) => (
-              <tr key={t.id} className="border-t border-line">
-                <td className="py-2">{formatDateTime(t.vigente_desde)}</td>
-                <td className="py-2 text-right tabular-nums">
-                  {formatMoney(t.tarifa_base)} · {t.estadia_base_min} min
-                </td>
-                <td className="py-2 text-right tabular-nums">
-                  {formatMoney(t.tarifa_fraccion)} · {t.fraccion_min} min
-                </td>
-                <td className={`py-2 text-right ${t.vigente ? 'font-medium text-libre' : 'text-muted'}`}>
-                  {t.vigente ? 'Vigente' : 'Anterior'}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-};
 
 // --- Fondo de cambio ---------------------------------------------------------------------------------------------
 
@@ -549,20 +472,26 @@ const SeccionArticulos: React.FC<SeccionConBajas & { articulos: Articulo[] }> = 
 
 // --- Habitaciones ------------------------------------------------------------------------------------------------
 
-const SeccionHabitaciones: React.FC<SeccionConBajas & { habitaciones: HabitacionConfiguracion[] }> = ({
+const SeccionHabitaciones: React.FC<
+  SeccionConBajas & { habitaciones: HabitacionConfiguracion[]; categorias: Categoria[] }
+> = ({
   habitaciones,
+  categorias,
   ocupado,
   ejecutar,
   confirmar,
 }) => {
   const [nueva, setNueva] = useState('');
+  const activas = categorias.filter((c) => c.activa);
+  const [categoriaNueva, setCategoriaNueva] = useState<number | ''>(activas[0]?.id ?? '');
+  const categoriaDe = (id: number) => categorias.find((c) => c.id === id);
   const [renumerando, setRenumerando] = useState<HabitacionConfiguracion | null>(null);
   const [numeroNuevo, setNumeroNuevo] = useState('');
 
   const agregar = async (e: React.FormEvent) => {
     e.preventDefault();
     const ok = await ejecutar(
-      () => api.altaHabitacion(numero(nueva)),
+      () => api.altaHabitacion(numero(nueva), categoriaNueva === '' ? undefined : categoriaNueva),
       `${formatRoomNumber(numero(nueva))} agregada a la grilla.`,
       'No se pudo agregar la habitación.',
     );
@@ -586,6 +515,20 @@ const SeccionHabitaciones: React.FC<SeccionConBajas & { habitaciones: Habitacion
         <Field label="Número de la habitación nueva" htmlFor="hab_nueva">
           <input id="hab_nueva" inputMode="numeric" required className={`${campo} w-48`} value={nueva} onChange={(e) => setNueva(e.target.value)} />
         </Field>
+        <Field label="Categoría" htmlFor="hab_nueva_categoria">
+          <select
+            id="hab_nueva_categoria"
+            className={`${campo} w-56`}
+            value={categoriaNueva}
+            onChange={(e) => setCategoriaNueva(Number(e.target.value))}
+          >
+            {activas.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.nombre}
+              </option>
+            ))}
+          </select>
+        </Field>
         <Button type="submit" className="h-11" disabled={ocupado}>
           Agregar habitación
         </Button>
@@ -594,6 +537,7 @@ const SeccionHabitaciones: React.FC<SeccionConBajas & { habitaciones: Habitacion
         <thead className="text-left text-xs text-muted">
           <tr>
             <th className="py-2 font-medium">Habitación</th>
+            <th className="py-2 font-medium">Categoría</th>
             <th className="py-2 font-medium">Estado</th>
             <th className="py-2 text-right font-medium">Acciones</th>
           </tr>
@@ -602,6 +546,36 @@ const SeccionHabitaciones: React.FC<SeccionConBajas & { habitaciones: Habitacion
           {habitaciones.map((h) => (
             <tr key={h.id} className={`border-t border-line ${h.activa ? '' : 'text-muted'}`}>
               <td className="py-2 font-medium">{formatRoomNumber(h.numero)}</td>
+              <td className="py-2">
+                <div className="flex items-center gap-2">
+                  <ChipCategoria categoria={categoriaDe(h.categoria_id)} className="hidden sm:inline-flex" />
+                  {h.activa && (
+                    <select
+                      aria-label={`Categoría de la ${formatRoomNumber(h.numero)}`}
+                      className={`${campo} w-40`}
+                      value={h.categoria_id}
+                      disabled={ocupado}
+                      onChange={(e) => {
+                        const nueva = categoriaDe(Number(e.target.value));
+                        void ejecutar(
+                          () => api.configurarHabitacion(h.id, { categoria_id: Number(e.target.value) }),
+                          `${formatRoomNumber(h.numero)} pasa a ${nueva?.nombre ?? 'otra categoría'}` +
+                            (h.estado === 'Ocupada' ? ': el turno en curso conserva su tarifa.' : '.'),
+                          'No se pudo cambiar la categoría.',
+                        );
+                      }}
+                    >
+                      {categorias
+                        .filter((c) => c.activa || c.id === h.categoria_id)
+                        .map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.nombre}
+                          </option>
+                        ))}
+                    </select>
+                  )}
+                </div>
+              </td>
               <td className="py-2">{h.activa ? h.estado : 'Dada de baja (conserva su historial)'}</td>
               <td className="py-2">
                 <div className="flex justify-end gap-2">
@@ -694,6 +668,19 @@ const SeccionConserjes: React.FC<SeccionConBajas & { operadores: OperadorEstado[
   confirmar,
 }) => {
   const [form, setForm] = useState(FORM_CONSERJE);
+  const [restableciendo, setRestableciendo] = useState<OperadorEstado | null>(null);
+  const [claveNueva, setClaveNueva] = useState('');
+
+  const restablecer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!restableciendo) return;
+    const ok = await ejecutar(
+      () => api.restablecerClave(restableciendo.id, claveNueva),
+      `Clave de ${restableciendo.nombre_visible} restablecida. Comuníquesela en persona.`,
+      'No se pudo restablecer la clave.',
+    );
+    if (ok) setRestableciendo(null);
+  };
 
   const alta = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -727,7 +714,21 @@ const SeccionConserjes: React.FC<SeccionConBajas & { operadores: OperadorEstado[
               <td className="py-2 font-mono text-xs">{o.usuario}</td>
               <td className="py-2">{o.ultimo_acceso ? formatDateTime(o.ultimo_acceso) : '—'}</td>
               <td className="py-2">
-                <div className="flex justify-end">
+                <div className="flex justify-end gap-2">
+                  {o.rol === 'OPERADOR' && o.activo && (
+                    <Button
+                      variant="secondary"
+                      className="h-11"
+                      aria-label={`Restablecer la clave de ${o.nombre_visible}`}
+                      title="Restablecer clave"
+                      onClick={() => {
+                        setClaveNueva('');
+                        setRestableciendo(o);
+                      }}
+                    >
+                      <KeyRound className="h-4 w-4" aria-hidden="true" />
+                    </Button>
+                  )}
                   {o.rol === 'OPERADOR' &&
                     (o.activo ? (
                       <Button
@@ -787,6 +788,42 @@ const SeccionConserjes: React.FC<SeccionConBajas & { operadores: OperadorEstado[
           Dar de alta
         </Button>
       </form>
+
+      {restableciendo && (
+        <Modal
+          title="Restablecer la clave"
+          subtitle={`${restableciendo.nombre_visible} (${restableciendo.usuario})`}
+          onClose={() => setRestableciendo(null)}
+        >
+          <form onSubmit={restablecer} className="space-y-4">
+            <p className="text-sm text-muted">
+              La clave anterior deja de servir y se quita el bloqueo por intentos fallidos. Queda en el registro de
+              actividad; la gerencia nunca ve la clave anterior.
+            </p>
+            <Field label="Clave nueva" htmlFor="clave_restablecida" hint="Al menos 10 caracteres.">
+              <input
+                id="clave_restablecida"
+                data-autofocus
+                type="password"
+                required
+                minLength={10}
+                autoComplete="new-password"
+                className={campo}
+                value={claveNueva}
+                onChange={(e) => setClaveNueva(e.target.value)}
+              />
+            </Field>
+            <div className="flex justify-end gap-2">
+              <Button variant="secondary" className="h-11" onClick={() => setRestableciendo(null)}>
+                Cancelar
+              </Button>
+              <Button type="submit" className="h-11" disabled={ocupado || claveNueva.length < 10}>
+                Restablecer
+              </Button>
+            </div>
+          </form>
+        </Modal>
+      )}
     </div>
   );
 };

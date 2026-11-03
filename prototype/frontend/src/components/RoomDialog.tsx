@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Banknote, Bike, Car, CreditCard, Footprints, Minus, Plus, Receipt } from 'lucide-react';
-import { Articulo, HabitacionConDetalles, MedioPago, TipoCliente, TurnoResumen } from '../types';
+import { Articulo, Categoria, HabitacionConDetalles, MedioPago, TipoCliente, TurnoResumen } from '../types';
 import { api, getErrorMessage } from '../services/api';
 import { formatDuration, formatMoney, formatRoomNumber } from '../utils/format';
-import { ESTADIA_BASE_MIN, elapsedMs, faseEstadia, minutosExcedidos } from '../utils/turno';
+import { ESTADIA_BASE_MIN, elapsedMs, faseEstadia, formatMinutos, minutosExcedidos } from '../utils/turno';
+import { ChipCategoria } from './CategoriasConfig';
 import Button from './ui/Button';
 import Field, { inputClass } from './ui/Field';
 import Modal from './ui/Modal';
@@ -12,6 +13,8 @@ import { useToast } from './ui/Toast';
 
 interface RoomDialogProps {
   room: HabitacionConDetalles;
+  // Categoría de la habitación: su tarifa vigente es la que tomará el turno al abrirse.
+  categoria?: Categoria;
   now: number;
   onClose: () => void;
   onAperturaTurno: (patente: string | undefined, tipoCliente: TipoCliente) => Promise<void>;
@@ -39,6 +42,7 @@ const SectionTitle: React.FC<{ children: React.ReactNode }> = ({ children }) => 
 
 const RoomDialog: React.FC<RoomDialogProps> = ({
   room,
+  categoria,
   now,
   onClose,
   onAperturaTurno,
@@ -218,9 +222,24 @@ const RoomDialog: React.FC<RoomDialogProps> = ({
           </Field>
         )}
 
-        <p className="rounded-md bg-surface-2 px-3 py-2.5 text-sm text-muted">
-          Estadía base de {ESTADIA_BASE_MIN / 60} horas. Superada, el excedente se liquida por fracciones.
-        </p>
+        {categoria?.tarifa ? (
+          <div className="rounded-md border border-line bg-surface-2 px-3 py-2.5 text-sm">
+            <div className="mb-1.5 flex items-center justify-between gap-2">
+              <ChipCategoria categoria={categoria} />
+              <span className="font-semibold tabular-nums text-ink">{formatMoney(categoria.tarifa.tarifa_base)}</span>
+            </div>
+            <p className="text-muted">
+              Turno de {formatMinutos(categoria.tarifa.estadia_base_min)}. Superado
+              {categoria.tarifa.tolerancia_min > 0 && ` (con ${categoria.tarifa.tolerancia_min} min de tolerancia)`}, se
+              cobran {formatMoney(categoria.tarifa.tarifa_fraccion)} cada {formatMinutos(categoria.tarifa.fraccion_min)}
+              {categoria.tarifa.tope ? `, con un tope de ${formatMoney(categoria.tarifa.tope)} por estadía` : ''}.
+            </p>
+          </div>
+        ) : (
+          <p className="rounded-md bg-surface-2 px-3 py-2.5 text-sm text-muted">
+            Estadía base de {ESTADIA_BASE_MIN / 60} horas. Superada, el excedente se liquida por fracciones.
+          </p>
+        )}
       </form>
     );
     footer = (
@@ -274,7 +293,9 @@ const RoomDialog: React.FC<RoomDialogProps> = ({
     body = <p className="text-sm text-muted">{cargando ? 'Cargando cuenta…' : 'No se pudo cargar la cuenta.'}</p>;
   } else if (vista === 'cuenta') {
     const transcurrido = elapsedMs(resumen, now);
-    const fase = faseEstadia(transcurrido);
+    // La tarifa del turno (la de su categoría al abrirse), no la vigente hoy.
+    const baseMin = resumen.tarifa?.estadia_base_min ?? resumen.estadia_base_min ?? ESTADIA_BASE_MIN;
+    const fase = faseEstadia(transcurrido, baseMin);
     const nombreArticulo = (id: number) => articulos.find((a) => a.id === id)?.descripcion ?? 'Producto';
 
     body = (
@@ -286,7 +307,7 @@ const RoomDialog: React.FC<RoomDialogProps> = ({
               {formatDuration(transcurrido)}
             </span>
             {fase === 'excedido' && (
-              <span className="block text-xs font-medium text-danger">Excedido +{minutosExcedidos(transcurrido)} min</span>
+              <span className="block text-xs font-medium text-danger">Excedido +{minutosExcedidos(transcurrido, baseMin)} min</span>
             )}
           </span>
         </div>
@@ -296,11 +317,22 @@ const RoomDialog: React.FC<RoomDialogProps> = ({
           <table className="w-full text-sm">
             <tbody className="divide-y divide-line">
               <tr>
-                <td className="py-2 text-muted">Estadía base ({ESTADIA_BASE_MIN / 60} h)</td>
+                <td className="py-2 text-muted">
+                  Estadía base ({formatMinutos(baseMin)}
+                  {resumen.tarifa?.categoria ? ` · ${resumen.tarifa.categoria}` : ''})
+                </td>
                 <td className="py-2 text-right tabular-nums text-ink">{formatMoney(resumen.tarifa_base)}</td>
               </tr>
               <tr>
-                <td className="py-2 text-muted">Sobreturno</td>
+                <td className="py-2 text-muted">
+                  Sobreturno
+                  {resumen.tarifa && (
+                    <span className="text-subtle">
+                      {' '}
+                      · {formatMoney(resumen.tarifa.tarifa_fraccion)} cada {formatMinutos(resumen.tarifa.fraccion_min)}
+                    </span>
+                  )}
+                </td>
                 <td className="py-2 text-right tabular-nums text-ink">{formatMoney(resumen.total_sobreturno)}</td>
               </tr>
               {resumen.consumos.map((c) => (

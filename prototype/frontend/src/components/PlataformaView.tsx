@@ -6,7 +6,10 @@ import { formatDateTime, formatMoney } from '../utils/format';
 import Button from './ui/Button';
 import Field, { inputClass } from './ui/Field';
 import Modal from './ui/Modal';
+import ThemeToggle from './ui/ThemeToggle';
 import { useToast } from './ui/Toast';
+import PerfilView from './PerfilView';
+import { Avatar } from './TopNav';
 
 const campo = `${inputClass} h-11`;
 
@@ -28,13 +31,15 @@ const ALTA_VACIA = {
 
 interface PlataformaViewProps {
   sesion: Sesion;
+  onRefrescarSesion: () => Promise<void>;
   onSalir: () => void;
 }
 
 // Multiinquilino: la plataforma da de alta establecimientos con su gerencia inicial, los suspende y ve un resumen
 // de cada uno (cantidades, nunca turnos, cobros ni patentes). No opera ningún motel.
-const PlataformaView: React.FC<PlataformaViewProps> = ({ sesion, onSalir }) => {
+const PlataformaView: React.FC<PlataformaViewProps> = ({ sesion, onRefrescarSesion, onSalir }) => {
   const { toast } = useToast();
+  const [verPerfil, setVerPerfil] = useState(false);
   const [lista, setLista] = useState<EstablecimientoResumen[]>([]);
   const [estado, setEstado] = useState<'cargando' | 'ok' | 'error'>('cargando');
   const [alta, setAlta] = useState<typeof ALTA_VACIA | null>(null);
@@ -118,11 +123,22 @@ const PlataformaView: React.FC<PlataformaViewProps> = ({ sesion, onSalir }) => {
     <div className="flex min-h-screen flex-col">
       <header className="sticky top-0 z-30 border-b border-line bg-surface">
         <div className="mx-auto flex h-14 max-w-[1600px] items-center gap-4 px-4 sm:px-6">
-          <img src="/logo.png" alt="MotelOS" className="h-7 object-contain" />
+          <img src="/logo.png" alt="MotelOS" className="logo h-7 object-contain" />
           <span className="rounded-md bg-accent-soft px-2 py-1 text-xs font-semibold uppercase tracking-wide text-accent">
             Plataforma
           </span>
-          <span className="ml-auto hidden text-sm font-medium text-ink sm:inline">{sesion.operador.nombre_visible}</span>
+          <span className="ml-auto" />
+          <ThemeToggle />
+          <button
+            type="button"
+            onClick={() => setVerPerfil((v) => !v)}
+            aria-pressed={verPerfil}
+            title="Mi perfil"
+            className={`press flex items-center gap-2 rounded-full py-1 pl-1 pr-3 hover:bg-surface-2 ${verPerfil ? 'bg-accent-soft' : ''}`}
+          >
+            <Avatar nombre={sesion.operador.nombre_visible} />
+            <span className="hidden text-sm font-medium text-ink sm:inline">{sesion.operador.nombre_visible}</span>
+          </button>
           <button
             type="button"
             onClick={onSalir}
@@ -135,7 +151,13 @@ const PlataformaView: React.FC<PlataformaViewProps> = ({ sesion, onSalir }) => {
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-[1600px] flex-1 px-4 py-6 sm:px-6">
+      {verPerfil && (
+        <main className="mx-auto w-full max-w-[1600px] flex-1 px-4 py-6 sm:px-6">
+          <PerfilView onPerfilActualizado={onRefrescarSesion} onSalir={onSalir} />
+        </main>
+      )}
+
+      <main className={`mx-auto w-full max-w-[1600px] flex-1 px-4 py-6 sm:px-6 ${verPerfil ? 'hidden' : ''}`}>
         <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
           <div>
             <h1 className="text-xl font-semibold text-ink">Establecimientos</h1>
