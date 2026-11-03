@@ -1,5 +1,5 @@
 import React from 'react';
-import { BarChart3, ClipboardList, LayoutGrid, Lock, LogOut, Package, Settings, Sparkles } from 'lucide-react';
+import { BarChart3, ClipboardList, LayoutGrid, Lock, LogOut, Package, Search, Settings, Sparkles } from 'lucide-react';
 import { Sesion } from '../types';
 import { formatClock, parseUtc } from '../utils/format';
 import ThemeToggle from './ui/ThemeToggle';
@@ -23,9 +23,13 @@ interface TopNavProps {
   // Entradas del registro de actividad que la gerencia todavía no revisó.
   pendientes: number;
   onSalir: () => void;
+  // Abre la paleta de comandos (Ctrl+K).
+  onBuscar: () => void;
+  // La campanita de avisos.
+  avisos?: React.ReactNode;
 }
 
-const ITEMS: { view: View; label: string; icon: React.ElementType; roles: string[] }[] = [
+export const ITEMS: { view: View; label: string; icon: React.ElementType; roles: string[] }[] = [
   { view: 'inteligencia', label: 'Inteligencia', icon: Sparkles, roles: ['ADMINISTRADOR'] },
   { view: 'dashboard', label: 'Habitaciones', icon: LayoutGrid, roles: ['OPERADOR', 'ADMINISTRADOR'] },
   { view: 'inventario', label: 'Inventario', icon: Package, roles: ['OPERADOR', 'ADMINISTRADOR'] },
@@ -40,7 +44,17 @@ const hora = (iso: string): string => {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 };
 
-const TopNav: React.FC<TopNavProps> = ({ sesion, activeView, setActiveView, online, now, pendientes, onSalir }) => {
+const TopNav: React.FC<TopNavProps> = ({
+  sesion,
+  activeView,
+  setActiveView,
+  online,
+  now,
+  pendientes,
+  onSalir,
+  onBuscar,
+  avisos,
+}) => {
   const { operador, guardia, establecimiento } = sesion;
   const items = ITEMS.filter((i) => i.roles.includes(operador.rol));
 
@@ -91,6 +105,17 @@ const TopNav: React.FC<TopNavProps> = ({ sesion, activeView, setActiveView, onli
             <span className={`h-2 w-2 rounded-full ${online ? 'bg-libre' : 'bg-danger'}`} aria-hidden="true" />
             <span className="hidden xl:inline">{online ? 'Conectado' : 'Sin conexión'}</span>
           </span>
+          <button
+            type="button"
+            onClick={onBuscar}
+            aria-label="Buscar y hacer (Ctrl+K)"
+            title="Buscar y hacer (Ctrl+K)"
+            className="press hit flex items-center gap-2 rounded-md p-2 text-muted hover:bg-surface-2 hover:text-ink"
+          >
+            <Search className="h-4 w-4" aria-hidden="true" />
+            <kbd className="hidden rounded border border-line px-1 text-[10px] 2xl:inline">Ctrl K</kbd>
+          </button>
+          {avisos}
           <ThemeToggle />
           {/* Mi perfil: el nombre y la guardia, con un avatar de iniciales. Con el menú de la gerencia (seis secciones)
               el texto se muestra desde 1536 px. */}

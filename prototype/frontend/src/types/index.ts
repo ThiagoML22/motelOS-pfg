@@ -129,6 +129,33 @@ export interface EstablecimientoPublico {
   id: number;
   codigo: string;
   nombre: string;
+  // Apariencia y avisos (migración 009).
+  color_marca?: string | null;
+  eslogan?: string | null;
+  aviso_por_vencer_min?: number;
+  alertas_sonoras?: boolean;
+}
+
+// Lo que el ingreso muestra al reconocer el código de un motel.
+export interface MarcaPublica {
+  codigo: string;
+  nombre: string;
+  color_marca: string | null;
+  eslogan: string | null;
+}
+
+// Novedades de guardia (migración 009).
+export interface Novedad {
+  id: number;
+  texto: string;
+  importante: boolean;
+  creado_en: string;
+  operador_id: number;
+  operador_nombre: string;
+  guardia_id: number | null;
+  franja: string | null;
+  habitacion_id: number | null;
+  habitacion_numero: number | null;
 }
 
 export interface Sesion {
@@ -322,6 +349,10 @@ export interface EstablecimientoDatos {
   domicilio?: string | null;
   telefono?: string | null;
   leyenda_comprobante?: string | null;
+  color_marca?: string | null;
+  eslogan?: string | null;
+  aviso_por_vencer_min?: number;
+  alertas_sonoras?: boolean;
 }
 
 export interface EstablecimientoResumen extends Establecimiento {

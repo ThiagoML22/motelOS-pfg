@@ -119,6 +119,17 @@ class Periodo:
     explicito: bool = True
 
     @property
+    def en(self) -> str:
+        """El período como complemento: «ayer», «el sábado 31/10», «en la semana pasada»."""
+        if self.etiqueta in ("hoy", "ayer", "anteayer") or self.etiqueta.startswith("el "):
+            return self.etiqueta
+        return f"en {self.etiqueta}"
+
+    @property
+    def en_mayuscula(self) -> str:
+        return self.en[0].upper() + self.en[1:]
+
+    @property
     def dias(self) -> int:
         return (self.hasta - self.desde).days + 1
 
@@ -346,10 +357,10 @@ class Asistente:
             turnos = self._turnos(periodo)
             tabla = self._por_categoria(turnos)
             if not tabla["filas"]:
-                return _respuesta(f"No hay turnos cobrados en {periodo.etiqueta}.", "ingresos", periodo)
+                return _respuesta(f"No hay turnos cobrados {periodo.en}.", "ingresos", periodo)
             primera = tabla["filas"][0]
             return _respuesta(
-                f"En {periodo.etiqueta}, la categoría que más ingresos dejó es {primera[0]}: {primera[2]} en "
+                f"{periodo.en_mayuscula}, la categoría que más ingresos dejó es {primera[0]}: {primera[2]} en "
                 f"{primera[1]} turnos (ticket promedio {primera[3]}).{self._aviso_corte(periodo)}",
                 "ingresos",
                 periodo,
@@ -367,7 +378,7 @@ class Asistente:
             sujeto += f" cobrados por {self.ctx.nombres.get(conserje_id, '—')}"
         if not turnos:
             return _respuesta(
-                f"No hay turnos cobrados{sujeto} en {periodo.etiqueta}.{self._aviso_corte(periodo)}",
+                f"No hay turnos cobrados{sujeto} {periodo.en}.{self._aviso_corte(periodo)}",
                 "ingresos",
                 periodo,
             )
@@ -379,7 +390,7 @@ class Asistente:
         )
         consumos = sum(t.consumos for t in turnos)
         return _respuesta(
-            f"En {periodo.etiqueta} se cobraron {ia.pesos(total)}{sujeto} en {len(turnos)} turnos (ticket promedio "
+            f"{periodo.en_mayuscula} se cobraron {ia.pesos(total)}{sujeto} en {len(turnos)} turnos (ticket promedio "
             f"{ia.pesos(total / len(turnos))}); {ia.pesos(consumos)} fueron consumos.{comparacion}"
             f"{self._aviso_corte(periodo)}",
             "ingresos",
@@ -398,7 +409,7 @@ class Asistente:
         dias = len({t.fin.date() for t in turnos}) or 1
         cambio = ia.variacion(len(turnos), len(anteriores))
         return _respuesta(
-            f"En {periodo.etiqueta} hubo {len(turnos)} turnos{sujeto}"
+            f"{periodo.en_mayuscula} hubo {len(turnos)} turnos{sujeto}"
             + (f", unos {len(turnos) / dias:.0f} por día" if periodo.dias > 1 and turnos else "")
             + (f" ({ia.con_signo(cambio)} contra el período anterior)." if cambio is not None else ".")
             + self._aviso_corte(periodo),
@@ -412,12 +423,12 @@ class Asistente:
     def ticket(self, periodo: Periodo, categoria_id: int | None) -> dict:
         turnos = self._turnos(periodo, categoria_id)
         if not turnos:
-            return _respuesta(f"No hay turnos cobrados en {periodo.etiqueta}.", "ticket", periodo)
+            return _respuesta(f"No hay turnos cobrados {periodo.en}.", "ticket", periodo)
         promedio = sum(t.total for t in turnos) / len(turnos)
         consumos = sum(t.consumos for t in turnos) / len(turnos)
         sujeto = f" en {self.ctx.nombre_categoria(categoria_id)}" if categoria_id is not None else ""
         return _respuesta(
-            f"El ticket promedio{sujeto} en {periodo.etiqueta} fue de {ia.pesos(promedio)} por turno, de los que "
+            f"El ticket promedio{sujeto} {periodo.en} fue de {ia.pesos(promedio)} por turno, de los que "
             f"{ia.pesos(consumos)} son consumos del minibar.",
             "ticket",
             periodo,
@@ -428,7 +439,7 @@ class Asistente:
     def estadia(self, periodo: Periodo, categoria_id: int | None) -> dict:
         turnos = self._turnos(periodo, categoria_id)
         if not turnos:
-            return _respuesta(f"No hay estadías cerradas en {periodo.etiqueta}.", "estadia", periodo)
+            return _respuesta(f"No hay estadías cerradas {periodo.en}.", "estadia", periodo)
         minutos = [t.minutos for t in turnos]
         sujeto = f" en {self.ctx.nombre_categoria(categoria_id)}" if categoria_id is not None else ""
         grupos: dict[int, list[float]] = {}
@@ -448,7 +459,7 @@ class Asistente:
         }
         return _respuesta(
             f"Una estadía{sujeto} dura en promedio {ia.minutos_texto(mean(minutos))} (la mitad dura menos de "
-            f"{ia.minutos_texto(median(minutos))}) en {periodo.etiqueta}. "
+            f"{ia.minutos_texto(median(minutos))}) {periodo.en}. "
             f"{ia.porcentaje(sum(1 for t in turnos if t.sobreturno > 0) / len(turnos))} paga sobreturno.",
             "estadia",
             periodo,
@@ -459,11 +470,11 @@ class Asistente:
     def sobreturno(self, periodo: Periodo, categoria_id: int | None) -> dict:
         turnos = self._turnos(periodo, categoria_id)
         if not turnos:
-            return _respuesta(f"No hay turnos cobrados en {periodo.etiqueta}.", "sobreturno", periodo)
+            return _respuesta(f"No hay turnos cobrados {periodo.en}.", "sobreturno", periodo)
         con = [t for t in turnos if t.sobreturno > 0]
         importe = sum(t.sobreturno for t in con)
         return _respuesta(
-            f"En {periodo.etiqueta}, {len(con)} de {len(turnos)} turnos ({ia.porcentaje(len(con) / len(turnos))}) "
+            f"{periodo.en_mayuscula}, {len(con)} de {len(turnos)} turnos ({ia.porcentaje(len(con) / len(turnos))}) "
             f"pagaron sobreturno, por {ia.pesos(importe)} en total "
             f"({ia.porcentaje(importe / (sum(t.total for t in turnos) or 1))} de los ingresos).",
             "sobreturno",
@@ -502,7 +513,7 @@ class Asistente:
         general = ia.ocupacion(turnos, ventanas, cupo) or 0
         sujeto = f" de {self.ctx.nombre_categoria(categoria_id)}" if categoria_id is not None else ""
         return _respuesta(
-            f"En {periodo.etiqueta}, las habitaciones{sujeto} estuvieron ocupadas el {ia.porcentaje(general)} del "
+            f"{periodo.en_mayuscula}, las habitaciones{sujeto} estuvieron ocupadas el {ia.porcentaje(general)} del "
             "tiempo.",
             "ocupacion",
             periodo,
@@ -516,11 +527,11 @@ class Asistente:
             periodo = Periodo(self.hoy - timedelta(weeks=8), self.hoy, "las últimas 8 semanas")
         turnos = [t for t in self.ctx.turnos if periodo.contiene(t.inicio)]
         if not turnos:
-            return _respuesta(f"No hay turnos en {periodo.etiqueta}.", "horas", periodo)
+            return _respuesta(f"No hay turnos {periodo.en}.", "horas", periodo)
         por_hora = Counter(t.inicio.hour for t in turnos)
         por_dia = Counter(t.inicio.weekday() for t in turnos)
         mejores = [f"{h} h" for h, _ in por_hora.most_common(3)]
-        texto = f"En {periodo.etiqueta}, las horas con más llegadas son las {', '.join(mejores)}."
+        texto = f"{periodo.en_mayuscula}, las horas con más llegadas son las {', '.join(mejores)}."
         if not periodo.dias_semana and len(por_dia) > 1:
             fuerte = max(por_dia, key=por_dia.get)
             flojo = min(por_dia, key=por_dia.get)
@@ -620,7 +631,7 @@ class Asistente:
                         f"{reposicion['dias_restantes']:.0f} días."
                     )
                 return _respuesta(
-                    f"De «{a.descripcion}» se vendieron {unidades} unidades en {periodo.etiqueta} "
+                    f"De «{a.descripcion}» se vendieron {unidades} unidades {periodo.en} "
                     f"({ia.pesos(sum(v.subtotal for v in ventas))}).{extra}",
                     "articulos",
                     periodo,
@@ -631,11 +642,11 @@ class Asistente:
                 unidades[v.articulo_id] += v.cantidad
                 importe[v.articulo_id] += v.subtotal
         if not unidades:
-            return _respuesta(f"No hubo consumos en {periodo.etiqueta}.", "articulos", periodo)
+            return _respuesta(f"No hubo consumos {periodo.en}.", "articulos", periodo)
         nombre = {a.id: a.descripcion for a in self.ctx.articulos}
         top = unidades.most_common(5)
         return _respuesta(
-            f"Lo más vendido en {periodo.etiqueta}: "
+            f"Lo más vendido {periodo.en}: "
             + ", ".join(f"{nombre.get(a, a)} ({u})" for a, u in top[:3])
             + f". En total, {sum(unidades.values())} unidades por {ia.pesos(sum(importe.values()))}.",
             "articulos",
@@ -653,7 +664,7 @@ class Asistente:
         if conserje_id is not None:
             arqueos = [a for a in arqueos if a.operador_id == conserje_id]
         if not arqueos:
-            return _respuesta(f"No hay arqueos en {periodo.etiqueta}.", "caja", periodo)
+            return _respuesta(f"No hay arqueos {periodo.en}.", "caja", periodo)
         por_operador: dict[int, list] = {}
         for a in arqueos:
             por_operador.setdefault(a.operador_id, []).append(a)
@@ -675,7 +686,7 @@ class Asistente:
         total_faltante = -sum(a.diferencia for a in arqueos if a.categoria == FALTANTE)
         con_diferencia = sum(1 for a in arqueos if a.diferencia)
         texto = (
-            f"En {periodo.etiqueta} se confirmaron {len(arqueos)} arqueos: {con_diferencia} con diferencia "
+            f"{periodo.en_mayuscula} se confirmaron {len(arqueos)} arqueos: {con_diferencia} con diferencia "
             f"(TDC {ia.porcentaje(con_diferencia / len(arqueos))}) y {ia.pesos(total_faltante)} de faltantes en total."
         )
         if conserje_id is None and len(filas) > 1 and filas[0][2] > 0:
@@ -695,12 +706,14 @@ class Asistente:
             if periodo.contiene(c.momento):
                 totales[c.medio] += c.monto
         if not totales:
-            return _respuesta(f"No hay cobros en {periodo.etiqueta}.", "medios", periodo)
+            return _respuesta(f"No hay cobros {periodo.en}.", "medios", periodo)
         suma = sum(totales.values())
         etiqueta = {"EFECTIVO": "Efectivo", "POSNET": "POSNET", "MERCADO_PAGO": "Mercado Pago"}
         filas = [[etiqueta.get(m, m), ia.pesos(v), ia.porcentaje(v / suma)] for m, v in totales.most_common()]
         return _respuesta(
-            f"En {periodo.etiqueta}: " + ", ".join(f"{f[0]} {f[2]}" for f in filas) + f" de {ia.pesos(suma)} cobrados.",
+            f"{periodo.en_mayuscula}: "
+            + ", ".join(f"{f[0]} {f[2]}" for f in filas)
+            + f" de {ia.pesos(suma)} cobrados.",
             "medios",
             periodo,
             "Cobros registrados por medio de pago en guardias ya arqueadas.",
@@ -717,7 +730,7 @@ class Asistente:
         if habitacion_id is not None:
             numero = self.ctx.numero(habitacion_id)
             return _respuesta(
-                f"La habitación {numero} tuvo {usos[habitacion_id]} turnos en {periodo.etiqueta} y dejó "
+                f"La habitación {numero} tuvo {usos[habitacion_id]} turnos {periodo.en} y dejó "
                 f"{ia.pesos(ingresos[habitacion_id])}.",
                 "habitaciones",
                 periodo,
@@ -730,7 +743,7 @@ class Asistente:
         quiere_menos = bool(re.search(r"menos", texto))
         elegida = menos if quiere_menos else mas
         texto_resp = (
-            f"La habitación {'menos' if quiere_menos else 'más'} usada en {periodo.etiqueta} es la {elegida.numero} "
+            f"La habitación {'menos' if quiere_menos else 'más'} usada {periodo.en} es la {elegida.numero} "
             f"({self.ctx.nombre_categoria(elegida.categoria_id)}), con {usos[elegida.id]} turnos. "
             f"La {'más' if quiere_menos else 'menos'} usada es la {(mas if quiere_menos else menos).numero} "
             f"({usos[(mas if quiere_menos else menos).id]})."

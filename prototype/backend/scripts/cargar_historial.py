@@ -39,6 +39,7 @@ from app.models.consumo import Consumo
 from app.models.establecimiento import Establecimiento
 from app.models.guardia import Guardia
 from app.models.habitacion import Habitacion
+from app.models.novedad import Novedad
 from app.models.operador import ROL_OPERADOR, Operador
 from app.models.pago import Pago
 from app.models.tarifa import Tarifa
@@ -367,6 +368,57 @@ ARTICULOS_EXTRA = {
 }
 DEMO = (("motelcc", 60, 1.5, 6), ("luna", 30, 0.7, None))
 
+# Novedades de guardia de ejemplo (migración 009): horas antes del fin del historial, usuario, texto, importante y
+# número de habitación. La de la 6 explica por qué esa habitación se usa menos (la detecta la inteligencia).
+NOVEDADES_DEMO = {
+    "motelcc": [
+        (
+            20,
+            "conserje2",
+            "La 6: el aire hace ruido y los clientes piden cambiarse. Hay que llamar al técnico.",
+            True,
+            6,
+        ),
+        (11, "conserje1", "Quedan pocas aguas en el depósito; ya le avisé al proveedor.", False, None),
+        (4, "conserje2", "Se rompió el control remoto de la 11, quedó uno de repuesto en recepción.", False, 11),
+    ],
+    "luna": [(6, "conserje1", "Cambiar las sábanas del depósito: la lavandería entrega el jueves.", False, None)],
+}
+
+
+async def _novedades_demo(db: AsyncSession, codigo: str, hasta: datetime) -> None:
+    """Novedades con su hora en el pasado. El trigger pone la hora actual, por eso van con replica, como el resto."""
+    if db.get_bind().dialect.name == "postgresql":
+        await db.execute(text("SET LOCAL session_replication_role = replica"))
+    usuarios = {o.usuario: o.id for o in (await db.execute(select(Operador))).scalars()}
+    numeros = {h.numero: h.id for h in (await db.execute(select(Habitacion))).scalars()}
+    for horas, usuario, texto, importante, numero in NOVEDADES_DEMO.get(codigo, []):
+        momento = (hasta - timedelta(hours=horas)).astimezone(UTC)
+        guardia = (
+            (
+                await db.execute(
+                    select(Guardia).where(
+                        Guardia.operador_id == usuarios.get(usuario),
+                        Guardia.abierta_en <= momento,
+                        Guardia.cerrada_en > momento,
+                    )
+                )
+            )
+            .scalars()
+            .first()
+        )
+        db.add(
+            Novedad(
+                operador_id=usuarios[usuario],
+                guardia_id=guardia.id if guardia else None,
+                habitacion_id=numeros.get(numero),
+                texto=texto,
+                importante=importante,
+                creado_en=momento,
+            )
+        )
+    await db.commit()
+
 
 async def cargar() -> None:
     engine = create_async_engine(settings.DATABASE_URL)
@@ -406,6 +458,8 @@ async def cargar() -> None:
                     habitacion_poco_usada=poco_usada,
                     semilla=11 if codigo == "luna" else 7,
                 )
+            async with sesiones(info={CLAVE: establecimiento.id}) as db:
+                await _novedades_demo(db, codigo, inicio_de_franja(datetime.now(UTC), ZoneInfo(settings.ZONA_HORARIA)))
             print(
                 f"{codigo}: {dias} días de historial · {resultado.get('turnos', 0)} turnos, "
                 f"{resultado.get('consumos', 0)} consumos, {resultado.get('guardias', 0)} guardias arqueadas."

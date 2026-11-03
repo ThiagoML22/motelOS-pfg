@@ -79,7 +79,8 @@ const Tarjeta: React.FC<{ titulo: string; icono?: React.ElementType; extra?: Rea
 );
 
 // Inteligencia local: todo se calcula en el servidor del motel con los turnos de guardias ya arqueadas (RN-RES-03).
-const InteligenciaView: React.FC = () => {
+// `pregunta` llega desde la paleta de comandos (Ctrl+K) y el asistente la responde al abrir la vista.
+const InteligenciaView: React.FC<{ pregunta?: { texto: string; id: number } | null }> = ({ pregunta }) => {
   const { toast } = useToast();
   const [tablero, setTablero] = useState<Tablero | null>(null);
   const [estado, setEstado] = useState<'cargando' | 'ok' | 'error'>('cargando');
@@ -168,7 +169,7 @@ const InteligenciaView: React.FC = () => {
             </div>
           </div>
           <aside className="xl:sticky xl:top-20 xl:self-start">
-            <Asistente />
+            <Asistente pregunta={pregunta} />
           </aside>
         </div>
       )}
@@ -624,7 +625,7 @@ interface Mensaje {
   respuesta?: RespuestaAsistente;
 }
 
-const Asistente: React.FC = () => {
+const Asistente: React.FC<{ pregunta?: { texto: string; id: number } | null }> = ({ pregunta }) => {
   const [mensajes, setMensajes] = useState<Mensaje[]>([
     {
       de: 'asistente',
@@ -641,8 +642,8 @@ const Asistente: React.FC = () => {
     lista.current?.scrollTo({ top: lista.current.scrollHeight, behavior: 'smooth' });
   }, [mensajes, pensando]);
 
-  const preguntar = async (pregunta: string) => {
-    const limpia = pregunta.trim();
+  const preguntar = async (consulta: string) => {
+    const limpia = consulta.trim();
     if (!limpia || pensando) return;
     setTexto('');
     setMensajes((m) => [...m, { de: 'usuario', texto: limpia }]);
@@ -657,6 +658,16 @@ const Asistente: React.FC = () => {
       setPensando(false);
     }
   };
+
+  // Pregunta enviada desde la paleta de comandos: se responde una sola vez.
+  const respondida = useRef<number | null>(null);
+  useEffect(() => {
+    if (pregunta && respondida.current !== pregunta.id) {
+      respondida.current = pregunta.id;
+      void preguntar(pregunta.texto);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pregunta]);
 
   return (
     <section className="flex h-[min(78vh,46rem)] flex-col overflow-hidden rounded-lg border border-line bg-surface" aria-label="Asistente">

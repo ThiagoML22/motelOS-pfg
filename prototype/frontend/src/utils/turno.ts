@@ -6,14 +6,20 @@ import { parseUtc } from './format';
 // total) es responsabilidad del backend: acá solo se señala visualmente el exceso.
 export const ESTADIA_BASE_MIN = 120;
 
-// Minutos antes del fin de la estadía base en que la tarjeta avisa que el turno está por vencer.
+// Minutos antes del fin de la estadía base en que la tarjeta avisa que el turno está por vencer. Desde la migración 009
+// lo configura cada motel (0 = sin aviso); la sesión lo fija al iniciar.
 export const AVISO_POR_VENCER_MIN = 10;
+let avisoPorVencerMin = AVISO_POR_VENCER_MIN;
+
+export const fijarAvisoPorVencer = (minutos: number | null | undefined) => {
+  avisoPorVencerMin = minutos ?? AVISO_POR_VENCER_MIN;
+};
 
 export type FaseEstadia = 'normal' | 'por_vencer' | 'excedido';
 
 export const faseEstadia = (transcurridoMs: number, baseMin: number = ESTADIA_BASE_MIN): FaseEstadia => {
   if (transcurridoMs > baseMin * 60000) return 'excedido';
-  return transcurridoMs > (baseMin - AVISO_POR_VENCER_MIN) * 60000 ? 'por_vencer' : 'normal';
+  return avisoPorVencerMin > 0 && transcurridoMs > (baseMin - avisoPorVencerMin) * 60000 ? 'por_vencer' : 'normal';
 };
 
 export const minutosRestantes = (transcurridoMs: number, baseMin: number = ESTADIA_BASE_MIN): number =>

@@ -246,6 +246,109 @@
   }
 }
 
+/* --- Cielo nocturno del ingreso --------------------------------------------------------------------------------- */
+/* El tono del cielo toma el color de marca del motel (--accent) apenas se reconoce su código. */
+.cielo {
+  background:
+    radial-gradient(circle at 78% 18%, rgb(var(--accent) / 0.5), transparent 55%),
+    radial-gradient(circle at 10% 90%, rgb(var(--accent) / 0.25), transparent 50%),
+    linear-gradient(165deg, #070b16 0%, #0e1628 55%, #1a1433 100%);
+  transition: background 600ms ease;
+}
+
+.cielo-estrella {
+  position: absolute;
+  border-radius: 9999px;
+  background: white;
+  opacity: 0.2;
+  animation: titilar-cielo ease-in-out infinite;
+}
+
+.cielo-luna {
+  position: absolute;
+  top: 9%;
+  right: 12%;
+  width: 92px;
+  height: 92px;
+  border-radius: 9999px;
+  background: radial-gradient(circle at 35% 35%, #fffaf0, #f2e6c9 60%, #d8c9a3);
+  box-shadow:
+    0 0 60px 12px rgb(255 244 214 / 0.25),
+    inset -14px -10px 0 0 rgb(0 0 0 / 0.08);
+  animation: flotar 7s ease-in-out infinite;
+}
+
+.estrella-fugaz {
+  position: absolute;
+  top: 14%;
+  left: 18%;
+  width: 120px;
+  height: 2px;
+  border-radius: 9999px;
+  background: linear-gradient(to left, white, transparent);
+  opacity: 0;
+  transform: rotate(-24deg);
+  animation: fugaz 9s ease-in 3s infinite;
+}
+
+/* La campanita se mueve dos veces cuando hay avisos sin ver. */
+@keyframes campana {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  20% {
+    transform: rotate(16deg);
+  }
+  40% {
+    transform: rotate(-14deg);
+  }
+  60% {
+    transform: rotate(8deg);
+  }
+  80% {
+    transform: rotate(-4deg);
+  }
+}
+
+@keyframes titilar-cielo {
+  0%,
+  100% {
+    opacity: 0.15;
+  }
+  50% {
+    opacity: 0.95;
+  }
+}
+
+@keyframes flotar {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes fugaz {
+  0% {
+    opacity: 0;
+    transform: rotate(-24deg) translateX(0);
+  }
+  3% {
+    opacity: 1;
+  }
+  9% {
+    opacity: 0;
+    transform: rotate(-24deg) translateX(420px);
+  }
+  100% {
+    opacity: 0;
+    transform: rotate(-24deg) translateX(420px);
+  }
+}
+
 @layer components {
   /* Retroalimentación al presionar: leve hundimiento con transición suave. */
   .press {

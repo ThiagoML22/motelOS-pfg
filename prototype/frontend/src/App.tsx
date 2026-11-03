@@ -1,15 +1,21 @@
-import { useCallback, useEffect, useState } from 'react';
-import { WifiOff } from 'lucide-react';
-import { Arqueo, Categoria, HabitacionConDetalles, RoomStatus, Sesion, TipoCliente } from './types';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { BedDouble, LogOut, MessageSquarePlus, Moon, UserRound, WifiOff } from 'lucide-react';
+import { Arqueo, Categoria, HabitacionConDetalles, Novedad, RoomStatus, Sesion, TipoCliente } from './types';
+import CentroAvisos from './components/CentroAvisos';
+import PaletaComandos, { Comando } from './components/PaletaComandos';
+import { NovedadesCard, NuevaNovedadModal } from './components/NovedadesPanel';
+import { elegirTema, modoActual } from './utils/tema';
 import { api, esSinRespuesta, getErrorMessage, onSesionVencida } from './services/api';
 import { useConexion } from './hooks/useConexion';
 import { useNow } from './hooks/useNow';
 import { formatClock, formatRoomNumber } from './utils/format';
+import { aplicarMarca, sonarAviso } from './utils/marca';
+import { FaseEstadia, elapsedMs, faseEstadia, fijarAvisoPorVencer } from './utils/turno';
 import ActividadView from './components/ActividadView';
 import InteligenciaView from './components/InteligenciaView';
 import PerfilView from './components/PerfilView';
 import PlataformaView from './components/PlataformaView';
-import TopNav, { View } from './components/TopNav';
+import TopNav, { ITEMS, View } from './components/TopNav';
 import RoomsGrid from './components/RoomsGrid';
 import RoomDialog from './components/RoomDialog';
 import InventarioView from './components/InventarioView';
@@ -51,6 +57,15 @@ function App() {
     });
     void refrescarSesion().finally(() => setIniciando(false));
   }, [refrescarSesion]);
+
+  // Apariencia y avisos del motel (migración 009). Sin sesión, la pantalla de ingreso aplica la del código escrito.
+  const marca = sesion?.establecimiento?.color_marca ?? null;
+  const avisoMin = sesion?.establecimiento?.aviso_por_vencer_min;
+  useEffect(() => {
+    if (!sesion) return;
+    aplicarMarca(marca);
+    fijarAvisoPorVencer(avisoMin);
+  }, [sesion, marca, avisoMin]);
 
   const salir = useCallback(async () => {
     try {
@@ -105,6 +120,11 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
   const [filtroCategoria, setFiltroCategoria] = useState<number | null>(null);
   // Registro de actividad: entradas de los conserjes que la gerencia todavía no vio.
   const [pendientes, setPendientes] = useState(0);
+  // Novedades de guardia (migración 009), la paleta de comandos y una pregunta enviada desde ella al asistente.
+  const [novedades, setNovedades] = useState<Novedad[]>([]);
+  const [nuevaNovedad, setNuevaNovedad] = useState(false);
+  const [paleta, setPaleta] = useState(false);
+  const [preguntaIA, setPreguntaIA] = useState<{ texto: string; id: number } | null>(null);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [openAddProduct, setOpenAddProduct] = useState(false);
   // Arqueo recién confirmado: el comprobante queda a la vista hasta que el conserje finaliza, aunque el
@@ -131,13 +151,25 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
   }, []);
 
   const fetchPendientes = useCallback(async () => {
-    if (!esGerencia) return;
     try {
-      setPendientes(await api.getActividadPendiente());
+      setNovedades(await api.getNovedades(30));
+      if (esGerencia) setPendientes(await api.getActividadPendiente());
     } catch {
-      // el contador se actualiza en el próximo sondeo
+      // los contadores se actualizan en el próximo sondeo
     }
   }, [esGerencia]);
+
+  // Ctrl+K (⌘K en Mac) abre y cierra la paleta de comandos.
+  useEffect(() => {
+    const teclas = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setPaleta((v) => !v);
+      }
+    };
+    window.addEventListener('keydown', teclas);
+    return () => window.removeEventListener('keydown', teclas);
+  }, []);
 
   // RNF-09: al volver la conexión se traen la sesión, la grilla y el contador del registro (en menos de 5 s).
   const conexion = useConexion(async () => {
@@ -168,6 +200,68 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
     const interval = setInterval(() => void onRefrescarSesion(), SESION_POLL_MS);
     return () => clearInterval(interval);
   }, [onRefrescarSesion]);
+
+  // Alertas sonoras (migración 009): un aviso cuando un turno pasa a «por vencer» o a «excedido», si el motel las
+  // activó y quien atiende es el conserje con su guardia.
+  const fasesPrevias = useRef(new Map<number, FaseEstadia>());
+  const conSonido = Boolean(sesion.establecimiento?.alertas_sonoras) && !esGerencia && conGuardiaPropia;
+  useEffect(() => {
+    let aviso: 'por_vencer' | 'excedido' | null = null;
+    const previas = fasesPrevias.current;
+    for (const h of habitaciones) {
+      const turno = h.estado === 'Ocupada' ? h.turno_activo : null;
+      if (!turno) {
+        previas.delete(h.id);
+        continue;
+      }
+      const fase = faseEstadia(elapsedMs(turno, now), turno.estadia_base_min ?? undefined);
+      const antes = previas.get(h.id);
+      if (antes !== undefined && antes !== fase && fase !== 'normal') {
+        aviso = fase === 'excedido' ? 'excedido' : (aviso ?? 'por_vencer');
+      }
+      previas.set(h.id, fase);
+    }
+    if (conSonido && aviso) sonarAviso(aviso);
+  }, [habitaciones, now, conSonido]);
+
+  const comandos = useMemo<Comando[]>(() => {
+    const lista: Comando[] = ITEMS.filter((i) => i.roles.includes(sesion.operador.rol)).map((i) => ({
+      id: `vista-${i.view}`,
+      titulo: i.label,
+      grupo: 'Ir a',
+      icono: i.icon,
+      accion: () => setActiveView(i.view),
+    }));
+    lista.push({ id: 'vista-perfil', titulo: 'Mi perfil', grupo: 'Ir a', icono: UserRound, claves: 'clave contraseña', accion: () => setActiveView('perfil') });
+    if (conGuardiaPropia) {
+      for (const h of habitaciones) {
+        lista.push({
+          id: `hab-${h.id}`,
+          titulo: `${formatRoomNumber(h.numero)}`,
+          detalle: ESTADO_META[h.estado].label,
+          grupo: 'Habitaciones',
+          icono: BedDouble,
+          claves: `${h.numero} habitacion ${categorias.find((c) => c.id === h.categoria_id)?.nombre ?? ''}`,
+          accion: () => {
+            setActiveView('dashboard');
+            openRoom(h, false);
+          },
+        });
+      }
+      lista.push({ id: 'novedad', titulo: 'Dejar una novedad', grupo: 'Acciones', icono: MessageSquarePlus, claves: 'nota aviso', accion: () => setNuevaNovedad(true) });
+    }
+    lista.push({
+      id: 'tema',
+      titulo: modoActual() === 'oscuro' ? 'Pasar a modo claro' : 'Pasar a modo oscuro',
+      grupo: 'Acciones',
+      icono: Moon,
+      claves: 'tema oscuro claro luna',
+      accion: () => elegirTema(modoActual() === 'oscuro' ? 'claro' : 'oscuro'),
+    });
+    lista.push({ id: 'salir', titulo: 'Cerrar sesión', grupo: 'Acciones', icono: LogOut, claves: 'salir', accion: onSalir });
+    return lista;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sesion.operador.rol, conGuardiaPropia, habitaciones, categorias, onSalir, paleta]);
 
   const selectedRoom = habitaciones.find((h) => h.id === selectedId) ?? null;
 
@@ -224,6 +318,18 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
         now={now}
         pendientes={pendientes}
         onSalir={onSalir}
+        onBuscar={() => setPaleta(true)}
+        avisos={
+          <CentroAvisos
+            novedades={novedades}
+            pendientes={pendientes}
+            esGerencia={esGerencia}
+            operadorId={sesion.operador.id}
+            claveVistas={`motelos.novedades.${sesion.establecimiento?.codigo ?? ''}.${sesion.operador.id}`}
+            onIrActividad={() => setActiveView('actividad')}
+            onNuevaNovedad={() => setNuevaNovedad(true)}
+          />
+        }
       />
 
       {!conexion.conectado && <AvisoSinConexion desde={conexion.sinConexionDesde} onReintentar={conexion.reintentar} />}
@@ -319,6 +425,8 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
               </div>
             )}
 
+            <NovedadesCard novedades={novedades} onNueva={() => setNuevaNovedad(true)} />
+
             {carga === 'cargando' && <p className="py-16 text-center text-sm text-muted">Cargando habitaciones…</p>}
 
             {carga === 'error' && (
@@ -353,16 +461,44 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
           <CierreCajaView sesion={sesion} resultado={ultimoArqueo} onConfirmado={setUltimoArqueo} onFinalizar={onSalir} />
         )}
 
-        {esGerencia && activeView === 'inteligencia' && <InteligenciaView />}
+        {esGerencia && activeView === 'inteligencia' && <InteligenciaView pregunta={preguntaIA} />}
 
         {esGerencia && activeView === 'gerencia' && <PanelGerencia onCambioGuardia={onRefrescarSesion} />}
 
-        {esGerencia && activeView === 'configuracion' && <ConfiguracionView onCambioHabitaciones={fetchHabitaciones} />}
+        {esGerencia && activeView === 'configuracion' && (
+          <ConfiguracionView onCambioHabitaciones={fetchHabitaciones} onCambioApariencia={onRefrescarSesion} />
+        )}
 
         {esGerencia && activeView === 'actividad' && <ActividadView onCambioPendientes={setPendientes} />}
 
         {activeView === 'perfil' && <PerfilView onPerfilActualizado={onRefrescarSesion} onSalir={onSalir} />}
       </main>
+
+      {nuevaNovedad && (
+        <NuevaNovedadModal
+          habitaciones={habitaciones}
+          onClose={() => setNuevaNovedad(false)}
+          onCreada={() => {
+            setNuevaNovedad(false);
+            void fetchPendientes();
+          }}
+        />
+      )}
+
+      {paleta && (
+        <PaletaComandos
+          comandos={comandos}
+          onClose={() => setPaleta(false)}
+          onPreguntar={
+            esGerencia
+              ? (texto) => {
+                  setActiveView('inteligencia');
+                  setPreguntaIA({ texto, id: Date.now() });
+                }
+              : undefined
+          }
+        />
+      )}
 
       {selectedRoom && (
         <RoomDialog

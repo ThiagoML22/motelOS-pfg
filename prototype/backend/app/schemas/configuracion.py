@@ -142,6 +142,11 @@ class EstablecimientoDatos(BaseModel):
     domicilio: str | None = Field(default=None, max_length=120)
     telefono: str | None = Field(default=None, max_length=40)
     leyenda_comprobante: str | None = Field(default=None, max_length=200)
+    # Apariencia y avisos (migración 009). Color vacío: el azul de MotelOS.
+    color_marca: str | None = Field(default=None, pattern=r"^(#[0-9a-fA-F]{6})?$")
+    eslogan: str | None = Field(default=None, max_length=120)
+    aviso_por_vencer_min: int | None = Field(default=None, ge=0, le=120)
+    alertas_sonoras: bool | None = None
 
 
 class EstablecimientoResponse(BaseModel):
@@ -155,6 +160,10 @@ class EstablecimientoResponse(BaseModel):
     leyenda_comprobante: str | None = None
     activo: bool
     creado_en: datetime
+    color_marca: str | None = None
+    eslogan: str | None = None
+    aviso_por_vencer_min: int = 10
+    alertas_sonoras: bool = False
 
 
 # --- Registro de actividad (migración 007) --------------------------------------------------------------------------

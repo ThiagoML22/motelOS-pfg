@@ -20,8 +20,10 @@ import {
   Guardia,
   HabitacionConDetalles,
   HabitacionConfiguracion,
+  MarcaPublica,
   MedioPago,
   MetricasCaja,
+  Novedad,
   OperadorEstado,
   Perfil,
   ResumenCategoria,
@@ -151,6 +153,22 @@ export const api = {
   },
 
   getSesion: async (): Promise<Sesion> => (await http.get('/auth/sesion')).data,
+
+  // Nombre y apariencia del motel para la pantalla de ingreso (sin sesión). null si el código no existe.
+  getMarca: async (codigo: string): Promise<MarcaPublica | null> => {
+    try {
+      return (await http.get('/auth/marca', { params: { codigo } })).data;
+    } catch (err) {
+      if (axios.isAxiosError(err) && err.response?.status === 404) return null;
+      throw err;
+    }
+  },
+
+  // --- Novedades de guardia (migración 009) ---
+  getNovedades: async (limite = 30): Promise<Novedad[]> => (await http.get('/novedades/', { params: { limite } })).data,
+
+  crearNovedad: async (datos: { texto: string; importante: boolean; habitacion_id?: number | null }): Promise<Novedad> =>
+    (await http.post('/novedades/', datos)).data,
 
   // --- Guardias y cierre de caja ciego (RF-08) ---
   abrirGuardia: async (): Promise<Guardia> => (await http.post('/guardias/')).data,

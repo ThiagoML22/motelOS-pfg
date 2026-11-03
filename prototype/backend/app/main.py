@@ -15,6 +15,7 @@ from app.api.v1.endpoints import (
     guardias,
     habitaciones,
     inteligencia,
+    novedades,
     operadores,
     perfil,
     plataforma,
@@ -84,6 +85,7 @@ app.include_router(turnos.router, prefix="/api/v1/turnos", tags=["turnos"], depe
 app.include_router(articulos.router, prefix="/api/v1/articulos", tags=["articulos"], dependencies=con_sesion)
 app.include_router(guardias.router, prefix="/api/v1/guardias", tags=["caja"], dependencies=con_sesion)
 app.include_router(categorias.router, prefix="/api/v1/categorias", tags=["habitaciones"], dependencies=con_sesion)
+app.include_router(novedades.router, prefix="/api/v1/novedades", tags=["novedades"], dependencies=con_sesion)
 # Mi perfil: cualquier sesión, también la plataforma.
 app.include_router(perfil.router, prefix="/api/v1/perfil", tags=["perfil"], dependencies=[Depends(operador_actual)])
 # Panel de la gerencia: solo el rol ADMINISTRADOR.

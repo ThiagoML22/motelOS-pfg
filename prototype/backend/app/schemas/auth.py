@@ -28,6 +28,22 @@ class EstablecimientoPublico(BaseModel):
     id: int
     codigo: str
     nombre: str
+    # Apariencia y avisos (migración 009): la interfaz los aplica al iniciar la sesión.
+    color_marca: str | None = None
+    eslogan: str | None = None
+    aviso_por_vencer_min: int = 10
+    alertas_sonoras: bool = False
+
+
+class MarcaPublica(BaseModel):
+    """Lo que la pantalla de ingreso muestra al reconocer el código de un motel: solo su nombre y su apariencia."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    codigo: str
+    nombre: str
+    color_marca: str | None = None
+    eslogan: str | None = None
 
 
 class SesionResponse(BaseModel):

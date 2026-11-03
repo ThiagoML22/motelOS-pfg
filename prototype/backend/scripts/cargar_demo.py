@@ -41,7 +41,16 @@ USUARIOS = [
     ("conserje2", "Conserje 2", ROL_OPERADOR, "DEMO_CLAVE_CONSERJES"),
 ]
 
-LUNA = {"codigo": "luna", "nombre": "Motel Luna", "domicilio": "Ruta 12 km 8, Garupá", "telefono": "3764-555000"}
+LUNA = {
+    "codigo": "luna",
+    "nombre": "Motel Luna",
+    "domicilio": "Ruta 12 km 8, Garupá",
+    "telefono": "3764-555000",
+    "color_marca": "#6d28d9",
+    "eslogan": "Noches bajo la luna",
+}
+# Eslogan de Motel C.C. (migración 009); su color queda el azul de MotelOS, así se ve la diferencia entre moteles.
+ESLOGAN_MOTELCC = "Tu descanso, a tu manera"
 LUNA_USUARIOS = [
     ("gerencia", "Gerencia Luna", ROL_ADMINISTRADOR, "DEMO_CLAVE_GERENCIA"),
     ("conserje1", "Conserje Luna", ROL_OPERADOR, "DEMO_CLAVE_CONSERJES"),
@@ -91,9 +100,17 @@ async def _luna(db: AsyncSession) -> int:
     db.add_all(
         [Habitacion(numero=n, estado="Libre", activa=True, categoria_id=simple.id) for n in range(101, 109)]
         + [
-            Tarifa(nombre=f"Simple desde {ahora:%Y-%m-%d %H:%M:%S.%f}", categoria_id=simple.id,
-                   tarifa_base=Decimal("10000"), estadia_base_min=120, tolerancia_min=0, fraccion_min=30,
-                   tarifa_fraccion=Decimal("3000"), vigente=True, vigente_desde=ahora),
+            Tarifa(
+                nombre=f"Simple desde {ahora:%Y-%m-%d %H:%M:%S.%f}",
+                categoria_id=simple.id,
+                tarifa_base=Decimal("10000"),
+                estadia_base_min=120,
+                tolerancia_min=0,
+                fraccion_min=30,
+                tarifa_fraccion=Decimal("3000"),
+                vigente=True,
+                vigente_desde=ahora,
+            ),
             ConfiguracionCaja(
                 establecimiento_id=establecimiento.id, fondo_cambio=Decimal("20000"), actualizado_en=ahora
             ),
@@ -112,15 +129,39 @@ async def _luna(db: AsyncSession) -> int:
 # Las habitaciones 1 a 8 de Motel C.C. quedan en Simple: los recorridos del canal usan la 1 y la 2 con $8.000.
 CATEGORIAS_DEMO = {
     "motelcc": [
-        ("Especial", "Hidromasaje y cama king", "#0f766e", 2,
-         ParametrosTarifa(tarifa_base=11000, estadia_base_min=120, fraccion_min=30, tarifa_fraccion=3500), [9, 10, 11]),
-        ("VIP", "Suite con jacuzzi, sauna y garage privado", "#7c3aed", 3,
-         ParametrosTarifa(tarifa_base=16000, estadia_base_min=180, fraccion_min=60, tarifa_fraccion=6000,
-                          tolerancia_min=10, tope=40000), [12, 13]),
+        (
+            "Especial",
+            "Hidromasaje y cama king",
+            "#0f766e",
+            2,
+            ParametrosTarifa(tarifa_base=11000, estadia_base_min=120, fraccion_min=30, tarifa_fraccion=3500),
+            [9, 10, 11],
+        ),
+        (
+            "VIP",
+            "Suite con jacuzzi, sauna y garage privado",
+            "#7c3aed",
+            3,
+            ParametrosTarifa(
+                tarifa_base=16000,
+                estadia_base_min=180,
+                fraccion_min=60,
+                tarifa_fraccion=6000,
+                tolerancia_min=10,
+                tope=40000,
+            ),
+            [12, 13],
+        ),
     ],
     "luna": [
-        ("Suite", "Suite con hidromasaje", "#b45309", 2,
-         ParametrosTarifa(tarifa_base=14000, estadia_base_min=150, fraccion_min=30, tarifa_fraccion=4000), [107, 108]),
+        (
+            "Suite",
+            "Suite con hidromasaje",
+            "#b45309",
+            2,
+            ParametrosTarifa(tarifa_base=14000, estadia_base_min=150, fraccion_min=30, tarifa_fraccion=4000),
+            [107, 108],
+        ),
     ],
 }
 
@@ -148,6 +189,9 @@ async def cargar() -> None:
         async with sesiones() as db:
             consulta = select(Establecimiento).where(Establecimiento.codigo == settings.ESTABLECIMIENTO_PREDETERMINADO)
             principal = (await db.execute(consulta)).scalars().one()
+            if not principal.eslogan:
+                principal.eslogan = ESLOGAN_MOTELCC
+                await db.commit()
             luna_id = await _luna(db)
         async with sesiones(info={CLAVE: principal.id}) as db:
             await _usuarios(db, USUARIOS, claves, principal.nombre)
@@ -157,7 +201,9 @@ async def cargar() -> None:
             await _categorias(db, "luna")
         async with sesiones(info={CLAVE: PLATAFORMA}) as db:
             await _usuarios(
-                db, [("plataforma", "Equipo de la plataforma", ROL_PLATAFORMA, "DEMO_CLAVE_PLATAFORMA")], claves,
+                db,
+                [("plataforma", "Equipo de la plataforma", ROL_PLATAFORMA, "DEMO_CLAVE_PLATAFORMA")],
+                claves,
                 "Plataforma",
             )
     finally:

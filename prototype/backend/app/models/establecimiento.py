@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from sqlalchemy import Boolean, Column, DateTime, Integer, String, true
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, false, text, true
 
 from app.core.database import Base
 
@@ -23,3 +23,9 @@ class Establecimiento(Base):
     leyenda_comprobante = Column(String(200), nullable=True)
     activo = Column(Boolean, nullable=False, default=True, server_default=true())
     creado_en = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC))
+    # Apariencia y avisos (migración 009): acento de la interfaz, eslogan del ingreso, anticipación del aviso «por
+    # vencer» de la grilla y alertas sonoras de la ventanilla.
+    color_marca = Column(String(7), nullable=True)
+    eslogan = Column(String(120), nullable=True)
+    aviso_por_vencer_min = Column(Integer, nullable=False, default=10, server_default=text("10"))
+    alertas_sonoras = Column(Boolean, nullable=False, default=False, server_default=false())
