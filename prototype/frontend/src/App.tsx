@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { WifiOff } from 'lucide-react';
 import { Arqueo, Categoria, HabitacionConDetalles, RoomStatus, Sesion, TipoCliente } from './types';
-import { api, getErrorMessage, onSesionVencida } from './services/api';
+import { api, esSinRespuesta, getErrorMessage, onSesionVencida } from './services/api';
 import { useConexion } from './hooks/useConexion';
 import { useNow } from './hooks/useNow';
 import { formatClock, formatRoomNumber } from './utils/format';
@@ -37,8 +37,9 @@ function App() {
   const refrescarSesion = useCallback(async () => {
     try {
       setSesion(await api.getSesion());
-    } catch {
-      setSesion(null);
+    } catch (err) {
+      // RNF-09: sin conexión la sesión sigue (el servidor no la rechazó); solo un 401 la cierra.
+      if (!esSinRespuesta(err)) setSesion(null);
     }
   }, []);
 

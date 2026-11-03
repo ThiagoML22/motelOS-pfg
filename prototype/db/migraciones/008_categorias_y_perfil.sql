@@ -25,7 +25,7 @@ CREATE TABLE categorias_habitacion (
 
 -- Cada establecimiento existente arranca con la categoria Simple, que recibe su tarifa y todas sus habitaciones.
 INSERT INTO categorias_habitacion (establecimiento_id, nombre, descripcion, color, orden)
-SELECT id, 'Simple', 'Habitacion estandar', '#244473', 1 FROM establecimientos;
+SELECT id, 'Simple', 'Habitación estándar', '#244473', 1 FROM establecimientos;
 
 ALTER TABLE habitaciones ADD COLUMN categoria_id INTEGER;
 UPDATE habitaciones h SET categoria_id = c.id

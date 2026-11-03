@@ -134,6 +134,9 @@ export const getErrorMessage = (error: unknown, fallback: string): string => {
 
 export const esConflicto = (error: unknown): boolean => axios.isAxiosError(error) && error.response?.status === 409;
 
+// La petición no llegó a tener respuesta (corte, servidor caído o tiempo agotado): no dice nada de la sesión.
+export const esSinRespuesta = (error: unknown): boolean => axios.isAxiosError(error) && !error.response;
+
 export const api = {
   // --- Sesión ---
   // El establecimiento es el código del motel (multiinquilino); vacío, el predeterminado de la instalación.
