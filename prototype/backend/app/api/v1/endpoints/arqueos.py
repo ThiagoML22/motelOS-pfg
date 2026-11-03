@@ -2,15 +2,17 @@
 
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import operador_actual
 from app.core.database import get_db
 from app.models.arqueo import ArqueoCaja
+from app.models.establecimiento import Establecimiento
 from app.models.operador import Operador
 from app.schemas.caja import ArqueoDetalle, ArqueoResultado, DeclaracionSupervisada, MetricasCaja
 from app.services import caja, reportes
+from app.services.comprobante import comprobante_arqueo
 
 router = APIRouter()
 
@@ -41,6 +43,25 @@ async def detalle(arqueo_id: int, db: AsyncSession = Depends(get_db)):
     if arqueo is None:
         raise HTTPException(status_code=404, detail="Arqueo no encontrado")
     return await reportes.detalle_de_arqueo(db, arqueo)
+
+
+@router.get("/{arqueo_id}/comprobante.pdf", response_class=Response)
+async def comprobante(arqueo_id: int, db: AsyncSession = Depends(get_db)):
+    """RF-10: el comprobante del arqueo en PDF, para imprimir y firmar."""
+    arqueo = await db.get(ArqueoCaja, arqueo_id)
+    if arqueo is None:
+        raise HTTPException(status_code=404, detail="Arqueo no encontrado")
+    return await respuesta_pdf(db, arqueo)
+
+
+async def respuesta_pdf(db: AsyncSession, arqueo: ArqueoCaja) -> Response:
+    detalle = await reportes.detalle_de_arqueo(db, arqueo)
+    establecimiento = await db.get(Establecimiento, arqueo.establecimiento_id)
+    return Response(
+        content=comprobante_arqueo(detalle, establecimiento),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="arqueo-{arqueo.id}.pdf"'},
+    )
 
 
 @router.post(

@@ -40,6 +40,9 @@ class Settings(BaseSettings):
     # Fondo de cambio que recibe cada guardia en la gaveta: $25.000, aprobado por la gerencia en el acta de
     # validación del 19/10/2026 (punto 5). Se suma al efectivo que el sistema espera en el arqueo.
     FONDO_INICIAL_CAJA: Decimal = Decimal("25000")
+    # Multiinquilino (migración 006): código del establecimiento cuando el inicio de sesión no indica uno. Así
+    # una instalación de un solo motel se usa igual que antes.
+    ESTABLECIMIENTO_PREDETERMINADO: str = "motelcc"
 
     @model_validator(mode="after")
     def exigir_configuracion_segura(self) -> "Settings":
