@@ -49,6 +49,17 @@ class Pagina:
         else:
             self.operaciones.append(b"q %.2f g %.2f %.2f %.2f %.2f re f Q" % (gris, x, y, ancho, alto))
 
+    def matriz(self, x: float, y: float, lado: float, celdas: list[list[bool]]) -> None:
+        """Dibuja una matriz de celdas negras (un código QR) en un cuadrado de `lado`, desde su esquina inferior."""
+        paso = lado / len(celdas)
+        rectangulos = b" ".join(
+            b"%.3f %.3f %.3f %.3f re" % (x + c * paso, y + lado - (f + 1) * paso, paso, paso)
+            for f, fila in enumerate(celdas)
+            for c, negra in enumerate(fila)
+            if negra
+        )
+        self.operaciones.append(b"q 0 g " + rectangulos + b" f Q")
+
 
 class DocumentoPDF:
     def __init__(self, titulo: str):

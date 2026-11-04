@@ -209,6 +209,9 @@ export interface PagoDetalle {
 
 export interface ArqueoDetalle extends Arqueo {
   pagos: PagoDetalle[];
+  huella?: string | null;
+  codigo?: string | null;
+  secuencia?: number | null;
 }
 
 export interface MetricaCaja {
@@ -539,6 +542,67 @@ export interface Tablero {
   mas_vendidos: { articulo_id: number; descripcion: string; unidades: number; importe: number }[];
   clientes_perdidos: ClientesPerdidos;
   rotacion: Rotacion;
+}
+
+// Gemelo del motel: repetir las llegadas reales con otras condiciones. No cambia nada.
+export interface EscenarioGemelo {
+  limpieza_min?: number | null;
+  habitaciones?: Record<number, number>;
+  precio_pct?: number;
+  precio_cuando?: 'siempre' | 'pico' | 'floja';
+}
+
+export interface FotoGemelo {
+  turnos: number;
+  perdidos: number;
+  ingresos: number;
+  ocupacion: number;
+}
+
+export interface ResultadoGemelo {
+  disponible: boolean;
+  dias: number;
+  limpieza_actual: number;
+  categorias: { categoria_id: number; nombre: string; color: string; actuales: number; cambio: number }[];
+  base?: FotoGemelo;
+  escenario?: FotoGemelo;
+  diferencia?: { turnos: number; perdidos: number; ingresos: number; ingresos_por_mes: number };
+  por_hora?: { hora: number; etiqueta: string; base: number; escenario: number }[];
+  calibracion?: { turnos_reales: number; turnos_modelo: number; coincidencia: number | null; ticket: number };
+  conclusion: string;
+  supuestos?: string[];
+}
+
+// Comprobantes verificables (migración 012).
+export interface IntegridadComprobantes {
+  total: number;
+  integros: number;
+  alterados: {
+    secuencia: number;
+    arqueo_id: number;
+    codigo: string;
+    motivo: string;
+    operador_nombre: string;
+    confirmado_en: string | null;
+  }[];
+  sin_sello: number;
+  ultimo_codigo: string | null;
+  verificado_en: string;
+}
+
+export interface VerificacionComprobante {
+  encontrado: boolean;
+  coincide: boolean;
+  detalle: string;
+  arqueo_id?: number;
+  secuencia?: number;
+  codigo?: string;
+  operador_nombre?: string;
+  franja?: string | null;
+  confirmado_en?: string;
+  total_declarado?: number;
+  diferencia?: number;
+  categoria?: string;
 }
 
 // Clientes que se fueron sin quedarse (migración 011).

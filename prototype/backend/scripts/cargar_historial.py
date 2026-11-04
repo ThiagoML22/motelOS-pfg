@@ -48,6 +48,7 @@ from app.models.operador import ROL_OPERADOR, Operador
 from app.models.pago import Pago
 from app.models.tarifa import Tarifa
 from app.models.turno import Turno
+from app.services import sellos
 from app.services.billing_service import calcular_sobreturno
 from app.services.caja import clasificar_diferencia
 
@@ -439,6 +440,9 @@ async def generar_historial(
             )
         )
         contador["arqueos"] += 1
+    await db.flush()
+    # Comprobantes verificables: la cadena de huellas, en orden, como si cada arqueo se hubiera sellado al confirmarse.
+    await sellos.sellar_pendientes(db)
 
     # Stock final: cada artículo queda con unos días de cobertura según lo que se vendió (algunos casi agotados).
     for i, articulo in enumerate(articulos):

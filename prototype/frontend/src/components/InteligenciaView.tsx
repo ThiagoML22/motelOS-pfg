@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { AlertaIA, ClientesPerdidos, Rotacion, Severidad, SugerenciaTarifa, Tablero } from '../types';
 import { ChatAsistente } from './Asistente';
+import GemeloMotel from './GemeloMotel';
 import { BotonNuevoPedido } from './PedidosReposicion';
 import { Cifra, EsqueletoTablero } from './ui/Carga';
 import { api, EVENTO_RECONECTADO, getErrorMessage } from '../services/api';
@@ -149,6 +150,7 @@ const InteligenciaView: React.FC = () => {
               <ClientesPerdidosCard datos={tablero.clientes_perdidos} />
               <RotacionCard datos={tablero.rotacion} />
             </div>
+            <GemeloMotel />
             <div className="grid gap-5 2xl:grid-cols-2">
               <SerieCard tablero={tablero} />
               <DemandaCard tablero={tablero} />

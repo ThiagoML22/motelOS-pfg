@@ -14,6 +14,7 @@ from datetime import date, datetime, timedelta
 from statistics import mean, median
 
 from app.models.cliente_perdido import MOTIVOS
+from app.services import gemelo as simulador
 from app.services import inteligencia as ia
 from app.services.caja import FALTANTE, SOBRANTE
 
@@ -48,6 +49,15 @@ SUGERENCIAS = [
 INTENCIONES: list[tuple[str, list[str]]] = [
     ("ayuda", [r"\bayuda\b", r"que (podes|sabes|puedo)", r"como (te uso|funciona)"]),
     ("resumen", [r"\bresumen\b", r"como (venimos|estamos|va|vamos)", r"\bnovedades\b", r"que (paso|hay de nuevo)"]),
+    (
+        "gemelo",
+        [
+            r"que pasa(ria)? si .*(limpieza|habitacion|precio|tarifa|agrego|sumo|subo|bajo|tuviera|hubiera)",
+            r"\bsimul(a|ar|ame|acion)\b",
+            r"si (la )?limpieza (tarda|demora|fuera|baja|dura)",
+            r"(cuanto|que) (ganaria|ganariamos|cambiaria)",
+        ],
+    ),
     (
         "perdidos",
         [
@@ -326,6 +336,7 @@ class Asistente:
             "ayuda": lambda: self.ayuda(),
             "resumen": lambda: self.resumen(),
             "perdidos": lambda: self.perdidos(periodo, categoria_id),
+            "gemelo": lambda: self.gemelo(texto, categoria_id),
             "pronostico": lambda: self.pronostico(texto),
             "stock": lambda: self.stock(texto),
             "articulos": lambda: self.articulos(texto, periodo),
@@ -373,6 +384,60 @@ class Asistente:
         datos = ia.resumen(self.ctx, kpis, ia.pronostico(self.ctx), lista, ia.mapa_demanda(self.ctx), reposiciones)
         texto = datos["titular"] + " " + " ".join(p["texto"] for p in datos["puntos"])
         return _respuesta(texto, "resumen", sugerencias=["¿Qué alertas hay?", "¿Cuántos turnos esperamos mañana?"])
+
+    def gemelo(self, texto: str, categoria_id: int | None) -> dict:
+        """«¿Qué pasa si la limpieza tarda 20 minutos?», «si agrego una VIP», «si subo la tarifa 10%»."""
+        _, limpieza_actual = simulador.llegadas_de(self.ctx, 30)
+        limpieza = None
+        if m := re.search(r"(\d{1,3}) min\w* menos", texto):
+            limpieza = max(limpieza_actual - int(m.group(1)), 1.0)
+        elif m := re.search(r"limpieza\D{0,30}?(\d{1,3})", texto):
+            limpieza = float(m.group(1))
+        cambios: dict[int, int] = {}
+        if m := re.search(r"(agreg|sum|tuviera|hubiera|constru)\w* (una|un|dos|tres|cuatro|\d+)\b", texto):
+            palabras = {"una": 1, "un": 1, "dos": 2, "tres": 3, "cuatro": 4}
+            cantidad = palabras.get(m.group(2)) or int(m.group(2))
+            if categoria_id is None and self.ctx.perdidos:
+                pedidas = Counter(p.categoria_id for p in self.ctx.perdidos if p.categoria_id is not None)
+                categoria_id = pedidas.most_common(1)[0][0] if pedidas else None
+            if categoria_id is None and self.ctx.categorias:
+                categoria_id = next(iter(self.ctx.categorias))
+            if categoria_id is not None:
+                cambios[categoria_id] = cantidad
+        precio = 0.0
+        if (m := re.search(r"(sub|aument|baj)\w*\D{0,30}?(\d{1,2})\b", texto)) and re.search(r"precio|tarifa", texto):
+            precio = float(m.group(2)) * (-1 if m.group(1) == "baj" else 1)
+        if limpieza is None and not cambios and not precio:
+            return _respuesta(
+                "Puedo probar un cambio sobre lo que pasó de verdad, sin tocar nada. Decime qué querés cambiar: la "
+                "limpieza, las habitaciones o el precio.",
+                "gemelo",
+                sugerencias=[
+                    "¿Qué pasa si la limpieza tarda 20 minutos?",
+                    "¿Qué pasa si agrego una VIP?",
+                    "¿Qué pasa si subo la tarifa 10%?",
+                ],
+            )
+        resultado = simulador.simular(self.ctx, simulador.Escenario(limpieza, cambios, precio))
+        if not resultado["disponible"]:
+            return _respuesta(resultado["conclusion"], "gemelo")
+        base, nuevo = resultado["base"], resultado["escenario"]
+        coincidencia = resultado["calibracion"]["coincidencia"]
+        return _respuesta(
+            resultado["conclusion"],
+            "gemelo",
+            detalle=f"Repite los últimos {resultado['dias']} días. Con las condiciones de hoy el modelo reproduce "
+            f"{ia.porcentaje(coincidencia)} de los turnos reales. No descuenta costos.",
+            tabla={
+                "columnas": ["", "Hoy", "Con el cambio"],
+                "filas": [
+                    ["Turnos", base["turnos"], nuevo["turnos"]],
+                    ["Clientes perdidos", base["perdidos"], nuevo["perdidos"]],
+                    ["Ingresos", ia.pesos(base["ingresos"]), ia.pesos(nuevo["ingresos"])],
+                ],
+            },
+            sugerencias=["¿Cuántos clientes perdimos?", "¿Cuánto tarda la limpieza?"],
+        )
 
     def perdidos(self, periodo: Periodo, categoria_id: int | None) -> dict:
         perdidos = [

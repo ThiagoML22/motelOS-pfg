@@ -16,10 +16,12 @@ import {
   EstablecimientoAlta,
   EstablecimientoDatos,
   EstablecimientoResumen,
+  EscenarioGemelo,
   FondoCambio,
   Guardia,
   HabitacionConDetalles,
   HabitacionConfiguracion,
+  IntegridadComprobantes,
   LineaDeTiempoDatos,
   MarcaPublica,
   MedioPago,
@@ -31,6 +33,7 @@ import {
   Perfil,
   ProximaLibre,
   ResumenCategoria,
+  ResultadoGemelo,
   ResumenMes,
   RespuestaAsistente,
   Sesion,
@@ -41,6 +44,7 @@ import {
   Turno,
   TurnoCreate,
   TurnoResumen,
+  VerificacionComprobante,
 } from '../types';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
@@ -181,6 +185,16 @@ export const api = {
       throw err;
     }
   },
+
+  // --- Comprobantes verificables (migración 012) ---
+  getIntegridad: async (): Promise<IntegridadComprobantes> => (await http.get('/arqueos/integridad')).data,
+
+  verificarComprobante: async (codigo: string): Promise<VerificacionComprobante> =>
+    (await http.get(`/arqueos/verificar/${encodeURIComponent(codigo)}`)).data,
+
+  // --- Gemelo del motel ---
+  probarEscenario: async (escenario: EscenarioGemelo): Promise<ResultadoGemelo> =>
+    (await http.post('/inteligencia/gemelo', escenario)).data,
 
   // --- Rotación (migración 011): próxima libre, línea de tiempo y clientes perdidos ---
   getProximaLibre: async (): Promise<ProximaLibre> => (await http.get('/habitaciones/proxima-libre')).data,

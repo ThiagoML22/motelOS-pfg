@@ -507,6 +507,37 @@ TEMAS: tuple[Tema, ...] = (
         GERENCIA,
     ),
     Tema(
+        "verificar_comprobante",
+        "Verificar un comprobante",
+        (
+            r"\bverific",
+            r"verific\w* (un |el |los |este )?(comprobante|arqueo)",
+            r"\bintegridad\b",
+            r"(alteraron|cambiaron|tocaron) .*arqueo",
+        ),
+        (
+            "En «Control de caja», en «Integridad de los comprobantes».",
+            "«Verificar ahora» recalcula la huella de todos los arqueos y marca los que ya no coinciden.",
+            "Para uno solo, escribí el código impreso en el papel o escaneá su QR.",
+            "Si el papel y el sistema no coinciden, el arqueo cambió después de firmarse.",
+        ),
+        "gerencia",
+        GERENCIA,
+    ),
+    Tema(
+        "usar_gemelo",
+        "Probar un cambio en el gemelo del motel",
+        (r"(uso|usar|abro|abrir|pruebo|probar)\w* (el )?(gemelo|simulador)", r"probar un cambio"),
+        (
+            "En «Inteligencia», en «Gemelo del motel».",
+            "Mové la limpieza, las habitaciones o el precio, o tocá uno de los ejemplos.",
+            "Compara las condiciones de hoy con las nuevas: turnos, clientes perdidos e ingresos por mes.",
+            "No cambia nada del sistema; también me lo podés preguntar: «¿qué pasa si agrego una VIP?».",
+        ),
+        "inteligencia",
+        GERENCIA,
+    ),
+    Tema(
         "control_caja",
         "Revisar arqueos y faltantes",
         (r"control de caja", r"historial de (caja|arqueos)", r"ver (los )?arqueos"),
@@ -654,13 +685,14 @@ PANTALLAS = {
             "Si un conserje se fue sin cerrar, arriba aparece su guardia con «Cierre supervisado».",
             "Abrí un mes para ver sus días; tocá un arqueo para ver sus cobros y descargar el PDF.",
             "Cada mes se exporta en PDF (informe) o Excel (planilla); el filtro por conserje se respeta.",
+            "«Integridad de los comprobantes» verifica que ningún arqueo haya cambiado después de firmarse.",
         ),
         (),
         (
             "¿Cómo exporto los arqueos del mes?",
             "¿Quién tuvo más faltantes en los últimos 30 días?",
             "¿Qué es la TDC?",
-            "¿Cómo hago un cierre supervisado?",
+            "¿Cómo verifico un comprobante?",
         ),
         GERENCIA,
     ),
@@ -698,10 +730,11 @@ PANTALLAS = {
     "inteligencia": Pantalla(
         "Inteligencia",
         "Es el análisis del motel calculado en su propio servidor, sin internet: resumen, alertas, pronóstico de "
-        "turnos, demanda por hora, clientes que se fueron, limpieza, sugerencias de tarifa y reposición sugerida. "
-        "Solo usa lo ya arqueado.",
+        "turnos, demanda por hora, clientes que se fueron, limpieza, el gemelo del motel, sugerencias de tarifa y "
+        "reposición sugerida. Solo usa lo ya arqueado.",
         (
             "Los gráficos muestran cada valor al pasar el mouse.",
+            "En el gemelo del motel probás un cambio de limpieza, habitaciones o precio antes de hacerlo.",
             "«Ver y aplicar» en una sugerencia de tarifa muestra el efecto estimado antes de confirmar.",
             "«Armar pedido con esto» convierte la reposición sugerida en un pedido al proveedor.",
             "A la derecha está el asistente: preguntale por los datos con tus palabras.",
@@ -709,9 +742,9 @@ PANTALLAS = {
         (),
         (
             "¿Cuántos turnos esperamos mañana?",
+            "¿Qué pasa si la limpieza tarda 20 minutos?",
             "¿Cuántos clientes perdimos?",
-            "¿Cuánto tarda la limpieza?",
-            "¿Cómo aplico una sugerencia de tarifa?",
+            "¿Qué es el gemelo del motel?",
         ),
         GERENCIA,
     ),
@@ -1113,7 +1146,7 @@ ENTRADAS = TEMAS + conocimiento.DEFINICIONES
 # Lo que un conserje puede preguntar del análisis: no muestra dinero (RN-RES-03 y datos de la gerencia).
 ANALISIS_CONSERJE = {"horas", "pronostico", "estadia", "ocupacion"}
 # Lo que es dinero o caja: al conserje se le dice que es de la gerencia sin buscar otra respuesta.
-DINERO = {"ingresos", "caja", "ticket", "medios", "sobreturno", "resumen", "perdidos"}
+DINERO = {"ingresos", "caja", "ticket", "medios", "sobreturno", "resumen", "perdidos", "gemelo"}
 INTENCIONES_ANALISIS = {nombre for nombre, _ in INTENCIONES}
 
 
@@ -1229,7 +1262,10 @@ async def responder(
         return _respuesta_de(tema, es_gerencia), texto
 
     # 3. La ventanilla ahora (lo que el conserje ya ve en su pantalla).
-    vivo = await _ventanilla_ahora(ventanilla, texto, es_gerencia, anterior_intencion)
+    # «¿Qué pasa si la limpieza tarda 20 minutos?» es una simulación, no una pregunta por la limpieza de ahora.
+    vivo = None
+    if intencion_datos != "gemelo":
+        vivo = await _ventanilla_ahora(ventanilla, texto, es_gerencia, anterior_intencion)
     if vivo is not None:
         return vivo.como_dict(), texto
 

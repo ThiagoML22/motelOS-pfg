@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/motel_db"
     SQL_ECHO: bool = False
     CORS_ORIGINS: str = "http://localhost:5173"
+    # Dirección de la aplicación en la red del motel, para el QR de los comprobantes. Vacía: la primera de CORS_ORIGINS.
+    URL_PUBLICA: str = ""
     # RNF-08: la patente se elimina dentro de las N horas posteriores al cierre del turno (24 h, aprobado por
     # la gerencia el 06/10/2026) y la tarea de depuración corre cada DEPURACION_INTERVALO_MIN minutos.
     RETENCION_PATENTE_HORAS: int = 24

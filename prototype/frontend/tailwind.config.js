@@ -58,6 +58,11 @@ export default {
           '0%, 70%': { transform: 'rotate(0deg)' },
           '85%, 100%': { transform: 'rotate(180deg)' },
         },
+        // Los eslabones de la cadena de comprobantes se encienden uno tras otro.
+        eslabon: {
+          from: { opacity: '0.2', transform: 'scaleY(0.4)' },
+          to: { opacity: '1', transform: 'scaleY(1)' },
+        },
         // Una habitación que cambió de estado se ilumina un momento con el acento.
         destello: {
           '0%': { boxShadow: '0 0 0 0 rgb(var(--accent) / 0.55)' },
@@ -86,6 +91,7 @@ export default {
         'toast-in': 'toast-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both',
         'tarjeta-in': 'tarjeta-in 320ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards',
         tramo: 'tramo 520ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards',
+        eslabon: 'eslabon 260ms ease-out backwards',
         reloj: 'reloj 2.8s ease-in-out infinite',
         destello: 'destello 1.4s ease-out',
         crecer: 'crecer 650ms cubic-bezier(0.2, 0.8, 0.2, 1) both',

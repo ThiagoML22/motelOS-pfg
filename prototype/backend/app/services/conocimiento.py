@@ -428,6 +428,35 @@ DEFINICIONES: tuple[Definicion, ...] = (
         extra="demanda perdida rechazado lleno completo",
     ),
     Definicion(
+        "gemelo",
+        "El gemelo del motel",
+        (r"\bgemelo\b", r"simulador del motel"),
+        "Es un simulador que repite lo que pasó de verdad: cada llegada de los últimos 30 días, con su duración y lo "
+        "que pagó, más los clientes que se fueron. Le cambiás la limpieza, las habitaciones o el precio y te dice "
+        "cuántos turnos, clientes perdidos e ingresos daría, sin tocar nada del sistema. Compara dos corridas del "
+        "mismo modelo y dice cuánto del pasado real reproduce. No descuenta costos, y el efecto del precio es un "
+        "supuesto.",
+        "inteligencia",
+        GERENCIA,
+        extra="simular probar escenario que pasaria cambio",
+    ),
+    Definicion(
+        "huella",
+        "La huella de un comprobante",
+        (
+            r"\bhuellas?( de un comprobante)?\b",
+            r"comprobantes? verificables?",
+            r"cadena de (comprobantes|arqueos|huellas)",
+        ),
+        "Es un código que sale de los datos del arqueo, de sus cobros y de la huella del arqueo anterior. Si alguien "
+        "cambia un importe directamente en la base, la huella deja de coincidir; y si la recalcula, se corta la cadena "
+        "con el siguiente. Va impresa en el comprobante firmado, así el papel también sirve de testigo. Se verifica en "
+        "Control de caja.",
+        "gerencia",
+        GERENCIA,
+        extra="integridad alterado sello hash",
+    ),
+    Definicion(
         "limpieza_sin_turno",
         "Una limpieza sin turno",
         (r"limpiezas? sin (un )?turno",),

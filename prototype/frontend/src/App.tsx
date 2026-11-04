@@ -165,6 +165,8 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
   // refresco de la sesión ya informe la guardia como cerrada.
   const [ultimoArqueo, setUltimoArqueo] = useState<Arqueo | null>(null);
   const mostrandoComprobante = activeView === 'caja' && ultimoArqueo !== null;
+  // El QR de un comprobante trae su código en la dirección: la gerencia lo ve verificado en Control de caja.
+  const codigoAVerificar = useMemo(() => new URLSearchParams(window.location.search).get('verificar'), []);
 
   // Si el conserje abre una guardia nueva, el comprobante anterior deja lugar al formulario de cierre.
   useEffect(() => {
@@ -607,7 +609,7 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
 
         {esGerencia && activeView === 'inteligencia' && <InteligenciaView />}
 
-        {esGerencia && activeView === 'gerencia' && <PanelGerencia onCambioGuardia={onRefrescarSesion} />}
+        {esGerencia && activeView === 'gerencia' && <PanelGerencia onCambioGuardia={onRefrescarSesion} codigoInicial={codigoAVerificar} />}
 
         {esGerencia && activeView === 'configuracion' && (
           <ConfiguracionView onCambioHabitaciones={fetchHabitaciones} onCambioApariencia={onRefrescarSesion} />
