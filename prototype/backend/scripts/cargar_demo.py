@@ -248,6 +248,11 @@ async def cargar() -> None:
             if not principal.eslogan:
                 principal.eslogan = ESLOGAN_MOTELCC
                 await db.commit()
+            # Lo que ve el cliente con su QR; si la gerencia ya lo cargó, no se toca.
+            if not principal.wifi_nombre:
+                principal.wifi_nombre, principal.wifi_clave = "MotelCC-Huespedes", "descanso2026"
+                principal.bienvenida = "¡Bienvenidos! Cualquier cosa, nos avisás desde acá sin llamar."
+                await db.commit()
             luna_id = await _luna(db)
         async with sesiones(info={CLAVE: principal.id}) as db:
             await _usuarios(db, USUARIOS, claves, principal.nombre)

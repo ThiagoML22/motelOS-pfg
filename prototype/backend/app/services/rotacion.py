@@ -20,6 +20,7 @@ from app.models.categoria import CategoriaHabitacion
 from app.models.evento_habitacion import COBRO, EventoHabitacion
 from app.models.habitacion import Habitacion
 from app.models.operador import Operador
+from app.models.pedido_cliente import RECHAZADO, SALIDA, TIEMPO, PedidoCliente
 from app.models.tarifa import Tarifa
 from app.models.turno import Turno
 from app.services.liquidacion import con_zona
@@ -31,6 +32,8 @@ LIMPIEZA_POR_DEFECTO_MIN = 25
 DIAS_DE_ESTADIAS = 60
 DIAS_DE_LIMPIEZAS = 30
 MINIMO_MUESTRAS = 8
+# Lo que tarda en irse quien pidió la cuenta: (temprano, típico, tarde), en minutos.
+SALIDA_AVISADA_MIN = (3.0, 8.0, 15.0)
 
 
 async def cambiar_estado(
@@ -130,6 +133,24 @@ def _percentil(ordenados: list[float], parte: float) -> float:
     return ordenados[min(int(len(ordenados) * parte), len(ordenados) - 1)]
 
 
+def lo_que_avisa_el_cliente(
+    pedido: PedidoCliente, inicio: datetime, ahora: datetime, base: float
+) -> tuple[float, float, float] | None:
+    """Minutos que le faltan a un turno según lo que avisó el cliente: es mejor dato que cualquier estadística.
+
+    Quien pidió la cuenta se está yendo. Quien avisó que se queda más, se queda hasta el fin de su estadía base (o desde
+    que avisó, si ya la había pasado) más esos minutos.
+    """
+    if pedido.tipo == SALIDA:
+        return SALIDA_AVISADA_MIN
+    if pedido.tipo != TIEMPO or not pedido.minutos:
+        return None
+    avisado = (con_zona(pedido.creado_en) - inicio).total_seconds() / 60
+    lleva = (ahora - inicio).total_seconds() / 60
+    falta = max(max(base, avisado) + pedido.minutos - lleva, 5.0)
+    return falta * 0.8, falta, falta * 1.25
+
+
 def estimar_restante(duraciones: list[float], transcurrido: float, base: float) -> tuple[float, float, float]:
     """Minutos que le faltarían a un turno que ya lleva `transcurrido`: (temprano, típico, tarde).
 
@@ -183,12 +204,30 @@ async def proxima_libre(db: AsyncSession, ahora: datetime | None = None) -> dict
         ).all()
     )
 
+    # Lo último que avisó cada cliente que sigue en su habitación (un aviso rechazado no cuenta).
+    avisos: dict = {}
+    if en_curso:
+        consulta = (
+            select(PedidoCliente)
+            .where(
+                PedidoCliente.turno_id.in_([turno.id for turno, _ in en_curso.values()]),
+                PedidoCliente.tipo.in_((SALIDA, TIEMPO)),
+                PedidoCliente.estado != RECHAZADO,
+            )
+            .order_by(PedidoCliente.id)
+        )
+        avisos = {p.turno_id: p for p in (await db.execute(consulta)).scalars()}
+
     proximas = []
     for h in habitaciones:
+        aviso = None
         if h.estado == OCUPADA and h.id in en_curso:
             turno, base = en_curso[h.id]
-            lleva = (ahora - con_zona(turno.hora_inicio)).total_seconds() / 60
-            temprano, tipico, tarde = estimar_restante(duraciones[h.categoria_id], lleva, float(base or 120))
+            inicio = con_zona(turno.hora_inicio)
+            lleva = (ahora - inicio).total_seconds() / 60
+            aviso = avisos.get(turno.id)
+            avisado = lo_que_avisa_el_cliente(aviso, inicio, ahora, float(base or 120)) if aviso else None
+            temprano, tipico, tarde = avisado or estimar_restante(duraciones[h.categoria_id], lleva, float(base or 120))
             temprano, tipico, tarde = temprano + limpieza, tipico + limpieza, tarde + limpieza
         elif h.estado == LIMPIEZA:
             desde = inicio_limpieza.get(h.id)
@@ -209,6 +248,8 @@ async def proxima_libre(db: AsyncSession, ahora: datetime | None = None) -> dict
                 "minutos": round(tipico),
                 "minimo": round(temprano),
                 "maximo": round(tarde),
+                # Si la estimación sale de lo que avisó el cliente con su QR.
+                "aviso": aviso.tipo if aviso else None,
             }
         )
     proximas.sort(key=lambda p: (p["minutos"], p["numero"]))

@@ -30,8 +30,8 @@ export const ChipCategoria: React.FC<{ categoria?: Pick<Categoria, 'nombre' | 'c
 }) =>
   categoria ? (
     <span
-      className={`inline-flex max-w-full items-center gap-1.5 truncate rounded-full border px-2 py-0.5 text-xs font-medium ${className}`}
-      style={{ borderColor: `${categoria.color}66`, color: categoria.color, backgroundColor: `${categoria.color}14` }}
+      className={`chip-categoria inline-flex max-w-full items-center gap-1.5 truncate rounded-full border px-2 py-0.5 text-xs font-medium ${className}`}
+      style={{ borderColor: `${categoria.color}66`, '--chip': categoria.color, backgroundColor: `${categoria.color}14` } as React.CSSProperties}
     >
       <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: categoria.color }} aria-hidden="true" />
       <span className="truncate">{categoria.nombre}</span>

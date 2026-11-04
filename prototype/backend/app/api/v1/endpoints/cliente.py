@@ -5,12 +5,13 @@ existe responde siempre lo mismo.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Path, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.inquilino import fijar_establecimiento
+from app.models.calificacion import TODOS_LOS_PROBLEMAS
 from app.models.establecimiento import Establecimiento
 from app.models.turno import Turno
 from app.services import acceso_cliente
@@ -36,6 +37,22 @@ class PedidoAlta(BaseModel):
     tipo: str
     articulo_id: int | None = None
     cantidad: int | None = None
+    minutos: int | None = None
+    medio_pago: str | None = None
+
+
+class LineaCarrito(BaseModel):
+    articulo_id: int
+    cantidad: int = Field(ge=1, le=acceso_cliente.MAXIMA_CANTIDAD)
+
+
+class CarritoAlta(BaseModel):
+    lineas: list[LineaCarrito] = Field(min_length=1, max_length=acceso_cliente.MAXIMAS_LINEAS)
+
+
+class CalificacionAlta(BaseModel):
+    puntaje: int = Field(ge=1, le=5)
+    problemas: int = Field(default=0, ge=0, le=TODOS_LOS_PROBLEMAS)
 
 
 @router.get("/{token}")
@@ -47,4 +64,20 @@ async def estadia(turno: Turno = Depends(turno_del_enlace), db: AsyncSession = D
 async def pedir(
     datos: PedidoAlta, turno: Turno = Depends(turno_del_enlace), db: AsyncSession = Depends(get_db)
 ) -> dict:
-    return await acceso_cliente.pedir(db, turno, datos.tipo, datos.articulo_id, datos.cantidad)
+    return await acceso_cliente.pedir(
+        db, turno, datos.tipo, datos.articulo_id, datos.cantidad, datos.minutos, datos.medio_pago
+    )
+
+
+@router.post("/{token}/carrito", status_code=status.HTTP_201_CREATED)
+async def pedir_carrito(
+    datos: CarritoAlta, turno: Turno = Depends(turno_del_enlace), db: AsyncSession = Depends(get_db)
+) -> dict:
+    return await acceso_cliente.pedir_carrito(db, turno, [(x.articulo_id, x.cantidad) for x in datos.lineas])
+
+
+@router.post("/{token}/calificacion", status_code=status.HTTP_201_CREATED)
+async def calificar(
+    datos: CalificacionAlta, turno: Turno = Depends(turno_del_enlace), db: AsyncSession = Depends(get_db)
+) -> dict:
+    return await acceso_cliente.calificar(db, turno, datos.puntaje, datos.problemas)

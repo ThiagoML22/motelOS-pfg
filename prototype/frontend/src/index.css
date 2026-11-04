@@ -558,6 +558,26 @@
   }
 }
 
+/* El chip de una categoría usa su color; en modo oscuro se aclara, porque un azul marino sobre fondo oscuro no se lee. */
+.chip-categoria {
+  color: var(--chip);
+}
+
+[data-theme='dark'] .chip-categoria {
+  color: color-mix(in srgb, var(--chip) 45%, white);
+}
+
+/* La hoja que sube desde abajo en la página del cliente. */
+.hoja-entrar {
+  animation: hoja-subir 260ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+}
+
+@keyframes hoja-subir {
+  from {
+    transform: translateY(100%);
+  }
+}
+
 /* Mot, el robotcito del asistente (components/Mot.tsx). El cuerpo toma el color de marca; la pantalla y los ojos no
    cambian con el tema: es su cara. Con «reducir movimiento» queda quieto pero sigue cambiando de expresión. */
 .mot {

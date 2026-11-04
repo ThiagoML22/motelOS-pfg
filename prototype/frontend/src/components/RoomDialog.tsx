@@ -31,6 +31,16 @@ type Vista = 'cuenta' | 'productos' | 'cobro' | 'ticket';
 
 const AVISO_CAMBIO_TARIFA_MIN = 60;
 
+// Las líneas de un carrito comparten lote: se atienden como un solo pedido.
+const agruparPedidos = (pedidos: PedidoVentanilla[]): PedidoVentanilla[][] => {
+  const grupos = new Map<string, PedidoVentanilla[]>();
+  for (const p of pedidos) {
+    const clave = p.lote ?? `p${p.id}`;
+    grupos.set(clave, [...(grupos.get(clave) ?? []), p]);
+  }
+  return [...grupos.values()];
+};
+
 const TIPOS: { value: TipoCliente; label: string; icon: React.ElementType }[] = [
   { value: 'Auto', label: 'Auto', icon: Car },
   { value: 'Moto', label: 'Moto', icon: Bike },
@@ -179,19 +189,26 @@ const RoomDialog: React.FC<RoomDialogProps> = ({
     }
   };
 
-  const resolverPedido = async (pedido: PedidoVentanilla, entregado: boolean) => {
+  // Una línea por vez: si falta stock de una, las demás quedan hechas y el mensaje dice cuál falló.
+  const moverPedidos = async (lineas: PedidoVentanilla[], accion: (id: number) => Promise<unknown>, listo: string) => {
     setEnviando(true);
     try {
-      await (entregado ? api.atenderPedidoCliente(pedido.id) : api.rechazarPedidoCliente(pedido.id));
-      toast(entregado ? 'Pedido entregado.' : 'Avisamos que no está disponible.', 'success');
-      await onCambioPedidos?.();
-      if (turnoId) await loadData(turnoId);
-      await onRefreshRooms();
+      for (const linea of lineas) await accion(linea.id);
+      toast(listo, 'success');
     } catch (e) {
       toast(getErrorMessage(e, 'No se pudo atender el pedido.'), 'error');
     } finally {
+      await onCambioPedidos?.();
+      if (turnoId) await loadData(turnoId);
+      await onRefreshRooms();
       setEnviando(false);
     }
+  };
+
+  const pedidoDeCuenta = pedidos.find((p) => p.tipo === 'SALIDA');
+  const irACobrar = () => {
+    if (pedidoDeCuenta?.medio_pago) setMedioPago(pedidoDeCuenta.medio_pago);
+    setVista('cobro');
   };
 
   const titulo = formatRoomNumber(room.numero);
@@ -402,25 +419,53 @@ const RoomDialog: React.FC<RoomDialogProps> = ({
               <BellRing className="h-4 w-4" aria-hidden="true" />
               Pedidos del cliente
             </h3>
-            <ul className="space-y-1.5">
-              {pedidos.map((p) => (
-                <li key={p.id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
-                  <span className="min-w-0 text-ink">
-                    {p.cantidad ? `${p.cantidad} × ${p.descripcion}` : p.descripcion}
-                    {p.subtotal !== null && <span className="text-muted"> · {formatMoney(p.subtotal)}</span>}
-                  </span>
-                  <span className="flex gap-1.5">
-                    <Button size="sm" disabled={enviando} onClick={() => void resolverPedido(p, true)}>
-                      {p.tipo === 'ARTICULO' ? 'Entregado' : 'Listo'}
-                    </Button>
-                    {p.tipo === 'ARTICULO' && (
-                      <Button size="sm" variant="secondary" disabled={enviando} onClick={() => void resolverPedido(p, false)}>
-                        No hay
-                      </Button>
-                    )}
-                  </span>
-                </li>
-              ))}
+            <ul className="space-y-2.5">
+              {agruparPedidos(pedidos).map((lineas) => {
+                const delMinibar = lineas[0].tipo === 'ARTICULO';
+                const sinSalir = lineas.filter((l) => l.estado === 'Pendiente');
+                const total = lineas.reduce((suma, l) => suma + (l.subtotal ?? 0), 0);
+                return (
+                  <li key={lineas[0].lote ?? lineas[0].id} className="text-sm">
+                    {delMinibar &&
+                      lineas.map((l) => (
+                        <div key={l.id} className="flex items-center justify-between gap-2 text-ink">
+                          <span className="min-w-0">{`${l.cantidad} × ${l.descripcion}`}</span>
+                          <button
+                            type="button"
+                            disabled={enviando}
+                            onClick={() => void moverPedidos([l], api.rechazarPedidoCliente, 'Avisamos que no está disponible.')}
+                            className="press shrink-0 rounded px-1.5 py-0.5 text-xs text-muted hover:text-danger"
+                          >
+                            No hay
+                          </button>
+                        </div>
+                      ))}
+                    <div className={`flex flex-wrap items-center justify-between gap-2 ${delMinibar ? 'mt-1.5' : ''}`}>
+                      {delMinibar ? (
+                        <span className="text-xs text-muted">{`${formatMoney(total)}${sinSalir.length ? '' : ' · En camino'}`}</span>
+                      ) : (
+                        <span className="min-w-0 text-ink">{lineas[0].descripcion}</span>
+                      )}
+                      <span className="flex gap-1.5">
+                        {delMinibar && sinSalir.length > 0 && (
+                          <Button size="sm" variant="secondary" disabled={enviando} onClick={() => void moverPedidos(sinSalir, api.llevarPedidoCliente, 'El cliente ya lo ve en camino.')}>
+                            Lo llevo
+                          </Button>
+                        )}
+                        {lineas[0].tipo === 'SALIDA' ? (
+                          <Button size="sm" disabled={enviando} onClick={irACobrar}>
+                            Cobrar
+                          </Button>
+                        ) : (
+                          <Button size="sm" disabled={enviando} onClick={() => void moverPedidos(lineas, api.atenderPedidoCliente, delMinibar ? 'Pedido entregado.' : 'Listo.')}>
+                            {delMinibar ? 'Entregado' : 'Listo'}
+                          </Button>
+                        )}
+                      </span>
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           </div>
         )}
@@ -478,7 +523,7 @@ const RoomDialog: React.FC<RoomDialogProps> = ({
         <Button variant="secondary" className="flex-1" onClick={() => setVista('productos')}>
           Agregar productos
         </Button>
-        <Button className="flex-1" onClick={() => setVista('cobro')}>
+        <Button className="flex-1" onClick={irACobrar}>
           Cobrar
         </Button>
       </div>
@@ -568,6 +613,9 @@ const RoomDialog: React.FC<RoomDialogProps> = ({
 
         <div>
           <SectionTitle>Medio de pago</SectionTitle>
+          {pedidoDeCuenta?.medio_pago && (
+            <p className="mb-2 text-xs text-muted">{pedidoDeCuenta.descripcion}. Podés cambiarlo si paga de otra forma.</p>
+          )}
           <div role="radiogroup" aria-label="Medio de pago" className="grid grid-cols-3 gap-2">
             {MEDIOS.map(({ value, label, icon: Icon }) => (
               <button

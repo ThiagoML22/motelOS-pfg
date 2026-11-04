@@ -380,6 +380,9 @@ export interface Establecimiento extends EstablecimientoPublico {
   domicilio?: string | null;
   telefono?: string | null;
   leyenda_comprobante?: string | null;
+  wifi_nombre?: string | null;
+  wifi_clave?: string | null;
+  bienvenida?: string | null;
   activo: boolean;
   creado_en: string;
 }
@@ -393,6 +396,9 @@ export interface EstablecimientoDatos {
   eslogan?: string | null;
   aviso_por_vencer_min?: number;
   alertas_sonoras?: boolean;
+  wifi_nombre?: string | null;
+  wifi_clave?: string | null;
+  bienvenida?: string | null;
 }
 
 export interface EstablecimientoResumen extends Establecimiento {
@@ -584,6 +590,18 @@ export interface Tablero {
   mas_vendidos: { articulo_id: number; descripcion: string; unidades: number; importe: number }[];
   clientes_perdidos: ClientesPerdidos;
   rotacion: Rotacion;
+  opiniones: Opiniones;
+}
+
+// Lo que dicen los clientes (migración 015): solo totales, nunca una opinión suelta.
+export interface Opiniones {
+  dias: number;
+  cantidad: number;
+  promedio: number | null;
+  parte: number;
+  puntajes: { puntaje: number; cantidad: number }[];
+  problemas: { problema: string; cantidad: number }[];
+  habitaciones: { habitacion_id: number; numero: number; promedio: number; cantidad: number; problema: string | null; problema_veces: number }[];
 }
 
 // Gemelo del motel: repetir las llegadas reales con otras condiciones. No cambia nada.
@@ -763,7 +781,17 @@ export interface ConfirmacionAsistente {
   tarifa_id?: number | null;
 }
 
-// El cliente en su habitación (migración 013): lo que ve con el QR de su ticket.
+// Un pedido o aviso, como lo ve el cliente. Las líneas de un carrito comparten `lote` (migración 015).
+export interface PedidoEstadia {
+  id: number;
+  tipo: string;
+  descripcion: string;
+  cantidad: number | null;
+  estado: string;
+  lote: string | null;
+}
+
+// El cliente en su habitación (migraciones 013 y 015): lo que ve con el QR de su ticket.
 export interface EstadiaCliente {
   activa: boolean;
   motel: string;
@@ -771,6 +799,7 @@ export interface EstadiaCliente {
   numero?: number;
   categoria?: string | null;
   franja?: string | null;
+  bienvenida?: string | null;
   hora_inicio?: string;
   ahora?: string;
   estadia_base_min?: number;
@@ -779,10 +808,16 @@ export interface EstadiaCliente {
   total_consumos?: number;
   total?: number;
   proximo_cargo?: { minutos: number; monto: number } | null;
+  opciones_tiempo?: { minutos: number; etiqueta: string; suma: number; hasta: string }[];
+  medios_pago?: { medio: string; etiqueta: string }[];
+  mot?: { id: string; pregunta: string; respuesta: string }[];
+  calificada?: boolean;
+  puede_calificar?: boolean;
+  problemas?: { valor: number; etiqueta: string }[];
   consumos?: { descripcion: string; cantidad: number; subtotal: number }[];
   articulos?: { id: number; descripcion: string; precio: number; categoria: string | null }[];
   avisos?: { tipo: string; descripcion: string }[];
-  pedidos?: { id: number; tipo: string; descripcion: string; cantidad: number | null; estado: string }[];
+  pedidos?: PedidoEstadia[];
 }
 
 // Un pedido del cliente que espera en la ventanilla.
@@ -794,6 +829,9 @@ export interface PedidoVentanilla {
   tipo: string;
   descripcion: string;
   cantidad: number | null;
+  estado: string;
+  lote: string | null;
+  medio_pago: MedioPago | null;
   subtotal: number | null;
   creado_en: string;
 }

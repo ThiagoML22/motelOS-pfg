@@ -404,6 +404,9 @@ const SeccionEstablecimiento: React.FC<{ establecimiento: Establecimiento; ocupa
     domicilio: establecimiento.domicilio ?? '',
     telefono: establecimiento.telefono ?? '',
     leyenda_comprobante: establecimiento.leyenda_comprobante ?? '',
+    wifi_nombre: establecimiento.wifi_nombre ?? '',
+    wifi_clave: establecimiento.wifi_clave ?? '',
+    bienvenida: establecimiento.bienvenida ?? '',
   });
   const set = (clave: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setForm((prev) => ({ ...prev, [clave]: e.target.value }));
@@ -445,6 +448,19 @@ const SeccionEstablecimiento: React.FC<{ establecimiento: Establecimiento; ocupa
             value={form.leyenda_comprobante}
             onChange={set('leyenda_comprobante')}
           />
+        </Field>
+        <h3 className="pt-2 text-sm font-semibold text-ink">Para el cliente</h3>
+        <p className="-mt-3 text-xs text-muted">Lo ve en su celular, con el QR del ticket, mientras dura su estadía.</p>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Red de Wi-Fi" htmlFor="est_wifi">
+            <input id="est_wifi" maxLength={60} className={campo} value={form.wifi_nombre} onChange={set('wifi_nombre')} />
+          </Field>
+          <Field label="Clave de Wi-Fi" htmlFor="est_wifi_clave">
+            <input id="est_wifi_clave" maxLength={60} autoComplete="off" className={campo} value={form.wifi_clave} onChange={set('wifi_clave')} />
+          </Field>
+        </div>
+        <Field label="Mensaje de bienvenida" htmlFor="est_bienvenida" hint="Lo dice Mot cuando el cliente entra a hablar con él.">
+          <input id="est_bienvenida" maxLength={200} className={campo} value={form.bienvenida} onChange={set('bienvenida')} />
         </Field>
         <Button type="submit" disabled={ocupado || !form.nombre.trim()} className="h-11">
           Guardar datos

@@ -23,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.models.arqueo import ArqueoCaja
 from app.models.articulo import Articulo
+from app.models.calificacion import PROBLEMAS, Calificacion
 from app.models.categoria import CategoriaHabitacion
 from app.models.cliente_perdido import MOTIVOS, SIN_LUGAR, ClientePerdido
 from app.models.consumo import Consumo
@@ -158,6 +159,14 @@ class Perdido:
     operador_id: int
 
 
+@dataclass(frozen=True)
+class Opinion:
+    momento: datetime
+    habitacion_id: int
+    puntaje: int
+    problemas: int
+
+
 @dataclass
 class Contexto:
     zona: ZoneInfo
@@ -178,6 +187,7 @@ class Contexto:
     limpiezas: list[Tramo] = field(default_factory=list)
     # Todas, también las dadas de baja: lo cobrado con ellas sigue en el historial.
     franjas: list[FranjaTarifa] = field(default_factory=list)
+    opiniones: list[Opinion] = field(default_factory=list)
 
     def franjas_de(self, categoria_id: int) -> list[FranjaTarifa]:
         return [f for f in self.franjas if f.activa and f.categoria_id == categoria_id]
@@ -303,6 +313,17 @@ async def contexto(db: AsyncSession, ahora: datetime | None = None) -> Contexto:
             )
         ).all()
     ]
+    # Las opiniones no dicen nada de la caja: no esperan al arqueo.
+    opiniones = [
+        Opinion(local(m), h, p, problemas)
+        for m, h, p, problemas in (
+            await db.execute(
+                select(
+                    Calificacion.creado_en, Calificacion.habitacion_id, Calificacion.puntaje, Calificacion.problemas
+                ).where(Calificacion.creado_en >= desde_utc)
+            )
+        ).all()
+    ]
     limpiezas = [
         t
         for t in tramos_en_estado(await eventos_de(db, LIMPIEZA, desde_utc), LIMPIEZA)
@@ -326,6 +347,7 @@ async def contexto(db: AsyncSession, ahora: datetime | None = None) -> Contexto:
         perdidos=perdidos,
         limpiezas=limpiezas,
         franjas=todas_las_franjas,
+        opiniones=opiniones,
     )
 
 
@@ -407,6 +429,69 @@ def mapa_demanda(ctx: Contexto, semanas: int = SEMANAS_ESTACIONALES) -> dict:
         "dia_mas_fuerte": DIAS[max(range(7), key=lambda d: por_dia[d])],
         "dia_mas_flojo": DIAS[min(range(7), key=lambda d: por_dia[d])],
         "por_dia": por_dia,
+    }
+
+
+# --- Opiniones de los clientes ---------------------------------------------------------------------------------
+
+# Una habitación se compara con las demás recién con esta cantidad de opiniones: con menos, una sola la movería mucho.
+MINIMO_OPINIONES = 3
+
+
+def problemas_de(mascara: int) -> list[str]:
+    return [etiqueta for valor, etiqueta in PROBLEMAS.items() if mascara & valor]
+
+
+def opiniones(ctx: Contexto, dias: int = 30) -> dict:
+    """Promedio, lo que más falla y cómo está cada habitación. Solo totales: una opinión suelta con su hora dejaría de
+    ser anónima."""
+    desde = ctx.ahora - timedelta(days=dias)
+    propias = [o for o in ctx.opiniones if o.momento >= desde]
+    if not propias:
+        return {
+            "dias": dias,
+            "cantidad": 0,
+            "promedio": None,
+            "parte": 0.0,
+            "puntajes": [],
+            "problemas": [],
+            "habitaciones": [],
+        }
+    por_habitacion: dict[int, list[Opinion]] = defaultdict(list)
+    problemas: Counter[str] = Counter()
+    for o in propias:
+        por_habitacion[o.habitacion_id].append(o)
+        problemas.update(problemas_de(o.problemas))
+    filas = []
+    for habitacion_id, lista in por_habitacion.items():
+        if len(lista) < MINIMO_OPINIONES:
+            continue
+        propios: Counter[str] = Counter()
+        for o in lista:
+            propios.update(problemas_de(o.problemas))
+        principal = propios.most_common(1)[0] if propios else None
+        filas.append(
+            {
+                "habitacion_id": habitacion_id,
+                "numero": ctx.numero(habitacion_id),
+                "promedio": round(mean(o.puntaje for o in lista), 2),
+                "cantidad": len(lista),
+                "problema": principal[0] if principal else None,
+                "problema_veces": principal[1] if principal else 0,
+            }
+        )
+    filas = [f for f in filas if f["numero"] is not None]
+    filas.sort(key=lambda f: (f["promedio"], -f["cantidad"]))
+    turnos = sum(1 for t in ctx.turnos if t.fin >= desde)
+    puntajes = Counter(o.puntaje for o in propias)
+    return {
+        "dias": dias,
+        "cantidad": len(propias),
+        "promedio": round(mean(o.puntaje for o in propias), 2),
+        "parte": round(min(len(propias) / turnos, 1.0), 4) if turnos else 0.0,
+        "puntajes": [{"puntaje": p, "cantidad": puntajes[p]} for p in range(5, 0, -1)],
+        "problemas": [{"problema": p, "cantidad": c} for p, c in problemas.most_common()],
+        "habitaciones": filas,
     }
 
 
@@ -908,6 +993,25 @@ def _alertas_de_rotacion(ctx: Contexto, dias: int) -> list[dict]:
     return alertas
 
 
+def _alertas_de_opiniones(ctx: Contexto, dias: int) -> list[dict]:
+    """Una habitación que varios clientes marcan por lo mismo: es un arreglo pendiente, no una mala racha."""
+    alertas = []
+    for fila in opiniones(ctx, dias)["habitaciones"]:
+        veces = fila["problema_veces"]
+        if veces >= MINIMO_OPINIONES and veces / fila["cantidad"] >= 0.3:
+            alertas.append(
+                _alerta(
+                    "habitacion",
+                    "media",
+                    f"Habitación {fila['numero']}: {veces} clientes marcaron «{fila['problema']}»",
+                    f"Tiene {str(fila['promedio']).replace('.', ',')} de promedio en {fila['cantidad']} opiniones "
+                    f"de los últimos {dias} días.",
+                    "Revisala antes de que se note en la ocupación.",
+                )
+            )
+    return alertas
+
+
 ORDEN_SEVERIDAD = {"alta": 0, "media": 1, "info": 2}
 
 
@@ -917,6 +1021,7 @@ def alertas(ctx: Contexto, reposiciones: list[dict] | None = None, dias: int = 3
         + _alertas_de_habitaciones(ctx, dias)
         + _alertas_de_turnos(ctx, dias)
         + _alertas_de_rotacion(ctx, dias)
+        + _alertas_de_opiniones(ctx, dias)
         + _alertas_de_inventario(ctx, reposiciones if reposiciones is not None else reposicion(ctx))
     )
     return sorted(lista, key=lambda a: ORDEN_SEVERIDAD[a["severidad"]])
@@ -1436,4 +1541,5 @@ async def tablero(db: AsyncSession, ahora: datetime | None = None) -> dict:
         "mas_vendidos": articulos_mas_vendidos(ctx),
         "clientes_perdidos": perdidos,
         "rotacion": rotacion(ctx),
+        "opiniones": opiniones(ctx),
     }

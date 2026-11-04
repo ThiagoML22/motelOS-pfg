@@ -348,10 +348,34 @@ TEMAS: tuple[Tema, ...] = (
         (r"(atend|entreg|rechaz)\w* .*pedido", r"pedido .*(cliente|habitacion)"),
         (
             "Cuando el cliente pide algo, suena un aviso y su tarjeta muestra el pedido.",
-            "Abrí la habitación: en «Pedidos del cliente» tocá «Entregado» o «No hay».",
-            "Al entregarlo se carga a la cuenta y se descuenta del stock.",
+            "Abrí la habitación: en «Pedidos del cliente» tocá «Lo llevo» y el cliente lo ve en camino.",
+            "Al dárselo tocá «Entregado», o «No hay» si falta algo. Recién ahí se carga a la cuenta y se descuenta "
+            "del stock.",
         ),
         "dashboard",
+    ),
+    Tema(
+        "cliente_avisa",
+        "El cliente pide la cuenta o se queda más tiempo",
+        (r"(pide|pidio|pidieron) la cuenta", r"(cliente|habitacion) .*(se queda|quedarse) .*(mas|tiempo)"),
+        (
+            "Con el QR, el cliente puede avisar que se va y cómo paga, o que se queda más. Lo ves en su tarjeta.",
+            "Si pidió la cuenta, al tocar «Cobrar» ya está elegido el medio que dijo. Podés cambiarlo.",
+            "El aviso no cobra nada: la cuenta sale del tiempo real. También mejora la estimación de la próxima libre.",
+        ),
+        "dashboard",
+    ),
+    Tema(
+        "ver_opiniones",
+        "Ver qué opinan los clientes",
+        (r"(ver|mirar|donde) .*(opinion|calificacion|queja)", r"que opinan los clientes"),
+        (
+            "En Inteligencia, en «Lo que dicen los clientes».",
+            "Ves el promedio, lo que más marcan y cómo está cada habitación.",
+            "Son anónimas: solo hay totales, nunca una opinión suelta con su hora.",
+        ),
+        "inteligencia",
+        GERENCIA,
     ),
     Tema(
         "cliente_perdido",
@@ -1255,7 +1279,7 @@ ENTRADAS = TEMAS + conocimiento.DEFINICIONES
 # Lo que un conserje puede preguntar del análisis: no muestra dinero (RN-RES-03 y datos de la gerencia).
 ANALISIS_CONSERJE = {"horas", "pronostico", "estadia", "ocupacion"}
 # Lo que es dinero o caja: al conserje se le dice que es de la gerencia sin buscar otra respuesta.
-DINERO = {"ingresos", "caja", "ticket", "medios", "sobreturno", "resumen", "perdidos", "gemelo"}
+DINERO = {"ingresos", "caja", "ticket", "medios", "sobreturno", "resumen", "perdidos", "gemelo", "opiniones"}
 INTENCIONES_ANALISIS = {nombre for nombre, _ in INTENCIONES}
 
 

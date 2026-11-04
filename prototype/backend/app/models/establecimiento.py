@@ -29,3 +29,7 @@ class Establecimiento(Base):
     eslogan = Column(String(120), nullable=True)
     aviso_por_vencer_min = Column(Integer, nullable=False, default=10, server_default=text("10"))
     alertas_sonoras = Column(Boolean, nullable=False, default=False, server_default=false())
+    # Lo que la gerencia le cuenta al cliente en su página (migración 015).
+    wifi_nombre = Column(String(60), nullable=True)
+    wifi_clave = Column(String(60), nullable=True)
+    bienvenida = Column(String(200), nullable=True)

@@ -59,6 +59,15 @@ INTENCIONES: list[tuple[str, list[str]]] = [
         ],
     ),
     (
+        "opiniones",
+        [
+            r"\b(opinion|opiniones|calificacion|calificaciones|queja|quejas|puntaje)\b",
+            r"que (dicen|opinan) los clientes",
+            r"como nos (califican|puntuan|ven)",
+            r"clientes? (contentos?|conformes?|satisfechos?)",
+        ],
+    ),
+    (
         "perdidos",
         [
             r"clientes? perdid",
@@ -336,6 +345,7 @@ class Asistente:
             "ayuda": lambda: self.ayuda(),
             "resumen": lambda: self.resumen(),
             "perdidos": lambda: self.perdidos(periodo, categoria_id),
+            "opiniones": lambda: self.opiniones(),
             "gemelo": lambda: self.gemelo(texto, categoria_id),
             "pronostico": lambda: self.pronostico(texto),
             "stock": lambda: self.stock(texto),
@@ -359,7 +369,7 @@ class Asistente:
                 "desconocida",
                 sugerencias=SUGERENCIAS[:4],
             )
-        if not self.ctx.turnos and intencion not in ("ayuda", "stock"):
+        if not self.ctx.turnos and intencion not in ("ayuda", "stock", "opiniones"):
             return _respuesta(
                 "Todavía no hay turnos cerrados para analizar: las respuestas aparecen cuando se arquea la primera "
                 "guardia con turnos.",
@@ -437,6 +447,38 @@ class Asistente:
                 ],
             },
             sugerencias=["¿Cuántos clientes perdimos?", "¿Cuánto tarda la limpieza?"],
+        )
+
+    def opiniones(self) -> dict:
+        datos = ia.opiniones(self.ctx)
+        if not datos["cantidad"]:
+            return _respuesta(
+                f"En los últimos {datos['dias']} días ningún cliente calificó su estadía.",
+                "opiniones",
+                detalle="Se califica desde la página del QR del ticket, de forma anónima.",
+            )
+        promedio = str(datos["promedio"]).replace(".", ",")
+        texto = (
+            f"En los últimos {datos['dias']} días calificaron {datos['cantidad']} clientes, con {promedio} de 5 de "
+            "promedio."
+        )
+        if datos["problemas"]:
+            texto += f" Lo que más marcan: {datos['problemas'][0]['problema'].lower()}."
+        peores = datos["habitaciones"][:5]
+        return _respuesta(
+            texto,
+            "opiniones",
+            tabla={
+                "columnas": ["Habitación", "Promedio", "Opiniones", "Lo que más marcan"],
+                "filas": [
+                    [f["numero"], str(f["promedio"]).replace(".", ","), f["cantidad"], f["problema"] or "—"]
+                    for f in peores
+                ],
+            }
+            if peores
+            else None,
+            detalle="Son anónimas: solo se ven totales, nunca una opinión suelta.",
+            sugerencias=["¿Cuánto tarda la limpieza?", "¿Qué habitación se usa menos?"],
         )
 
     def perdidos(self, periodo: Periodo, categoria_id: int | None) -> dict:

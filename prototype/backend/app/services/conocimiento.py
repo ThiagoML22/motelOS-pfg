@@ -474,11 +474,22 @@ DEFINICIONES: tuple[Definicion, ...] = (
         "ticket_cliente",
         "El ticket con QR del cliente",
         (r"ticket (con qr|del cliente|para el cliente)", r"\bqr del cliente\b", r"pedidos? del cliente"),
-        "Es un ticket que se le da al cliente al entrar. Con el QR ve en su celular su tiempo y su cuenta, y pide algo "
-        "del minibar o avisa que se va sin llamar, sin cuenta ni datos personales. El pedido llega a la ventanilla: "
-        "quien atiende lo entrega y recién ahí se carga a la cuenta. El enlace vale solo mientras dura el turno.",
+        "Es un ticket que se le da al cliente al entrar. Con el QR ve en su celular su tiempo y su cuenta, pide del "
+        "minibar, avisa que se queda más o pide la cuenta, sin llamar y sin dar datos personales. Lo que pide llega a "
+        "la ventanilla: quien atiende lo entrega y recién ahí se carga a la cuenta. El enlace vale mientras dura el "
+        "turno.",
         "dashboard",
         extra="celular escanear codigo pedir habitacion",
+    ),
+    Definicion(
+        "calificacion",
+        "La calificación del cliente",
+        (r"calificacion(es)? (del|de los) clientes?", r"\bque es (la|una) calificacion\b", r"\bopiniones?\b"),
+        "Al irse, el cliente puede poner de 1 a 5 y marcar lo que falló, desde el QR y hasta una hora después del "
+        "cobro. Es anónima: no guarda datos de la persona ni texto libre, y la gerencia solo ve totales por "
+        "habitación.",
+        "inteligencia",
+        extra="puntaje estrellas queja cliente anonima",
     ),
     Definicion(
         "limpieza_sin_turno",

@@ -196,13 +196,21 @@ export const api = {
   // --- El cliente en su habitación (migración 013): sin sesión, con el enlace de su ticket ---
   getEstadiaCliente: async (token: string): Promise<EstadiaCliente> => (await http.get(`/cliente/${token}`)).data,
 
-  pedirCliente: async (token: string, pedido: { tipo: string; articulo_id?: number; cantidad?: number }) =>
+  pedirCliente: async (token: string, pedido: { tipo: string; articulo_id?: number; cantidad?: number; minutos?: number; medio_pago?: string }) =>
     (await http.post(`/cliente/${token}/pedidos`, pedido)).data,
+
+  pedirCarrito: async (token: string, lineas: { articulo_id: number; cantidad: number }[]) =>
+    (await http.post(`/cliente/${token}/carrito`, { lineas })).data,
+
+  calificarEstadia: async (token: string, puntaje: number, problemas: number) =>
+    (await http.post(`/cliente/${token}/calificacion`, { puntaje, problemas })).data,
 
   // --- Lo que pide el cliente, en la ventanilla ---
   getTicket: async (turno_id: string): Promise<TicketCliente> => (await http.get(`/turnos/${turno_id}/ticket`)).data,
 
   getPedidosCliente: async (): Promise<PedidoVentanilla[]> => (await http.get('/pedidos-cliente/')).data,
+
+  llevarPedidoCliente: async (id: number) => (await http.post(`/pedidos-cliente/${id}/llevar`)).data,
 
   atenderPedidoCliente: async (id: number) => (await http.post(`/pedidos-cliente/${id}/atender`)).data,
 

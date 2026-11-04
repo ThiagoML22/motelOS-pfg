@@ -212,6 +212,10 @@ class EstablecimientoDatos(BaseModel):
     eslogan: str | None = Field(default=None, max_length=120)
     aviso_por_vencer_min: int | None = Field(default=None, ge=0, le=120)
     alertas_sonoras: bool | None = None
+    # Lo que ve el cliente en su página (migración 015).
+    wifi_nombre: str | None = Field(default=None, max_length=60)
+    wifi_clave: str | None = Field(default=None, max_length=60)
+    bienvenida: str | None = Field(default=None, max_length=200)
 
 
 class EstablecimientoResponse(BaseModel):
@@ -229,6 +233,9 @@ class EstablecimientoResponse(BaseModel):
     eslogan: str | None = None
     aviso_por_vencer_min: int = 10
     alertas_sonoras: bool = False
+    wifi_nombre: str | None = None
+    wifi_clave: str | None = None
+    bienvenida: str | None = None
 
 
 # --- Registro de actividad (migración 007) --------------------------------------------------------------------------

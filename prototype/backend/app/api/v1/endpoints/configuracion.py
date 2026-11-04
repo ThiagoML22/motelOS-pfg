@@ -59,6 +59,9 @@ CAMPOS_ESTABLECIMIENTO = {
     "color_marca": "color de marca",
     "aviso_por_vencer_min": "aviso «por vencer» (minutos)",
     "alertas_sonoras": "alertas sonoras",
+    "wifi_nombre": "red de Wi-Fi para el cliente",
+    "wifi_clave": "clave de Wi-Fi para el cliente",
+    "bienvenida": "mensaje de bienvenida al cliente",
 }
 
 

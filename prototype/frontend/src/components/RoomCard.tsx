@@ -147,8 +147,15 @@ const RoomCard: React.FC<RoomCardProps> = ({ room, categoria, now, onClick, onAd
         {pedidos.length > 0 && (
           <span title={pedidos.map((p) => (p.cantidad ? `${p.cantidad} × ${p.descripcion}` : p.descripcion)).join(' · ')} className="flex min-w-0 animate-pop-in items-center gap-1 rounded-full bg-warn-soft px-2 py-1 text-xs font-medium text-warn">
             <BellRing className="h-3.5 w-3.5 shrink-0 animate-latido" aria-hidden="true" />
-            <span className="tabular-nums">{pedidos.length}</span>
-            <span className="sr-only">{pedidos.length === 1 ? 'pedido del cliente' : 'pedidos del cliente'}</span>
+            {/* Un carrito cuenta como un pedido. El cliente que pidió la cuenta se ve de lejos. */}
+            {pedidos.some((p) => p.tipo === 'SALIDA') ? (
+              <span>Se va</span>
+            ) : (
+              <>
+                <span className="tabular-nums">{new Set(pedidos.map((p) => p.lote ?? p.id)).size}</span>
+                <span className="sr-only">con pedidos del cliente</span>
+              </>
+            )}
           </span>
         )}
 
