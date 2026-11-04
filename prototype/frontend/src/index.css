@@ -381,6 +381,11 @@
 }
 
 @layer base {
+  /* Lugar reservado para la barra de desplazamiento: una sección corta y una larga dejan el encabezado en el mismo sitio. */
+  html {
+    scrollbar-gutter: stable;
+  }
+
   body {
     @apply bg-bg font-sans text-ink antialiased;
   }

@@ -70,6 +70,8 @@ const textoGuardia = (sesion: Sesion): string => {
 
 // Encabezado en dos filas: arriba el motel y las herramientas (buscar, conexión, avisos, tema, usuario); abajo el menú
 // de secciones con su espacio y la guardia en curso. En pantallas angostas el menú se desplaza en lugar de apretarse.
+// El encabezado no se mueve al cambiar de sección: las pestañas tienen el mismo peso de letra, activas o no, no se hunden
+// al tocarlas y el contador de Actividad va superpuesto, para que ninguna cambie de ancho ni corra a las demás.
 const TopNav: React.FC<TopNavProps> = ({
   sesion,
   activeView,
@@ -147,14 +149,14 @@ const TopNav: React.FC<TopNavProps> = ({
                 onClick={() => setActiveView(view)}
                 aria-current={active ? 'page' : undefined}
                 aria-label={view === 'actividad' && pendientes > 0 ? `${label}: ${pendientes} por revisar` : label}
-                className={`press flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-3 text-sm transition-colors ${
-                  active ? 'border-accent font-medium text-ink' : 'border-transparent text-muted hover:border-line-strong hover:text-ink'
+                className={`relative flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-3 text-sm font-medium transition-colors ${
+                  active ? 'border-accent text-ink' : 'border-transparent text-muted hover:border-line-strong hover:text-ink'
                 }`}
               >
                 <Icon className={`h-4 w-4 ${active ? 'text-accent' : ''}`} aria-hidden="true" />
                 {label}
                 {view === 'actividad' && pendientes > 0 && (
-                  <span className="rounded-full bg-warn px-1.5 py-0.5 text-[11px] font-semibold leading-none text-white tabular-nums">
+                  <span className="absolute -right-1 top-0.5 rounded-full bg-warn px-1.5 py-0.5 text-[11px] font-semibold leading-none text-white tabular-nums">
                     {pendientes}
                   </span>
                 )}

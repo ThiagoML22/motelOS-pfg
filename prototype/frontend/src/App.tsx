@@ -394,8 +394,9 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
 
       {!conexion.conectado && <AvisoSinConexion desde={conexion.sinConexionDesde} onReintentar={conexion.reintentar} />}
 
-      {/* Cada sección entra con una transición corta al cambiar de vista (la clave reinicia la animación). */}
-      <main key={activeView} className="mx-auto flex w-full max-w-[1600px] flex-1 animate-vista flex-col px-4 py-6 sm:px-6">
+      {/* Cada sección aparece con un fundido corto (la clave reinicia la animación). Solo opacidad: moverla desbordaría
+          la página un instante y la barra de desplazamiento correría el encabezado. */}
+      <main key={activeView} className="mx-auto flex w-full max-w-[1600px] flex-1 animate-fade-in flex-col px-4 py-6 sm:px-6">
         {enApertura && (
           <GuardiaView sesion={sesion} onGuardiaAbierta={onRefrescarSesion} onSalir={onSalir} />
         )}

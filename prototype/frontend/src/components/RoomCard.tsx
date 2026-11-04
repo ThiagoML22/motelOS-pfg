@@ -15,8 +15,6 @@ interface RoomCardProps {
   onClick: (room: HabitacionConDetalles) => void;
   onAddConsumo: (room: HabitacionConDetalles) => void;
   onChangeEstado: (room: HabitacionConDetalles, newState: RoomStatus) => void;
-  // Posición en la grilla: escalona la animación de entrada.
-  orden?: number;
 }
 
 const CAMBIOS_ESTADO: { estado: RoomStatus; label: string; icon: React.ElementType }[] = [
@@ -28,7 +26,7 @@ const CAMBIOS_ESTADO: { estado: RoomStatus; label: string; icon: React.ElementTy
 const TIPO_ICON: Record<string, React.ElementType> = { Auto: Car, Moto: Bike, Peaton: Footprints };
 const TIPO_LABEL: Record<string, string> = { Auto: 'Auto', Moto: 'Moto', Peaton: 'Peatón' };
 
-const RoomCard: React.FC<RoomCardProps> = ({ room, categoria, now, onClick, onAddConsumo, onChangeEstado, orden = 0 }) => {
+const RoomCard: React.FC<RoomCardProps> = ({ room, categoria, now, onClick, onAddConsumo, onChangeEstado }) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const meta = ESTADO_META[room.estado];
@@ -79,8 +77,7 @@ const RoomCard: React.FC<RoomCardProps> = ({ room, categoria, now, onClick, onAd
         }
       }}
       aria-label={`${formatRoomNumber(room.numero)}, ${meta.label}`}
-      style={{ animationDelay: `${Math.min(orden * 28, 420)}ms` }}
-      className={`group flex min-h-[9.5rem] animate-tarjeta-in cursor-pointer flex-col rounded-lg border border-l-4 border-line bg-surface p-4 transition duration-200 ease-out hover:-translate-y-0.5 hover:border-b-line-strong hover:border-r-line-strong hover:border-t-line-strong hover:shadow-lift active:translate-y-0 active:shadow-none ${barClass} ${destello ? 'animate-destello' : ''}`}
+      className={`group flex h-full min-h-[9.5rem] cursor-pointer flex-col rounded-lg border border-l-4 border-line bg-surface p-4 transition duration-200 ease-out hover:-translate-y-0.5 hover:border-b-line-strong hover:border-r-line-strong hover:border-t-line-strong hover:shadow-lift active:translate-y-0 active:shadow-none ${barClass} ${destello ? 'animate-destello' : ''}`}
     >
       <div className="flex items-start justify-between gap-2">
         <h3 className="text-base font-semibold text-ink">{formatRoomNumber(room.numero)}</h3>

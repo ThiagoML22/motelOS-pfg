@@ -47,11 +47,6 @@ export default {
           from: { opacity: '0', transform: 'translateX(-12px)' },
           to: { opacity: '1', transform: 'translateX(0)' },
         },
-        // Cambio de sección: la vista nueva entra apenas desde abajo.
-        vista: {
-          from: { opacity: '0', transform: 'translateY(6px)' },
-          to: { opacity: '1', transform: 'translateY(0)' },
-        },
         // Tarjetas de la grilla y filas: entrada escalonada (el retraso lo pone cada elemento).
         'tarjeta-in': {
           from: { opacity: '0', transform: 'translateY(10px) scale(0.985)' },
@@ -77,12 +72,13 @@ export default {
           '100%': { boxShadow: '0 0 0 0 rgb(var(--accent) / 0)' },
         },
       },
+      // Las entradas usan `backwards`: si el estado final quedara aplicado, el elemento encerraría a los diálogos
+      // (`fixed`) que tiene adentro y anularía su propio transform al pasar el mouse.
       animation: {
-        'fade-in': 'fade-in 160ms ease-out both',
-        'pop-in': 'pop-in 200ms cubic-bezier(0.2, 0.8, 0.2, 1) both',
+        'fade-in': 'fade-in 160ms ease-out backwards',
+        'pop-in': 'pop-in 200ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards',
         'toast-in': 'toast-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both',
-        vista: 'vista 240ms cubic-bezier(0.2, 0.8, 0.2, 1) both',
-        'tarjeta-in': 'tarjeta-in 320ms cubic-bezier(0.2, 0.8, 0.2, 1) both',
+        'tarjeta-in': 'tarjeta-in 320ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards',
         destello: 'destello 1.4s ease-out',
         crecer: 'crecer 650ms cubic-bezier(0.2, 0.8, 0.2, 1) both',
         dibujar: 'dibujar 900ms ease-out both',
