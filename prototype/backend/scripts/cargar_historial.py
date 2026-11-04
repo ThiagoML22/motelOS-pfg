@@ -45,6 +45,17 @@ from app.models.evento_habitacion import COBRO, LIBERAR, MANUAL, TURNO, EventoHa
 from app.models.guardia import Guardia
 from app.models.habitacion import Habitacion
 from app.models.novedad import Novedad
+from app.models.operacion import (
+    APERTURA,
+    CIERRE,
+    PRENDAS,
+    RESUELTO,
+    Arreglo,
+    RopaConteo,
+    RopaMovimiento,
+    TrasladoTurno,
+    Traspaso,
+)
 from app.models.operador import ROL_OPERADOR, Operador
 from app.models.pago import Pago
 from app.models.tarifa import Tarifa
@@ -52,6 +63,7 @@ from app.models.turno import Turno
 from app.services import franjas, sellos
 from app.services.billing_service import calcular_sobreturno
 from app.services.caja import clasificar_diferencia
+from app.services.liquidacion import con_zona
 
 FRANJAS = (6, 14, 22)
 # Llegadas por hora (hora local) en un día promedio: la noche concentra la demanda y la tarde tiene su pico.
@@ -502,6 +514,280 @@ async def agregar_opiniones(db: AsyncSession, semilla: int, habitacion_poco_usad
     return cantidad
 
 
+# Operación de ejemplo (migración 016): en la habitación poco usada vuelve a fallar el aire; es lo mismo que cuenta su
+# novedad, lo que marcan sus clientes y lo que detecta la inteligencia. Los faltantes de ropa son de un solo conserje.
+DIAS_DE_RECUENTOS = 30
+ROPA_POR_HABITACION = {"TOALLAS": 6, "SABANAS": 4}
+PIERDE_ROPA = 0.16
+# Días atrás, habitación (None: la poco usada), tipo, rubro, descripción, quién lo reparó, qué se hizo y costo.
+ARREGLOS_DEMO = (
+    (27, None, "FALLA", "AIRE", "Hace ruido y enfría poco", "Técnico de aire", "Se ajustó el forzador", 38000),
+    (19, None, "FALLA", "AIRE", "Volvió el ruido", "Técnico de aire", "Se cambió el capacitor", 52000),
+    (12, 3, "FALLA", "PLOMERIA", "Pierde la canilla del baño", "Plomero", "Se cambió el cuerito", 9500),
+    (9, 8, "MANTENIMIENTO", "AIRE", "Limpieza de filtros", "Personal propio", None, None),
+    (5, 11, "FALLA", "TV", "No funciona el control remoto", "Personal propio", "Control nuevo", 7800),
+)
+ARREGLOS_ABIERTOS_DEMO = ((1, None, "FALLA", "AIRE", "Hace ruido otra vez: los clientes piden cambiarse"),)
+TRASLADOS_DEMO = 3
+
+
+async def _foto_historica(turnos: list, momento: datetime, numeros: dict[int, int], base: dict[int, int]) -> dict:
+    """El traspaso de una guardia pasada: quiénes estaban en curso a esa hora."""
+    en_curso = []
+    for habitacion_id, tarifa_id, inicio, fin in turnos:
+        if con_zona(inicio) <= momento < con_zona(fin):
+            lleva = round((momento - con_zona(inicio)).total_seconds() / 60)
+            minimo = base.get(tarifa_id, 120)
+            en_curso.append(
+                {
+                    "numero": numeros.get(habitacion_id),
+                    "lleva_min": lleva,
+                    "base_min": minimo,
+                    "excedido": lleva > minimo,
+                }
+            )
+    en_curso.sort(key=lambda t: t["numero"] or 0)
+    return {"turnos": en_curso, "pedidos": [], "limpieza": [], "mantenimiento": [], "arreglos": [], "novedades": []}
+
+
+async def agregar_operacion(db: AsyncSession, semilla: int, habitacion_poco_usada: int | None = None) -> dict[str, int]:
+    """Recuentos y traspasos de cada cambio de guardia, movimientos de ropa, arreglos y traslados.
+
+    Como el resto del historial, va como dueño y con replica: los triggers exigen una guardia abierta y la hora actual.
+    """
+    if db.get_bind().dialect.name == "postgresql":
+        await db.execute(text("SET LOCAL session_replication_role = replica"))
+    rng = random.Random(semilla + 3)
+    ahora = datetime.now(UTC)
+    habitaciones = list((await db.execute(select(Habitacion).where(Habitacion.activa.is_(True)))).scalars())
+    numeros = {h.id: h.numero for h in habitaciones}
+    por_numero = {h.numero: h for h in habitaciones}
+    operadores = list(
+        (
+            await db.execute(
+                select(Operador)
+                .where(Operador.rol == ROL_OPERADOR, Operador.activo.is_(True))
+                .order_by(Operador.usuario)
+            )
+        ).scalars()
+    )
+    nombres = {o.id: o.nombre_visible for o in operadores}
+    # El mismo conserje que tiene más faltantes en la caja.
+    desprolijo = operadores[min(1, len(operadores) - 1)].id if operadores else None
+    desde = ahora - timedelta(days=DIAS_DE_RECUENTOS)
+    guardias = list(
+        (
+            await db.execute(
+                select(Guardia)
+                .where(Guardia.estado == "Cerrada", Guardia.abierta_en >= desde)
+                .order_by(Guardia.abierta_en, Guardia.id)
+            )
+        ).scalars()
+    )
+    tarifas = dict((await db.execute(select(Tarifa.id, Tarifa.estadia_base_min))).all())
+    turnos = (
+        await db.execute(
+            select(Turno.habitacion_id, Turno.tarifa_id, Turno.hora_inicio, Turno.hora_fin).where(
+                Turno.hora_fin.is_not(None), Turno.hora_fin >= desde
+            )
+        )
+    ).all()
+
+    hay = {prenda: cantidad * len(habitaciones) for prenda, cantidad in ROPA_POR_HABITACION.items()}
+    lavando = dict.fromkeys(hay, 0)
+    cantidades = {"recuentos": 0, "movimientos": 0, "traspasos": 0, "arreglos": 0, "traslados": 0}
+    anterior: Guardia | None = None
+    ultimo: dict[str, int] = {}
+
+    def conteo(guardia: Guardia, momento_conteo: str, cuando: datetime) -> list[dict]:
+        filas = []
+        for prenda, total in hay.items():
+            en_habitaciones = min(rng.randint(len(habitaciones), len(habitaciones) * 3 // 2), total)
+            sucias = min(rng.randint(4, 16), total - en_habitaciones)
+            fila = RopaConteo(
+                guardia_id=guardia.id,
+                operador_id=guardia.operador_id,
+                momento=momento_conteo,
+                prenda=prenda,
+                limpias=total - en_habitaciones - sucias,
+                sucias=sucias,
+                en_habitaciones=en_habitaciones,
+                creado_en=cuando,
+            )
+            db.add(fila)
+            cantidades["recuentos"] += 1
+            filas.append(fila)
+        return [
+            {
+                "prenda": f.prenda,
+                "etiqueta": PRENDAS[f.prenda],
+                "limpias": f.limpias,
+                "sucias": f.sucias,
+                "en_habitaciones": f.en_habitaciones,
+                "total": f.total,
+            }
+            for f in filas
+        ]
+
+    dejada: list[dict] = []
+    for indice, guardia in enumerate(guardias):
+        apertura = con_zona(guardia.abierta_en) + timedelta(minutes=3)
+        recibida = conteo(guardia, APERTURA, apertura)
+        foto = await _foto_historica(turnos, apertura, numeros, tarifas)
+        db.add(
+            Traspaso(
+                guardia_saliente_id=anterior.id if anterior else None,
+                guardia_id=guardia.id,
+                operador_id=guardia.operador_id,
+                resumen={
+                    **foto,
+                    "ropa_dejada": [
+                        {**d, "esperado": d["total"], "contado_por": nombres.get(anterior.operador_id, "—")}
+                        for d in dejada
+                    ]
+                    if anterior
+                    else [],
+                    "ropa_recibida": [
+                        {
+                            "prenda": r["prenda"],
+                            "etiqueta": r["etiqueta"],
+                            "total": r["total"],
+                            "esperado": ultimo.get(r["prenda"]),
+                            "diferencia": 0 if r["prenda"] in ultimo else None,
+                        }
+                        for r in recibida
+                    ],
+                },
+                creado_en=apertura,
+            )
+        )
+        cantidades["traspasos"] += 1
+
+        # Lo que pasa durante la guardia: la lavandería retira y devuelve, y alguna toalla se rompe.
+        medio = apertura + (con_zona(guardia.cerrada_en) - apertura) / 2
+        for prenda in hay:
+            cantidad, tipo = 0, None
+            if lavando[prenda]:
+                if rng.random() < 0.5:
+                    cantidad, tipo, lavando[prenda] = lavando[prenda], "LAVANDERIA_VUELVE", 0
+                    hay[prenda] += cantidad
+            elif rng.random() < 0.14:
+                cantidad, tipo = max(hay[prenda] // rng.randint(4, 6), 1), "LAVANDERIA_SALE"
+                lavando[prenda] = cantidad
+                hay[prenda] -= cantidad
+            elif rng.random() < 0.02:
+                cantidad, tipo = 1, "BAJA"
+                hay[prenda] -= 1
+            if tipo:
+                db.add(
+                    RopaMovimiento(
+                        guardia_id=guardia.id,
+                        operador_id=guardia.operador_id,
+                        prenda=prenda,
+                        tipo=tipo,
+                        cantidad=cantidad,
+                        creado_en=medio,
+                    )
+                )
+                cantidades["movimientos"] += 1
+        minimo_toallas = ROPA_POR_HABITACION["TOALLAS"] * len(habitaciones) // 2
+        if guardia.operador_id == desprolijo and rng.random() < PIERDE_ROPA and hay["TOALLAS"] > minimo_toallas:
+            hay["TOALLAS"] -= rng.choice((1, 1, 2))
+        # En el historial una guardia a veces abre antes de que se cierre la anterior: el recuento va primero igual.
+        cierre = con_zona(guardia.cerrada_en) - timedelta(minutes=5)
+        if indice + 1 < len(guardias):
+            cierre = min(cierre, con_zona(guardias[indice + 1].abierta_en) - timedelta(minutes=1))
+        dejada = conteo(guardia, CIERRE, cierre)
+        ultimo = dict(hay)
+        anterior = guardia
+
+    def habitacion_de(numero: int | None) -> Habitacion | None:
+        return por_numero.get(habitacion_poco_usada if numero is None else numero)
+
+    for dias, numero, tipo, rubro, descripcion, reparo, trabajo, costo in ARREGLOS_DEMO:
+        habitacion = habitacion_de(numero)
+        if habitacion is None or not operadores:
+            continue
+        abierto = ahora - timedelta(days=dias, hours=rng.randint(1, 9))
+        db.add(
+            Arreglo(
+                habitacion_id=habitacion.id,
+                tipo=tipo,
+                rubro=rubro,
+                descripcion=descripcion,
+                estado=RESUELTO,
+                abierto_por_id=rng.choice(operadores).id,
+                abierto_en=abierto,
+                resuelto_por_id=rng.choice(operadores).id,
+                resuelto_en=abierto + timedelta(hours=rng.randint(5, 30)),
+                reparado_por=reparo,
+                trabajo=trabajo,
+                costo=Decimal(costo) if costo else None,
+            )
+        )
+        cantidades["arreglos"] += 1
+    for dias, numero, tipo, rubro, descripcion in ARREGLOS_ABIERTOS_DEMO:
+        habitacion = habitacion_de(numero)
+        if habitacion is None or not operadores:
+            continue
+        db.add(
+            Arreglo(
+                habitacion_id=habitacion.id,
+                tipo=tipo,
+                rubro=rubro,
+                descripcion=descripcion,
+                abierto_por_id=rng.choice(operadores).id,
+                abierto_en=ahora - timedelta(days=dias, hours=rng.randint(1, 9)),
+            )
+        )
+        cantidades["arreglos"] += 1
+
+    # Clientes que pidieron irse de la habitación poco usada. Se eligen turnos que pudieron empezar en ella.
+    poco_usada = por_numero.get(habitacion_poco_usada) if habitacion_poco_usada else None
+    if poco_usada is not None:
+        propios = [
+            (con_zona(i), con_zona(f))
+            for h, _, i, f in turnos
+            if h == poco_usada.id
+        ]
+        candidatos = (
+            await db.execute(
+                select(Turno)
+                .where(
+                    Turno.estado == "FINALIZADO",
+                    Turno.habitacion_id != poco_usada.id,
+                    Turno.hora_inicio >= ahora - timedelta(days=20),
+                    Turno.operador_apertura_id.is_not(None),
+                    Turno.guardia_apertura_id.is_not(None),
+                )
+                .order_by(Turno.hora_inicio, Turno.id)
+            )
+        ).scalars()
+        libres = [
+            t
+            for t in candidatos
+            if con_zona(t.hora_fin) - con_zona(t.hora_inicio) > timedelta(minutes=40)
+            and not any(
+                inicio < con_zona(t.hora_inicio) + timedelta(minutes=30) and fin > con_zona(t.hora_inicio)
+                for inicio, fin in propios
+            )
+        ]
+        for turno in rng.sample(libres, min(TRASLADOS_DEMO, len(libres))):
+            db.add(
+                TrasladoTurno(
+                    turno_id=turno.id,
+                    desde_habitacion_id=poco_usada.id,
+                    hacia_habitacion_id=turno.habitacion_id,
+                    motivo="FALLA",
+                    operador_id=turno.operador_apertura_id,
+                    guardia_id=turno.guardia_apertura_id,
+                    creado_en=con_zona(turno.hora_inicio) + timedelta(minutes=25),
+                )
+            )
+            cantidades["traslados"] += 1
+    return cantidades
+
+
 # Artículos que se suman al catálogo de Motel C.C. para que el inventario tenga variedad.
 ARTICULOS_EXTRA = {
     "motelcc": [
@@ -588,6 +874,10 @@ async def cargar() -> None:
                         opiniones = await agregar_opiniones(db, 7, poco_usada)
                         await db.commit()
                         print(f"{codigo}: {opiniones} opiniones de clientes agregadas.")
+                    if not (await db.execute(select(RopaConteo.id).limit(1))).first():
+                        operacion = await agregar_operacion(db, 7, poco_usada)
+                        await db.commit()
+                        print(f"{codigo}: operación diaria de ejemplo agregada: {operacion}.")
                     continue
                 existentes = set((await db.execute(select(Articulo.codigo))).scalars())
                 for cod, descripcion, precio, rubro in ARTICULOS_EXTRA.get(codigo, []):
@@ -612,6 +902,9 @@ async def cargar() -> None:
                 )
             async with sesiones(info={CLAVE: establecimiento.id}) as db:
                 opiniones = await agregar_opiniones(db, 11 if codigo == "luna" else 7, poco_usada)
+                await db.commit()
+            async with sesiones(info={CLAVE: establecimiento.id}) as db:
+                await agregar_operacion(db, 11 if codigo == "luna" else 7, poco_usada)
                 await db.commit()
             async with sesiones(info={CLAVE: establecimiento.id}) as db:
                 await _novedades_demo(db, codigo, inicio_de_franja(datetime.now(UTC), ZoneInfo(settings.ZONA_HORARIA)))

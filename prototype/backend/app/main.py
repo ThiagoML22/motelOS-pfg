@@ -19,6 +19,7 @@ from app.api.v1.endpoints import (
     habitaciones,
     inteligencia,
     novedades,
+    operacion,
     operadores,
     pedidos,
     pedidos_cliente,
@@ -102,6 +103,8 @@ app.include_router(cliente.router, prefix="/api/v1/cliente", tags=["cliente"])
 app.include_router(
     pedidos_cliente.router, prefix="/api/v1/pedidos-cliente", tags=["habitaciones"], dependencies=con_sesion
 )
+# Operación diaria (migración 016): arreglos y ropa. Lo que ve la gerencia se monta más abajo.
+app.include_router(operacion.router, prefix="/api/v1/operacion", tags=["operación"], dependencies=con_sesion)
 # Asistente para todo el personal (ayuda y ventanilla); a la gerencia además le responde el análisis de datos.
 app.include_router(asistente.router, prefix="/api/v1/asistente", tags=["asistente"], dependencies=con_sesion)
 # Mi perfil: cualquier sesión, también la plataforma.
@@ -116,6 +119,7 @@ app.include_router(
 app.include_router(
     inteligencia.router, prefix="/api/v1/inteligencia", tags=["gerencia"], dependencies=solo_gerencia
 )
+app.include_router(operacion.gerencia, prefix="/api/v1/operacion", tags=["gerencia"], dependencies=solo_gerencia)
 # Plataforma (multiinquilino): alta, suspensión y resumen de establecimientos. Solo el rol PLATAFORMA.
 app.include_router(
     plataforma.router, prefix="/api/v1/plataforma", tags=["plataforma"], dependencies=[Depends(solo_plataforma)]

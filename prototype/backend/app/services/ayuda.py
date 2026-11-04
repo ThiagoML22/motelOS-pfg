@@ -26,6 +26,7 @@ from app.models.categoria import CategoriaHabitacion
 from app.models.configuracion import ConfiguracionCaja
 from app.models.habitacion import Habitacion
 from app.models.novedad import Novedad
+from app.models.operacion import EN_CURSO, RUBROS, SIN_RESOLVER, Arreglo
 from app.models.operador import ROL_ADMINISTRADOR, Operador
 from app.models.pedido import PENDIENTE, PedidoReposicion
 from app.models.tarifa import Tarifa
@@ -44,6 +45,10 @@ RIGE = re.compile(r"\b(rige|corre|vigente|actual|ahora)\b")
 COMO = re.compile(
     r"\b(como|donde|que hago|que tengo que|puedo|se puede|hay que|pasos|ayuda|explica|para que sirve|no puedo"
     r"|no me deja)\b"
+)
+ROPA_DATOS = re.compile(
+    r"\b(cuant\w*|hay|quedan|tenemos|faltan?|falto|faltaron|sobran?)\b.*\b(toallas?|sabanas?|ropa)\b"
+    r"|\b(toallas?|sabanas?|ropa)\b.*\b(hay|quedan|faltan?|faltaron)\b"
 )
 TODOS = "todos"
 GERENCIA = "gerencia"
@@ -72,8 +77,9 @@ TEMAS: tuple[Tema, ...] = (
         ),
         (
             "Al ingresar sin guardia abierta aparece «Abrir su guardia».",
-            "Leé debajo las novedades que dejaron las guardias anteriores.",
-            "Tocá «Abrir guardia»: tu caja empieza con el fondo de cambio.",
+            "Mirá lo que recibís y leé debajo las novedades que dejaron las guardias anteriores.",
+            "Contá la ropa y corregí lo que no coincida.",
+            "Tocá «Recibí y abrir guardia»: tu caja empieza con el fondo de cambio.",
             "Si la guardia abierta es de otro conserje, primero la cierra él con su arqueo.",
         ),
         "dashboard",
@@ -183,6 +189,7 @@ TEMAS: tuple[Tema, ...] = (
         ),
         (
             "Antes de irte entrá a «Cierre de caja».",
+            "Hacé el recuento de toallas y sábanas: sin eso no se cierra.",
             "Contá la gaveta y declará efectivo, POSNET y Mercado Pago. "
             "El sistema no te muestra el total: es un cierre "
             "ciego (RN-RES-03).",
@@ -362,6 +369,103 @@ TEMAS: tuple[Tema, ...] = (
             "Con el QR, el cliente puede avisar que se va y cómo paga, o que se queda más. Lo ves en su tarjeta.",
             "Si pidió la cuenta, al tocar «Cobrar» ya está elegido el medio que dijo. Podés cambiarlo.",
             "El aviso no cobra nada: la cuenta sale del tiempo real. También mejora la estimación de la próxima libre.",
+        ),
+        "dashboard",
+    ),
+    Tema(
+        "recuento_ropa",
+        "Contar las toallas y las sábanas",
+        (
+            r"\b(recuento|conteo|cont\w*|cuent\w*)\b.*\b(ropa|toallas?|sabanas?)\b",
+            r"\b(recuento|conteo) de (la )?(ropa|toallas|sabanas)\b",
+            r"\b(ropa|toallas?|sabanas?)\b.*\b(recuento|conteo|cont\w*)\b",
+            r"ropa de cama",
+        ),
+        (
+            "Al terminar la guardia, en «Cierre de caja» contá toda la ropa del motel: limpias, sucias y las que están "
+            "en las habitaciones.",
+            "Es a ciegas, como la caja: recién después de guardarlo ves si coincide. Sin el recuento no se cierra.",
+            "Quien entra ve lo que dejaste y lo confirma o lo corrige antes de abrir su guardia.",
+            "Si no coincide, la gerencia lo ve con los dos nombres.",
+        ),
+        "caja",
+    ),
+    Tema(
+        "movimiento_ropa",
+        "Anotar ropa que entra o sale del motel",
+        (
+            r"\blavanderia\b",
+            r"\b(rompio|rota|roto|rotas|rotos|baja|compr\w*|llego|llegaron)\b.*\b(toallas?|sabanas?)\b",
+            r"\b(toallas?|sabanas?)\b.*\b(rompio|rota|roto|rotas|rotos|baja|compr\w*|llego|llegaron)\b",
+        ),
+        (
+            "En Inventario tocá «Movimiento de ropa».",
+            "Elegí toallas o sábanas, qué pasó (sale a la lavandería, vuelve, compra o baja por rotura) y la cantidad.",
+            "Así, en el próximo recuento no aparece como faltante.",
+        ),
+        "inventario",
+    ),
+    Tema(
+        "traspaso",
+        "El traspaso de guardia",
+        (r"\btraspaso\b", r"(recib|entreg)\w* (la )?guardia", r"cambio de guardia", r"que (me dejaron|deje)\b"),
+        (
+            "Al abrir, ves lo que recibís: turnos en curso, pedidos sin resolver, habitaciones en limpieza o "
+            "mantenimiento, arreglos abiertos, novedades y la ropa.",
+            "Confirmá o corregí la ropa y tocá «Recibí y abrir guardia».",
+            "Queda registrado qué recibiste, y no se modifica.",
+        ),
+        "dashboard",
+    ),
+    Tema(
+        "trasladar_turno",
+        "Trasladar un turno a otra habitación",
+        (
+            r"\btrasla",
+            r"\b(cambi|mud|mov|pas)\w* .*\b(cliente|turno)\b.*\botra habitacion\b",
+            r"\bcambiarse de habitacion\b",
+            r"\bcambiar de habitacion\b",
+            r"\bquiere otra habitacion\b",
+        ),
+        (
+            "Abrí la habitación ocupada y tocá «Trasladar».",
+            "Elegí una habitación disponible y el motivo. Si es por una falla, contá qué falló.",
+            "El turno sigue igual: la hora, la tarifa con la que entró, la cuenta y el QR del cliente.",
+            "La habitación de origen pasa a limpieza; si fue por una falla, a mantenimiento con el arreglo abierto.",
+        ),
+        "dashboard",
+    ),
+    Tema(
+        "ver_operacion",
+        "Ver arreglos, ropa y traspasos",
+        (
+            r"\b(ver|mirar|donde)\b.*\b(arreglos|traspasos|recuentos|traslados)\b",
+            r"historial de (arreglos|ropa|traspasos|recuentos)",
+            r"(seccion|pantalla) operacion",
+        ),
+        (
+            "En «Operación» hay cuatro solapas: Arreglos, Ropa, Traspasos y Traslados.",
+            "En Arreglos ves lo pendiente y lo gastado por rubro y por habitación.",
+            "En Ropa ves el último recuento, las diferencias con los nombres y cada movimiento.",
+            "Lo importante también te llega a la campanita y a Inteligencia.",
+        ),
+        "operacion",
+        GERENCIA,
+    ),
+    Tema(
+        "arreglos",
+        "Registrar una falla o un mantenimiento",
+        (
+            r"\b(registr|carg|anot|report|avis)\w* .*\b(falla|mantenimiento|arreglo|rotura)\b",
+            r"\b(se rompio|esta rot[ao]|no anda|no funciona|no enfria|no calienta|pierde)\b",
+            r"\b(ver|donde|historial)\b.*\barreglos?\b",
+            r"\bresolver? (un |el )?arreglo\b",
+        ),
+        (
+            "Abrí la habitación y tocá «Arreglos»: ahí está todo su historial.",
+            "«Registrar» pide si es falla o mantenimiento, de qué es y qué pasa. Podés dejarla fuera de servicio.",
+            "Al resolverlo, «Resolver» pide quién lo reparó y, si lo sabés, cuánto costó.",
+            "El costo es informativo: no mueve la caja, y solo lo ve la gerencia.",
         ),
         "dashboard",
     ),
@@ -623,6 +727,7 @@ VISTAS = {
     "inventario": "Ir a Inventario",
     "caja": "Ir a Cierre de caja",
     "gerencia": "Ir a Control de caja",
+    "operacion": "Ir a Operación",
     "configuracion": "Ir a Configuración",
     "actividad": "Ir a Actividad",
     "perfil": "Ir a Mi perfil",
@@ -682,14 +787,16 @@ PANTALLAS = {
         "Todavía no tenés tu guardia abierta: hasta abrirla no podés operar la ventanilla (RF-08). Hay una sola "
         "ventanilla, así que solo opera quien tiene la guardia.",
         (
+            "Mirá lo que recibís: turnos, pedidos, habitaciones, arreglos y ropa.",
             "Leé las novedades que dejaron las guardias anteriores.",
-            "Tocá «Abrir guardia»: tu caja empieza con el fondo de cambio.",
+            "Contá la ropa, corregí lo que no coincida y tocá «Recibí y abrir guardia».",
             "Si la guardia abierta es de otro conserje, primero la cierra él con su arqueo (o la gerencia con un "
             "cierre supervisado).",
         ),
         (
             "¿Cómo abro la guardia?",
             "¿Qué novedades hay?",
+            "¿Qué es el traspaso?",
             "No me deja operar, ¿qué hago?",
             "¿Qué es el fondo de cambio?",
         ),
@@ -705,6 +812,7 @@ PANTALLAS = {
             "Arriba filtrás por estado o categoría y ordenás por número o por vencimiento.",
             "«Línea de tiempo» muestra las últimas 24 horas de cada habitación.",
             "Con dos disponibles o menos aparece cuándo se libera la próxima; si alguien se va, «Se fue un cliente».",
+            "Abriendo una habitación ves sus «Arreglos» y, si está ocupada, podés «Trasladar» el turno.",
             "Los pedidos que hace el cliente con su QR aparecen en su tarjeta.",
             "Las novedades de la guardia están sobre la grilla; «Dejar novedad» agrega una.",
         ),
@@ -728,6 +836,8 @@ PANTALLAS = {
         (
             "«Nuevo artículo» da de alta uno; «Reponer» suma las unidades que llegaron.",
             "En «Pedidos a proveedores», «Recibir» carga lo que llegó de un pedido y lo suma al stock.",
+            "«Movimiento de ropa» anota las toallas y sábanas que salen a la lavandería, vuelven, se compran o se "
+            "rompen.",
             "Cada movimiento queda a tu nombre y la gerencia lo ve en Actividad.",
         ),
         ("¿Qué artículos tienen poco stock?", "Llegó mercadería, ¿qué hago?", "¿Cómo recibo un pedido?"),
@@ -738,6 +848,7 @@ PANTALLAS = {
         "Es donde cerrás tu guardia con el arqueo ciego: contás la gaveta y declarás lo que hay sin ver el total que "
         "espera el sistema (RN-RES-03).",
         (
+            "Hacé el recuento de toallas y sábanas: sin eso no se cierra.",
             "Declará efectivo, POSNET y Mercado Pago.",
             "Al confirmar, el sistema calcula la diferencia (correcto, faltante o sobrante) y cierra tu guardia.",
             "Descargá el comprobante en PDF para firmarlo.",
@@ -765,6 +876,26 @@ PANTALLAS = {
             "¿Quién tuvo más faltantes en los últimos 30 días?",
             "¿Qué es la TDC?",
             "¿Cómo verifico un comprobante?",
+        ),
+        GERENCIA,
+    ),
+    "operacion": Pantalla(
+        "Operación",
+        "Es lo que pasa en la operación diaria: arreglos de las habitaciones, recuentos de ropa, cambios de guardia y "
+        "turnos trasladados. Los conserjes lo cargan desde la ventanilla.",
+        (
+            "En «Arreglos» ves lo pendiente, lo gastado y el historial de cada habitación, y cargás un costo que llegó "
+            "después.",
+            "En «Ropa» ves el último recuento, las diferencias con los nombres y lo que entró o salió del motel.",
+            "En «Traspasos» ves qué recibió cada conserje al abrir, y las guardias cerradas sin conteo.",
+            "En «Traslados» ves cada turno que cambió de habitación y por qué.",
+        ),
+        (),
+        (
+            "¿Faltan toallas?",
+            "¿Cuánto gastamos en arreglos?",
+            "¿Qué habitación se rompe más?",
+            "¿Qué arreglos hay abiertos?",
         ),
         GERENCIA,
     ),
@@ -1253,6 +1384,28 @@ class Ventanilla:
             acciones=_ir("inventario"),
         )
 
+    async def arreglos(self, numero: int | None) -> Respuesta:
+        """Lo que falta resolver. No lleva costos: esos son de la gerencia."""
+        consulta = select(Arreglo).where(Arreglo.estado.in_(SIN_RESOLVER)).order_by(Arreglo.abierto_en)
+        if numero is not None:
+            habitacion = next((h for h in self.habitaciones if h.numero == numero), None)
+            if habitacion is None:
+                return Respuesta(f"No encuentro la habitación {numero}.", "arreglos")
+            consulta = consulta.where(Arreglo.habitacion_id == habitacion.id)
+        lista = list((await self.db.execute(consulta)).scalars())
+        donde = f" en la {numero}" if numero is not None else ""
+        if not lista:
+            return Respuesta(f"No hay arreglos sin resolver{donde}.", "arreglos", acciones=_ir("dashboard"))
+        numeros = {h.id: h.numero for h in self.habitaciones}
+        partes = [
+            f"la {numeros.get(a.habitacion_id, '—')}, {RUBROS[a.rubro].lower()} («{a.descripcion}»)"
+            + (" (ya lo están viendo)" if a.estado == EN_CURSO else "")
+            for a in lista[:4]
+        ]
+        mas = f" Y {len(lista) - 4} más." if len(lista) > 4 else ""
+        titulo = "Hay un arreglo" if len(lista) == 1 else f"Hay {len(lista)} arreglos"
+        return Respuesta(f"{titulo} sin resolver{donde}: " + "; ".join(partes) + "." + mas, "arreglos")
+
     async def novedades(self) -> Respuesta:
         desde = self.ahora - timedelta(hours=24)
         lista = list(
@@ -1279,7 +1432,19 @@ ENTRADAS = TEMAS + conocimiento.DEFINICIONES
 # Lo que un conserje puede preguntar del análisis: no muestra dinero (RN-RES-03 y datos de la gerencia).
 ANALISIS_CONSERJE = {"horas", "pronostico", "estadia", "ocupacion"}
 # Lo que es dinero o caja: al conserje se le dice que es de la gerencia sin buscar otra respuesta.
-DINERO = {"ingresos", "caja", "ticket", "medios", "sobreturno", "resumen", "perdidos", "gemelo", "opiniones"}
+DINERO = {
+    "ingresos",
+    "caja",
+    "ticket",
+    "medios",
+    "sobreturno",
+    "resumen",
+    "perdidos",
+    "gemelo",
+    "opiniones",
+    "ropa",
+    "arreglos",
+}
 INTENCIONES_ANALISIS = {nombre for nombre, _ in INTENCIONES}
 
 
@@ -1493,6 +1658,17 @@ def _sugerencias_de(pantalla: str | None, es_gerencia: bool) -> list[str]:
 async def _ventanilla_ahora(
     ventanilla: Ventanilla, texto: str, es_gerencia: bool, anterior: str | None
 ) -> Respuesta | None:
+    # Cuánta ropa hay no se le dice a quien la cuenta a ciegas al cerrar.
+    if not es_gerencia and ROPA_DATOS.search(texto) and "pedido" not in texto:
+        return Respuesta(
+            "Eso no te lo puedo decir: el recuento de cierre es a ciegas, como la caja. Al abrir la guardia ves lo que "
+            "te dejaron; los totales y el historial los ve la gerencia.",
+            "ropa",
+        )
+    if re.search(r"\barreglos?\b", texto) and re.search(
+        r"\b(hay|abiert\w*|pendientes?|sin resolver|falta|que|cuales)\b", texto
+    ):
+        return await ventanilla.arreglos(_numero(texto))
     if re.search(
         r"(cuando|cuanto falta|en cuanto|a que hora)\b.*\b(liber(a|e|an|en|ara)\b|desocup|queda libre)"
         r"|(cuando|cuanto falta|en cuanto|a que hora)\b.*\b(hay|habra) lugar"

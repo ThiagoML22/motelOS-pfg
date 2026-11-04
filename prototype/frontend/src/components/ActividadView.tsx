@@ -15,6 +15,7 @@ const CATEGORIAS: { id: CategoriaActividad; label: string }[] = [
   { id: 'PERSONAL', label: 'Personal' },
   { id: 'ESTABLECIMIENTO', label: 'Establecimiento' },
   { id: 'PERFIL', label: 'Perfil' },
+  { id: 'OPERACION', label: 'Operación' },
 ];
 const ETIQUETA = Object.fromEntries(CATEGORIAS.map((c) => [c.id, c.label])) as Record<CategoriaActividad, string>;
 

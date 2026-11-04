@@ -7,6 +7,7 @@ import Button from './ui/Button';
 import Field, { inputClass } from './ui/Field';
 import Modal from './ui/Modal';
 import { useToast } from './ui/Toast';
+import MovimientoRopa from './MovimientoRopa';
 import { BotonNuevoPedido, SeccionPedidos } from './PedidosReposicion';
 import { EsqueletoTabla } from './ui/Carga';
 
@@ -183,6 +184,7 @@ const InventarioView: React.FC<InventarioViewProps> = ({ esConserje }) => {
           <p className="mt-0.5 text-sm text-muted">Minibar y productos de venta</p>
         </div>
         <div className="flex flex-wrap gap-2">
+          {esConserje && <MovimientoRopa />}
           {!esConserje && <BotonNuevoPedido onCreado={() => setVersionPedidos((v) => v + 1)} />}
           <Button onClick={abrirModal}>
             <Plus className="h-4 w-4" aria-hidden="true" />

@@ -51,6 +51,16 @@ import {
   TurnoCreate,
   TurnoResumen,
   VerificacionComprobante,
+  Arreglo,
+  ConteoPrenda,
+  MotivoTraslado,
+  PantallaTraspaso,
+  Prenda,
+  RopaContada,
+  RubroArreglo,
+  TableroOperacion,
+  TipoArreglo,
+  TipoMovimientoRopa,
 } from '../types';
 
 // Desde otro equipo de la red (el celular de un cliente), «localhost» sería ese equipo: se usa la dirección de la página.
@@ -242,7 +252,50 @@ export const api = {
     (await http.post('/novedades/', datos)).data,
 
   // --- Guardias y cierre de caja ciego (RF-08) ---
-  abrirGuardia: async (): Promise<Guardia> => (await http.post('/guardias/')).data,
+  // Quien entra confirma lo que recibe: la guardia se abre con su recuento.
+  abrirGuardia: async (conteos?: ConteoPrenda[]): Promise<Guardia> =>
+    (await http.post('/guardias/', conteos ? { conteos } : undefined)).data,
+
+  getTraspaso: async (): Promise<PantallaTraspaso> => (await http.get('/guardias/traspaso')).data,
+
+  contarRopa: async (conteos: ConteoPrenda[]): Promise<RopaContada[]> =>
+    (await http.post('/guardias/actual/ropa', { conteos })).data.prendas,
+
+  movimientoRopa: async (datos: { prenda: Prenda; tipo: TipoMovimientoRopa; cantidad: number }) =>
+    (await http.post('/operacion/ropa/movimientos', datos)).data,
+
+  getArreglos: async (filtro: { habitacionId?: number; sinResolver?: boolean } = {}): Promise<Arreglo[]> =>
+    (
+      await http.get('/operacion/arreglos', {
+        params: { habitacion_id: filtro.habitacionId, sin_resolver: filtro.sinResolver },
+      })
+    ).data,
+
+  reportarArreglo: async (datos: {
+    habitacion_id: number;
+    tipo: TipoArreglo;
+    rubro: RubroArreglo;
+    descripcion: string;
+    fuera_de_servicio: boolean;
+  }): Promise<Arreglo> => (await http.post('/operacion/arreglos', datos)).data,
+
+  empezarArreglo: async (id: number): Promise<Arreglo> => (await http.post(`/operacion/arreglos/${id}/empezar`)).data,
+
+  resolverArreglo: async (
+    id: number,
+    datos: { reparado_por: string; trabajo: string | null; costo: number | null; habilitar: boolean },
+  ): Promise<Arreglo> => (await http.post(`/operacion/arreglos/${id}/resolver`, datos)).data,
+
+  costoArreglo: async (id: number, costo: number | null): Promise<Arreglo> =>
+    (await http.patch(`/operacion/arreglos/${id}/costo`, { costo })).data,
+
+  trasladarTurno: async (
+    turnoId: string,
+    datos: { habitacion_id: number; motivo: MotivoTraslado; rubro?: RubroArreglo; descripcion?: string },
+  ): Promise<{ desde: number; hacia: number; origen_queda: string }> =>
+    (await http.post(`/turnos/${turnoId}/trasladar`, datos)).data,
+
+  getTableroOperacion: async (): Promise<TableroOperacion> => (await http.get('/operacion/tablero')).data,
 
   confirmarArqueo: async (declaracion: DeclaracionCaja): Promise<Arqueo> =>
     (await http.post('/guardias/actual/arqueo', declaracion)).data,

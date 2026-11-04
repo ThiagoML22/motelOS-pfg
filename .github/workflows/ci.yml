@@ -107,6 +107,7 @@ jobs:
           psql -h localhost -U postgres -d motel_schema -v ON_ERROR_STOP=1 -f db/verify_pedidos_cliente.sql
           psql -h localhost -U postgres -d motel_schema -v ON_ERROR_STOP=1 -f db/verify_franjas.sql
           psql -h localhost -U postgres -d motel_schema -v ON_ERROR_STOP=1 -f db/verify_cliente_ampliado.sql
+          psql -h localhost -U postgres -d motel_schema -v ON_ERROR_STOP=1 -f db/verify_operacion.sql
 
       - name: Verificar la migración desde una base v1.2 con datos
         working-directory: ./prototype
@@ -132,7 +133,8 @@ jobs:
           export DEMO_CLAVE_CONSERJES="c-$(openssl rand -hex 12)"
           export DEMO_CLAVE_PLATAFORMA="p-$(openssl rand -hex 12)"
           DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/motel_schema python -m scripts.cargar_demo
-          DATABASE_URL=postgresql+asyncpg://motel_app:motel_app@localhost:5432/motel_schema \
+          # Los recorridos abren y cierran guardias sin ropa; el recuento obligatorio se prueba en test_operacion.
+          EXIGIR_RECUENTO_ROPA=false DATABASE_URL=postgresql+asyncpg://motel_app:motel_app@localhost:5432/motel_schema \
             uvicorn app.main:app --port 8000 > uvicorn.log 2>&1 &
           for i in $(seq 1 30); do curl -sf http://localhost:8000/health && break; sleep 1; done
           python -m scripts.recorrido_v2 --api http://localhost:8000

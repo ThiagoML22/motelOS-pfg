@@ -12,6 +12,8 @@ TURNO = "TURNO"  # se abrió un turno
 COBRO = "COBRO"  # se cobró y cerró un turno
 LIBERAR = "LIBERAR"  # terminó la limpieza
 MANUAL = "MANUAL"  # alguien lo cambió a mano
+TRASLADO = "TRASLADO"  # el turno pasó a otra habitación (migración 016)
+ARREGLO = "ARREGLO"  # un arreglo la sacó de servicio o la devolvió (migración 016)
 
 
 class EventoHabitacion(DeEstablecimiento, Base):

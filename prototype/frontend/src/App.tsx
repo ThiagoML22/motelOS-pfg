@@ -26,6 +26,7 @@ import PerfilView from './components/PerfilView';
 import PlataformaView from './components/PlataformaView';
 import TopNav, { ITEMS, View } from './components/TopNav';
 import RoomsGrid from './components/RoomsGrid';
+import OperacionView from './components/OperacionView';
 import RoomDialog from './components/RoomDialog';
 import InventarioView from './components/InventarioView';
 import LoginView from './components/LoginView';
@@ -649,6 +650,8 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
 
         {esGerencia && activeView === 'gerencia' && <PanelGerencia onCambioGuardia={onRefrescarSesion} codigoInicial={codigoAVerificar} />}
 
+        {esGerencia && activeView === 'operacion' && <OperacionView />}
+
         {esGerencia && activeView === 'configuracion' && (
           <ConfiguracionView onCambioHabitaciones={fetchHabitaciones} onCambioApariencia={onRefrescarSesion} />
         )}
@@ -735,6 +738,8 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
           pedidos={pedidosCliente.filter((p) => p.habitacion_id === selectedRoom.id)}
           onCambioPedidos={fetchPedidosCliente}
           motel={sesion.establecimiento?.nombre}
+          habitaciones={habitaciones}
+          categorias={categorias}
         />
       )}
     </div>

@@ -16,6 +16,7 @@ from app.models import (  # noqa: F401
     guardia,
     habitacion,
     novedad,
+    operacion,
     operador,
     pago,
     pedido,

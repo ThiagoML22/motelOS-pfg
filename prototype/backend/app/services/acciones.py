@@ -20,13 +20,17 @@ ORDEN = re.compile(
     r"^(?:(?:por favor|porfa|dale|che|bueno)\s+)*"
     r"(?P<verbo>pasa|pasame|pone|poneme|deja|dejame|manda|libera|liberame|habilita|abri|abrime|ocupa|ocupame"
     r"|carga|cargale|cargame|agrega|agregale|agregame|suma|sumale|sumame|anota|anotame|anotale|registra|escribi"
-    r"|cobra|cobrale|cerra|cerrale)\b(?P<resto>.*)$"
+    r"|cobra|cobrale|cerra|cerrale|traslada|trasladame|muda|mudame|cambia|cambiame)\b(?P<resto>.*)$"
 )
 HABITACION = r"(?:la |el )?(?:habitacion |hab |n |numero )*(?P<numero>\d{1,4})\b"
 DESTINOS = (
     ("Mantenimiento", r"mantenimiento|fuera de servicio", "mantenimiento", "en mantenimiento"),
     ("En Limpieza", r"limpieza|a limpiar", "limpieza", "en limpieza"),
     ("Libre", r"\blibres?\b|disponibles?", "disponible", "disponible"),
+)
+TRASLADO = re.compile(
+    r"(?:la |el |habitacion |hab |n |numero )*(?P<desde>\d{1,4})\b.*?\b(?:a|para)\s+"
+    r"(?:la |el |habitacion |hab |n |numero )*(?P<hacia>\d{1,4})\b"
 )
 PATENTE = re.compile(r"\b([a-z]{2} ?\d{3} ?[a-z]{2}|[a-z]{3} ?\d{3})\b")
 
@@ -190,6 +194,38 @@ def _consumo(resto: str, ventanilla, tiene_guardia: bool) -> Propuesta | None:
     )
 
 
+def _traslado(texto: str, resto: str, ventanilla, tiene_guardia: bool) -> Propuesta | None:
+    m = TRASLADO.search(resto)
+    if m is None:
+        return None
+    if not tiene_guardia:
+        return Propuesta("Para trasladar un turno hace falta tener la guardia abierta.", "accion:rechazada")
+    desde, hacia = int(m.group("desde")), int(m.group("hacia"))
+    origen, destino = _buscar_habitacion(ventanilla, desde), _buscar_habitacion(ventanilla, hacia)
+    if origen is None or destino is None:
+        return Propuesta(f"No encuentro la habitación {desde if origen is None else hacia}.", "accion:rechazada")
+    turno = ventanilla.turnos.get(origen.id)
+    if turno is None:
+        return Propuesta(f"La {desde} no tiene un turno en curso.", "accion:rechazada")
+    if destino.estado != "Libre":
+        return Propuesta(f"La {hacia} no está disponible: está {destino.estado.lower()}.", "accion:rechazada")
+    if re.search(r"\b(falla|rot[ao]|no anda|no funciona|no enfria|no calienta)\b", texto):
+        return Propuesta(
+            "Si es por una falla, trasladalo desde la habitación: ahí queda el arreglo abierto con lo que falló.",
+            "accion:rechazada",
+            acciones=_abrir(origen.id, desde),
+        )
+    return _a_confirmar(
+        "traslado",
+        f"Trasladar el turno de la {desde} a la {hacia}",
+        f"Listo: el turno pasó a la {hacia} y la {desde} quedó en limpieza.",
+        detalle="Conserva la hora, la tarifa con la que entró, la cuenta y el QR del cliente.",
+        turno_id=str(turno.id),
+        habitacion_id=destino.id,
+        motivo_traslado="CLIENTE" if re.search(r"\bcliente\b|pidio|quiere", texto) else "OTRO",
+    )
+
+
 def _novedad(pregunta: str, texto: str, ventanilla) -> Propuesta | None:
     if not re.search(r"\b(novedad|nota)\b", texto):
         return None
@@ -250,6 +286,10 @@ def interpretar(pregunta: str, texto: str, ventanilla, tiene_guardia: bool) -> P
         )
     if verbo in ("abri", "abrime", "ocupa", "ocupame"):
         return _abrir_turno(texto, resto, ventanilla, tiene_guardia)
+    if verbo.startswith(("traslada", "muda", "cambia")) or re.search(r"\bturno\b", resto):
+        traslado = _traslado(texto, resto, ventanilla, tiene_guardia)
+        if traslado is not None:
+            return traslado
     if verbo.startswith(("carga", "agrega", "suma")):
         return _consumo(resto, ventanilla, tiene_guardia)
     return (

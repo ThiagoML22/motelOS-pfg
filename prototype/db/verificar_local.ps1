@@ -29,7 +29,7 @@ try {
                    'verify_multiinquilino.sql', 'verify_categorias_perfil.sql',
                    'verify_personalizacion_novedades.sql', 'verify_pedidos.sql', 'verify_historial_clientes.sql',
                    'verify_sellos.sql', 'verify_pedidos_cliente.sql', 'verify_franjas.sql',
-                   'verify_cliente_ampliado.sql') {
+                   'verify_cliente_ampliado.sql', 'verify_operacion.sql') {
         Write-Host "Verificando $v"
         Invoke-Psql 'motel_schema' @('-f', "/db/$v")
     }

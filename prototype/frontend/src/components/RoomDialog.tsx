@@ -1,10 +1,12 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { BellRing, Banknote, Bike, CalendarClock, Car, CreditCard, ExternalLink, Footprints, Minus, Plus, Printer, QrCode, Receipt } from 'lucide-react';
+import { ArrowRightLeft, BellRing, Banknote, Bike, CalendarClock, Car, CreditCard, ExternalLink, Footprints, Minus, Plus, Printer, QrCode, Receipt } from 'lucide-react';
 import { Articulo, Categoria, HabitacionConDetalles, MedioPago, PedidoVentanilla, TicketCliente, TipoCliente, TurnoResumen } from '../types';
 import { api, getErrorMessage } from '../services/api';
 import { formatDuration, formatMoney, formatRoomNumber } from '../utils/format';
 import { ESTADIA_BASE_MIN, elapsedMs, faseEstadia, formatMinutos, minutosExcedidos } from '../utils/turno';
+import ArreglosHabitacion, { BotonArreglos } from './ArreglosHabitacion';
 import { ChipCategoria } from './CategoriasConfig';
+import TrasladoTurno from './TrasladoTurno';
 import Button from './ui/Button';
 import Field, { inputClass } from './ui/Field';
 import Modal from './ui/Modal';
@@ -25,9 +27,12 @@ interface RoomDialogProps {
   onCambioPedidos?: () => Promise<void>;
   // El nombre del motel, para el ticket.
   motel?: string;
+  // Para elegir a qué habitación trasladar el turno.
+  habitaciones?: HabitacionConDetalles[];
+  categorias?: Categoria[];
 }
 
-type Vista = 'cuenta' | 'productos' | 'cobro' | 'ticket';
+type Vista = 'cuenta' | 'productos' | 'cobro' | 'ticket' | 'arreglos' | 'trasladar';
 
 const AVISO_CAMBIO_TARIFA_MIN = 60;
 
@@ -68,6 +73,8 @@ const RoomDialog: React.FC<RoomDialogProps> = ({
   pedidos = [],
   onCambioPedidos,
   motel,
+  habitaciones = [],
+  categorias = [],
 }) => {
   const { toast } = useToast();
   const turnoId = room.turno_activo?.id;
@@ -214,17 +221,41 @@ const RoomDialog: React.FC<RoomDialogProps> = ({
   const titulo = formatRoomNumber(room.numero);
   let subtitulo = 'Apertura de turno';
   if (isOcupada) {
-    subtitulo = { productos: 'Agregar productos', cobro: 'Cobro y cierre', cuenta: 'Cuenta del turno', ticket: 'Ticket para el cliente' }[vista];
+    subtitulo = {
+      productos: 'Agregar productos',
+      cobro: 'Cobro y cierre',
+      cuenta: 'Cuenta del turno',
+      ticket: 'Ticket para el cliente',
+      arreglos: 'Arreglos',
+      trasladar: 'Trasladar el turno',
+    }[vista];
   }
   // RNF-04: en el recambio, la guardia entrante ve quién abrió el turno que va a cobrar.
   if (isOcupada && room.turno_activo?.abierto_por) subtitulo += ` · abierto por ${room.turno_activo.abierto_por}`;
   if (room.estado === 'En Limpieza') subtitulo = 'En limpieza';
   if (room.estado === 'Mantenimiento') subtitulo = 'En mantenimiento';
+  if (vista === 'arreglos') subtitulo = 'Arreglos';
 
   let body: React.ReactNode = null;
   let footer: React.ReactNode = null;
+  const arreglosAbiertos = room.arreglos_abiertos ?? 0;
 
-  if (room.estado === 'Libre') {
+  if (vista === 'arreglos') {
+    body = <ArreglosHabitacion room={room} onCambio={onRefreshRooms} onVolver={() => setVista('cuenta')} />;
+  } else if (vista === 'trasladar' && isOcupada) {
+    body = (
+      <TrasladoTurno
+        room={room}
+        habitaciones={habitaciones}
+        categorias={categorias}
+        onVolver={() => setVista('cuenta')}
+        onListo={async () => {
+          await onRefreshRooms();
+          onClose();
+        }}
+      />
+    );
+  } else if (room.estado === 'Libre') {
     const tarifa = categoria?.tarifa_ahora ?? categoria?.tarifa;
     const ahora = categoria?.tarifa_ahora;
     // Una franja que empieza o termina pronto se avisa: el precio del cliente que está en la puerta depende de eso.
@@ -313,6 +344,7 @@ const RoomDialog: React.FC<RoomDialogProps> = ({
             Estadía base de {ESTADIA_BASE_MIN / 60} horas. Superada, el excedente se liquida por fracciones.
           </p>
         )}
+        <BotonArreglos abiertos={arreglosAbiertos} onClick={() => setVista('arreglos')} />
       </form>
     );
     footer = (
@@ -322,9 +354,12 @@ const RoomDialog: React.FC<RoomDialogProps> = ({
     );
   } else if (room.estado === 'En Limpieza') {
     body = (
-      <p className="text-sm text-muted">
-        La habitación está pendiente de limpieza. Al marcarla como disponible volverá a estar lista para ocupar.
-      </p>
+      <div className="space-y-4">
+        <p className="text-sm text-muted">
+          La habitación está pendiente de limpieza. Al marcarla como disponible volverá a estar lista para ocupar.
+        </p>
+        <BotonArreglos abiertos={arreglosAbiertos} onClick={() => setVista('arreglos')} />
+      </div>
     );
     footer = (
       <Button
@@ -343,9 +378,17 @@ const RoomDialog: React.FC<RoomDialogProps> = ({
     );
   } else if (room.estado === 'Mantenimiento') {
     body = (
-      <p className="text-sm text-muted">
-        La habitación está fuera de servicio. Al habilitarla volverá a estar disponible para ocupar.
-      </p>
+      <div className="space-y-4">
+        <p className="text-sm text-muted">
+          La habitación está fuera de servicio. Al habilitarla volverá a estar disponible para ocupar.
+        </p>
+        {arreglosAbiertos > 0 && (
+          <p className="text-sm text-warn">
+            {arreglosAbiertos === 1 ? 'Tiene un arreglo sin resolver.' : `Tiene ${arreglosAbiertos} arreglos sin resolver.`}
+          </p>
+        )}
+        <BotonArreglos abiertos={arreglosAbiertos} onClick={() => setVista('arreglos')} />
+      </div>
     );
     footer = (
       <Button
@@ -512,10 +555,17 @@ const RoomDialog: React.FC<RoomDialogProps> = ({
           <span className="text-2xl font-semibold tabular-nums text-ink">{formatMoney(resumen.total_general)}</span>
         </div>
 
-        <button type="button" onClick={() => void abrirTicket()} className="press inline-flex items-center gap-1.5 text-sm font-medium text-accent hover:underline">
-          <QrCode className="h-4 w-4" aria-hidden="true" />
-          Ticket con QR para el cliente
-        </button>
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+          <button type="button" onClick={() => void abrirTicket()} className="press inline-flex items-center gap-1.5 text-sm font-medium text-accent hover:underline">
+            <QrCode className="h-4 w-4" aria-hidden="true" />
+            Ticket con QR
+          </button>
+          <button type="button" onClick={() => setVista('trasladar')} className="press inline-flex items-center gap-1.5 text-sm font-medium text-accent hover:underline">
+            <ArrowRightLeft className="h-4 w-4" aria-hidden="true" />
+            Trasladar
+          </button>
+          <BotonArreglos abiertos={arreglosAbiertos} onClick={() => setVista('arreglos')} />
+        </div>
       </div>
     );
     footer = (

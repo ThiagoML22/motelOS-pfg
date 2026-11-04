@@ -1,9 +1,11 @@
-import React, { useMemo, useState } from 'react';
-import { CheckCircle2, EyeOff, FileDown, LogOut, Printer, Lock } from 'lucide-react';
-import { Arqueo, Sesion } from '../types';
+import React, { useEffect, useMemo, useState } from 'react';
+import { CheckCircle2, EyeOff, FileDown, LogOut, Printer, Lock, Shirt } from 'lucide-react';
+import { Arqueo, PantallaTraspaso, RopaContada, Sesion } from '../types';
 import { api, getErrorMessage } from '../services/api';
 import { formatDateTime, formatMoney } from '../utils/format';
 import { CATEGORIA_META, NOMBRE_FRANJA, aImporte, redondear } from '../utils/caja';
+import RecuentoRopa, { aConteos, ropaVacia, textoDiferencia } from './RecuentoRopa';
+import ResumenTraspaso from './ResumenTraspaso';
 import Button from './ui/Button';
 import Field, { inputClass } from './ui/Field';
 import Modal from './ui/Modal';
@@ -28,6 +30,37 @@ const CierreCajaView: React.FC<CierreCajaViewProps> = ({ sesion, resultado, onCo
   const [mercadoPago, setMercadoPago] = useState('');
   const [confirmando, setConfirmando] = useState(false);
   const [enviando, setEnviando] = useState(false);
+  const [traspaso, setTraspaso] = useState<PantallaTraspaso | null>(null);
+  const [ropa, setRopa] = useState(ropaVacia);
+  const [confirmandoRopa, setConfirmandoRopa] = useState(false);
+  const [contada, setContada] = useState<RopaContada[] | null>(null);
+
+  useEffect(() => {
+    api
+      .getTraspaso()
+      .then(setTraspaso)
+      .catch(() => setTraspaso(null));
+  }, []);
+
+  const conteos = aConteos(ropa);
+  // Sin el recuento no se cierra: si no se pudo saber, lo decide el servidor al confirmar.
+  const falta = Boolean(traspaso?.exige_recuento) && !traspaso?.ropa_contada && !contada;
+
+  const guardarRopa = async () => {
+    if (!conteos) return;
+    setEnviando(true);
+    try {
+      const resultado = await api.contarRopa(conteos);
+      setContada(resultado);
+      setConfirmandoRopa(false);
+      toast('Recuento de ropa guardado.', 'success');
+    } catch (err) {
+      setConfirmandoRopa(false);
+      toast(getErrorMessage(err, 'No se pudo guardar el recuento.'), 'error');
+    } finally {
+      setEnviando(false);
+    }
+  };
 
   const importes = useMemo(() => {
     const efectivo = aImporte(efectivoTexto);
@@ -88,6 +121,54 @@ const CierreCajaView: React.FC<CierreCajaViewProps> = ({ sesion, resultado, onCo
         </span>
       </p>
 
+      <div className="mb-5 grid gap-5 lg:grid-cols-[1.4fr_1fr]">
+        <section aria-labelledby="titulo-ropa" className="rounded-lg border border-line bg-surface p-5">
+          <h2 id="titulo-ropa" className="flex items-center gap-2 text-sm font-semibold text-ink">
+            <Shirt className="h-4 w-4 text-muted" aria-hidden="true" />
+            Toallas y sábanas
+          </h2>
+          {contada || traspaso?.ropa_contada ? (
+            <div className="mt-3 space-y-1 text-sm">
+              <p className="flex items-center gap-2 text-ink">
+                <CheckCircle2 className="h-4 w-4 text-libre" aria-hidden="true" />
+                Recuento hecho.
+              </p>
+              {contada?.map((p) => (
+                <p key={p.prenda} className="text-muted">
+                  {p.etiqueta}: {p.total}
+                  {p.diferencia === null && ' (primer recuento)'}
+                  {p.diferencia === 0 && ', coincide con lo que debería haber'}
+                  {!!p.diferencia && (
+                    <span className="font-medium text-danger">, {textoDiferencia(p.diferencia)}: lo verá la gerencia</span>
+                  )}
+                </p>
+              ))}
+            </div>
+          ) : (
+            <>
+              <p className="mt-0.5 mb-3 text-xs text-muted">
+                Cuente toda la ropa del motel, sin ver cuánta debería haber. Quien entra recibe este número.
+              </p>
+              <RecuentoRopa valores={ropa} onCambiar={setRopa} idBase="cierre" />
+              <Button className="mt-4 w-full sm:w-auto" disabled={!conteos} onClick={() => setConfirmandoRopa(true)}>
+                Guardar recuento
+              </Button>
+            </>
+          )}
+        </section>
+
+        <section aria-labelledby="titulo-deja" className="rounded-lg border border-line bg-surface p-5">
+          <h2 id="titulo-deja" className="text-sm font-semibold text-ink">
+            Lo que deja a la próxima guardia
+          </h2>
+          {traspaso ? (
+            <ResumenTraspaso foto={traspaso} className="mt-2" />
+          ) : (
+            <p className="mt-2 text-sm text-muted">Cargando…</p>
+          )}
+        </section>
+      </div>
+
       <div className="grid gap-5 lg:grid-cols-[1.4fr_1fr]">
         <section aria-labelledby="titulo-efectivo" className="rounded-lg border border-line bg-surface p-5">
           <h2 id="titulo-efectivo" className="text-sm font-semibold text-ink">
@@ -109,8 +190,6 @@ const CierreCajaView: React.FC<CierreCajaViewProps> = ({ sesion, resultado, onCo
                 id="efectivo"
                 inputMode="decimal"
                 placeholder="0"
-                data-autofocus
-                autoFocus
                 className={`${inputClass} h-12 text-lg tabular-nums`}
                 value={efectivoTexto}
                 onChange={(e) => setEfectivoTexto(e.target.value)}
@@ -162,13 +241,41 @@ const CierreCajaView: React.FC<CierreCajaViewProps> = ({ sesion, resultado, onCo
                 {importes.declarado === null ? '—' : formatMoney(importes.declarado)}
               </span>
             </div>
-            <Button className="mt-4 w-full" disabled={!importes.validos} onClick={() => setConfirmando(true)}>
+            {falta && <p className="mt-3 text-sm text-warn">Antes de cerrar, guarde el recuento de toallas y sábanas.</p>}
+            <Button className="mt-4 w-full" disabled={!importes.validos || falta} onClick={() => setConfirmando(true)}>
               <Lock className="h-4 w-4" aria-hidden="true" />
               Confirmar recuento y cerrar guardia
             </Button>
           </div>
         </section>
       </div>
+
+      {confirmandoRopa && conteos && (
+        <Modal
+          title="Guardar el recuento"
+          subtitle="Una vez guardado no se puede modificar."
+          onClose={() => !enviando && setConfirmandoRopa(false)}
+          footer={
+            <div className="flex justify-end gap-3">
+              <Button variant="secondary" onClick={() => setConfirmandoRopa(false)} disabled={enviando}>
+                Volver a contar
+              </Button>
+              <Button onClick={() => void guardarRopa()} disabled={enviando} data-autofocus>
+                {enviando ? 'Guardando…' : 'Guardar'}
+              </Button>
+            </div>
+          }
+        >
+          <dl className="space-y-2 text-sm">
+            {conteos.map((c) => (
+              <div key={c.prenda} className="flex justify-between">
+                <dt className="text-muted">{c.prenda === 'TOALLAS' ? 'Toallas' : 'Sábanas'}</dt>
+                <dd className="tabular-nums text-ink">{c.limpias + c.sucias + c.en_habitaciones}</dd>
+              </div>
+            ))}
+          </dl>
+        </Modal>
+      )}
 
       {confirmando && importes.validos && (
         <Modal

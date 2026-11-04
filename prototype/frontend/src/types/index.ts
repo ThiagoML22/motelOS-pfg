@@ -95,6 +95,8 @@ export interface ConstanciaCobro {
 export interface HabitacionConDetalles extends Habitacion {
   categoria_id?: number | null;
   turno_activo?: Turno | null;
+  // Arreglos sin resolver: la grilla los marca con un ícono.
+  arreglos_abiertos?: number;
 }
 
 // --- Sesión y caja (prototipo v2) ---
@@ -434,7 +436,8 @@ export type CategoriaActividad =
   | 'HABITACION'
   | 'PERSONAL'
   | 'ESTABLECIMIENTO'
-  | 'PERFIL';
+  | 'PERFIL'
+  | 'OPERACION';
 
 export interface Actividad {
   id: number;
@@ -764,7 +767,7 @@ export interface RespuestaAsistente {
 }
 
 export interface ConfirmacionAsistente {
-  tipo: 'estado' | 'abrir_turno' | 'consumo' | 'novedad' | 'cliente_perdido';
+  tipo: 'estado' | 'abrir_turno' | 'consumo' | 'novedad' | 'cliente_perdido' | 'traslado';
   titulo: string;
   hecho: string;
   habitacion_id?: number | null;
@@ -772,6 +775,7 @@ export interface ConfirmacionAsistente {
   tipo_cliente?: TipoCliente;
   patente?: string | null;
   turno_id?: string;
+  motivo_traslado?: MotivoTraslado;
   articulo_id?: number;
   cantidad?: number;
   texto?: string;
@@ -887,4 +891,146 @@ export interface ResumenMes {
   total_faltante: number;
   total_sobrante: number;
   tdc: number;
+}
+
+
+// --- Operación diaria (migración 016) ---
+
+export type Prenda = 'TOALLAS' | 'SABANAS';
+
+export interface ConteoPrenda {
+  prenda: Prenda;
+  limpias: number;
+  sucias: number;
+  en_habitaciones: number;
+}
+
+export interface RopaDejada extends ConteoPrenda {
+  etiqueta: string;
+  total: number;
+  esperado: number | null;
+  contado_por: string;
+}
+
+export interface RopaContada {
+  prenda: Prenda;
+  etiqueta: string;
+  total: number;
+  esperado: number | null;
+  diferencia: number | null;
+}
+
+export type TipoMovimientoRopa = 'LAVANDERIA_SALE' | 'LAVANDERIA_VUELVE' | 'COMPRA' | 'BAJA';
+
+// Cómo está la ventanilla en el cambio de guardia: sin importes ni patentes.
+export interface FotoVentanilla {
+  turnos: { numero: number | null; lleva_min: number; base_min: number; excedido: boolean }[];
+  pedidos: { numero: number | null; descripcion: string; cantidad: number | null }[];
+  limpieza: number[];
+  mantenimiento: number[];
+  arreglos: { numero: number | null; rubro: string; descripcion: string; estado: string }[];
+  novedades: { texto: string; importante: boolean; numero: number | null; autor: string }[];
+}
+
+export interface PantallaTraspaso extends FotoVentanilla {
+  // Nulo mientras haya una guardia abierta: el recuento de cierre es a ciegas.
+  ropa: RopaDejada[] | null;
+  ropa_contada: boolean;
+  exige_recuento: boolean;
+  saliente: { operador: string; franja: string; cerrada_en: string; sin_conteo: boolean } | null;
+}
+
+export type TipoArreglo = 'FALLA' | 'MANTENIMIENTO';
+export type RubroArreglo = 'AIRE' | 'PLOMERIA' | 'ELECTRICIDAD' | 'TV' | 'MUEBLES' | 'OTRO';
+export type MotivoTraslado = 'FALLA' | 'CLIENTE' | 'OTRO';
+
+export interface Arreglo {
+  id: number;
+  habitacion_id: number;
+  numero: number | null;
+  tipo: TipoArreglo;
+  tipo_nombre: string;
+  rubro: RubroArreglo;
+  rubro_nombre: string;
+  descripcion: string;
+  estado: 'Abierto' | 'En curso' | 'Resuelto';
+  abierto_por: string;
+  abierto_en: string;
+  resuelto_por: string | null;
+  resuelto_en: string | null;
+  reparado_por: string | null;
+  trabajo: string | null;
+  // Solo viene para la gerencia.
+  costo: number | null;
+}
+
+export interface ConteoHistorial {
+  id: number;
+  prenda: Prenda;
+  etiqueta: string;
+  momento: 'APERTURA' | 'CIERRE';
+  creado_en: string;
+  operador: string;
+  limpias: number;
+  sucias: number;
+  en_habitaciones: number;
+  total: number;
+  esperado: number | null;
+  diferencia: number | null;
+  anterior_por: string | null;
+}
+
+export interface TraspasoHistorial {
+  id: number;
+  creado_en: string;
+  franja: string | null;
+  recibio: string;
+  dejo: string | null;
+  sin_conteo: boolean;
+  resumen: FotoVentanilla & { ropa_dejada: RopaDejada[]; ropa_recibida: RopaContada[] };
+}
+
+export interface TableroOperacion {
+  arreglos: {
+    dias: number;
+    sin_resolver: Arreglo[];
+    resueltos: Arreglo[];
+    costo_total: number;
+    sin_costo: number;
+    en_mantenimiento: number[];
+    por_rubro: { rubro: RubroArreglo; nombre: string; cantidad: number; costo: number }[];
+    por_habitacion: { habitacion_id: number; numero: number | null; cantidad: number; costo: number }[];
+  };
+  ropa: {
+    resumen: {
+      prenda: Prenda;
+      etiqueta: string;
+      total: number | null;
+      limpias: number | null;
+      sucias: number | null;
+      en_habitaciones: number | null;
+      en_lavanderia: number;
+      faltantes: number;
+    }[];
+    conteos: ConteoHistorial[];
+    diferencias: ConteoHistorial[];
+    movimientos: {
+      id: number;
+      prenda: string;
+      tipo: string;
+      signo: number;
+      cantidad: number;
+      operador: string;
+      creado_en: string;
+    }[];
+  };
+  traspasos: TraspasoHistorial[];
+  traslados: {
+    id: number;
+    creado_en: string;
+    desde: number | null;
+    hacia: number | null;
+    motivo: string;
+    operador: string;
+  }[];
 }

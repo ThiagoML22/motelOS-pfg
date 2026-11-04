@@ -14,6 +14,7 @@ HABITACION = "HABITACION"
 PERSONAL = "PERSONAL"
 ESTABLECIMIENTO = "ESTABLECIMIENTO"
 PERFIL = "PERFIL"  # migración 008: nombre visible y claves
+OPERACION = "OPERACION"  # migración 016: arreglos, traslados y ropa
 
 
 class RegistroActividad(DeEstablecimiento, Base):
