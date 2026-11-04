@@ -1,6 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
-import { ArrowRight, Bot, RotateCcw, Send, X } from 'lucide-react';
-import { AccionAsistente, RespuestaAsistente } from '../types';
+import { ArrowRight, Bot, Check, RotateCcw, Send, X } from 'lucide-react';
+import { AccionAsistente, ConfirmacionAsistente, RespuestaAsistente } from '../types';
 import { api, getErrorMessage } from '../services/api';
 import Button from './ui/Button';
 
@@ -32,9 +32,9 @@ const SUGERENCIAS: Record<'gerencia' | 'conserje', string[]> = {
 
 const SALUDO = {
   gerencia:
-    'Hola. Te ayudo a usar el sistema y a entender los datos del motel: ingresos, turnos, ocupación, horarios, categorías, caja, stock o lo que se espera para mañana.',
+    'Hola. Te ayudo a usar el sistema y a entender los datos del motel: ingresos, turnos, ocupación, horarios, categorías, caja, stock o lo que se espera para mañana. También hago lo que me pidas, con tu confirmación: «pasá la 7 a mantenimiento».',
   conserje:
-    'Hola. Te ayudo a usar el sistema («¿cómo cobro un turno?») y te digo cómo está la ventanilla («¿qué habitaciones están libres?», «¿cuánto debe la 5?»).',
+    'Hola. Te ayudo a usar el sistema («¿cómo cobro un turno?»), te digo cómo está la ventanilla («¿qué habitaciones están libres?») y hago lo que me pidas, con tu confirmación: «cargale dos aguas a la 5», «pasá la 7 a limpieza».',
 };
 
 interface Mensaje {
@@ -43,6 +43,8 @@ interface Mensaje {
   respuesta?: RespuestaAsistente;
   // La respuesta recién llegada se escribe de a poco (las anteriores ya están completas).
   nuevo?: boolean;
+  // Qué pasó con la orden que propuso el asistente.
+  orden?: 'pendiente' | 'enviando' | 'hecha' | 'cancelada' | 'fallida';
 }
 
 interface Conversacion {
@@ -56,6 +58,10 @@ interface Conversacion {
   ejecutar: (accion: AccionAsistente) => void;
   reiniciar: () => void;
   preguntasHechas: string[];
+  // La ventanilla se entera de lo que cambió una orden confirmada.
+  registrarCambios: (manejador: () => void) => void;
+  confirmar: (indice: number) => void;
+  cancelar: (indice: number) => void;
   // La ventanilla avisa qué sección está abierta: viaja con cada pregunta y se nombra en el campo de texto.
   fijarPantalla: (vista: string, titulo: string) => void;
   tituloPantalla: string | null;
@@ -94,6 +100,20 @@ const TextoAnimado: React.FC<{ texto: string; animar: boolean }> = ({ texto, ani
   );
 };
 
+// Confirmar es hacer lo mismo que los botones de la pantalla: las reglas y la autoría son las de siempre.
+const ejecutarOrden = async (c: ConfirmacionAsistente) => {
+  if (c.tipo === 'estado') await api.updateHabitacionEstado(c.habitacion_id as number, c.estado as string);
+  else if (c.tipo === 'consumo') await api.addConsumo(c.turno_id as string, c.articulo_id as number, c.cantidad as number);
+  else if (c.tipo === 'novedad') await api.crearNovedad({ texto: c.texto as string, importante: Boolean(c.importante), habitacion_id: c.habitacion_id ?? null });
+  else if (c.tipo === 'cliente_perdido') await api.registrarClientePerdido(c.motivo ?? 'SIN_LUGAR', c.categoria_id ?? null);
+  else
+    await api.createTurno({
+      habitacion_id: c.habitacion_id as number,
+      tipo_cliente: c.tipo_cliente ?? 'Auto',
+      identificador_vehicular: c.patente ?? undefined,
+    });
+};
+
 const ContextoAsistente = createContext<Conversacion | null>(null);
 
 export const useAsistente = (): Conversacion => {
@@ -116,6 +136,43 @@ export const AsistenteProvider: React.FC<{ esGerencia: boolean; children: React.
   // La última pregunta y su intención viajan con la siguiente: así el servidor entiende «¿y la semana pasada?».
   const ultima = useRef<{ pregunta: string; intencion: string } | null>(null);
   const pantalla = useRef<string | undefined>(undefined);
+  const alCambiar = useRef<(() => void) | null>(null);
+  const registrarCambios = useCallback((fn: () => void) => {
+    alCambiar.current = fn;
+  }, []);
+  // La orden que espera confirmación: también se puede contestar escribiendo «sí» o «no».
+  const ordenPendiente = useRef<{ indice: number; confirmacion: ConfirmacionAsistente } | null>(null);
+
+  const marcarOrden = useCallback((indice: number, orden: Mensaje['orden']) => {
+    setMensajes((m) => m.map((mensaje, i) => (i === indice ? { ...mensaje, orden } : mensaje)));
+  }, []);
+
+  const confirmar = useCallback(
+    async (indice: number) => {
+      const pendiente = ordenPendiente.current;
+      if (!pendiente || pendiente.indice !== indice) return;
+      ordenPendiente.current = null;
+      marcarOrden(indice, 'enviando');
+      try {
+        await ejecutarOrden(pendiente.confirmacion);
+        marcarOrden(indice, 'hecha');
+        setMensajes((m) => [...m, { de: 'asistente', texto: pendiente.confirmacion.hecho, nuevo: true }]);
+        alCambiar.current?.();
+      } catch (err) {
+        marcarOrden(indice, 'fallida');
+        setMensajes((m) => [...m, { de: 'asistente', texto: getErrorMessage(err, 'No se pudo hacer.') }]);
+      }
+    },
+    [marcarOrden],
+  );
+
+  const cancelar = useCallback(
+    (indice: number) => {
+      if (ordenPendiente.current?.indice === indice) ordenPendiente.current = null;
+      marcarOrden(indice, 'cancelada');
+    },
+    [marcarOrden],
+  );
   const [tituloPantalla, setTituloPantalla] = useState<string | null>(null);
   const fijarPantalla = useCallback((vista: string, titulo: string) => {
     pantalla.current = vista;
@@ -125,13 +182,30 @@ export const AsistenteProvider: React.FC<{ esGerencia: boolean; children: React.
   const preguntar = useCallback(async (texto: string) => {
     const limpia = texto.trim();
     if (!limpia || ocupado.current) return;
+    const pendiente = ordenPendiente.current;
+    if (pendiente && /^(s[ií]|dale|ok|confirmo|confirmar|hacelo)\b/i.test(limpia)) {
+      setMensajes((m) => [...m, { de: 'usuario', texto: limpia }]);
+      void confirmar(pendiente.indice);
+      return;
+    }
+    if (pendiente && /^(no|cancela|cancelar|cancelá|dejalo|dejá)\b/i.test(limpia)) {
+      setMensajes((m) => [...m, { de: 'usuario', texto: limpia }]);
+      cancelar(pendiente.indice);
+      return;
+    }
+    // Otra pregunta deja de lado la orden que esperaba.
+    if (pendiente) cancelar(pendiente.indice);
     ocupado.current = true;
     setMensajes((m) => [...m, { de: 'usuario', texto: limpia }]);
     setPensando(true);
     try {
       const respuesta = await api.preguntar(limpia, ultima.current?.pregunta, ultima.current?.intencion, pantalla.current);
       ultima.current = { pregunta: limpia, intencion: respuesta.intencion };
-      setMensajes((m) => [...m, { de: 'asistente', texto: respuesta.respuesta, respuesta, nuevo: true }]);
+      setMensajes((m) => {
+        const confirmacion = respuesta.confirmacion;
+        if (confirmacion) ordenPendiente.current = { indice: m.length, confirmacion };
+        return [...m, { de: 'asistente', texto: respuesta.respuesta, respuesta, nuevo: true, orden: confirmacion ? 'pendiente' : undefined }];
+      });
       if (respuesta.sugerencias.length) setSugeridas(respuesta.sugerencias);
     } catch (err) {
       setMensajes((m) => [...m, { de: 'asistente', texto: getErrorMessage(err, 'No pude responder ahora. Probá de nuevo.') }]);
@@ -139,10 +213,11 @@ export const AsistenteProvider: React.FC<{ esGerencia: boolean; children: React.
       ocupado.current = false;
       setPensando(false);
     }
-  }, []);
+  }, [confirmar, cancelar]);
 
   const reiniciar = useCallback(() => {
     ultima.current = null;
+    ordenPendiente.current = null;
     setMensajes([{ de: 'asistente', texto: SALUDO[perfil] }]);
     setSugeridas(SUGERENCIAS[perfil]);
   }, [perfil]);
@@ -161,6 +236,9 @@ export const AsistenteProvider: React.FC<{ esGerencia: boolean; children: React.
         ejecutar,
         reiniciar,
         preguntasHechas,
+        registrarCambios,
+        confirmar,
+        cancelar,
         fijarPantalla,
         tituloPantalla,
       }}
@@ -176,7 +254,7 @@ interface ChatAsistenteProps {
 }
 
 export const ChatAsistente: React.FC<ChatAsistenteProps> = ({ className = 'h-[min(78vh,46rem)]', onCerrar }) => {
-  const { mensajes, pensando, sugeridas, esGerencia, preguntar, ejecutar, reiniciar, preguntasHechas, tituloPantalla } = useAsistente();
+  const { mensajes, pensando, sugeridas, esGerencia, preguntar, ejecutar, reiniciar, preguntasHechas, tituloPantalla, confirmar, cancelar } = useAsistente();
   const [texto, setTexto] = useState('');
   const lista = useRef<HTMLDivElement>(null);
   const entrada = useRef<HTMLInputElement>(null);
@@ -251,6 +329,34 @@ export const ChatAsistente: React.FC<ChatAsistenteProps> = ({ className = 'h-[mi
                     </li>
                   ))}
                 </ol>
+              )}
+              {m.respuesta?.confirmacion && (
+                <div className="mt-2 animate-fade-in rounded-md border border-accent/40 bg-surface px-3 py-2">
+                  <p className="font-medium text-ink">{m.respuesta.confirmacion.titulo}</p>
+                  {m.orden === 'pendiente' && (
+                    <div className="mt-2 flex gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => confirmar(i)}
+                        className="press inline-flex items-center gap-1 rounded-md bg-accent px-2.5 py-1 text-xs font-medium text-accent-fg hover:bg-accent-hover"
+                      >
+                        <Check className="h-3.5 w-3.5" aria-hidden="true" />
+                        Confirmar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => cancelar(i)}
+                        className="press rounded-md border border-line-strong px-2.5 py-1 text-xs text-muted hover:text-ink"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  )}
+                  {m.orden === 'enviando' && <p className="mt-1 text-xs text-muted">Haciéndolo…</p>}
+                  {m.orden === 'hecha' && <p className="mt-1 flex items-center gap-1 text-xs text-libre"><Check className="h-3 w-3" aria-hidden="true" /> Hecho</p>}
+                  {m.orden === 'cancelada' && <p className="mt-1 text-xs text-muted">Cancelado: no se hizo nada.</p>}
+                  {m.orden === 'fallida' && <p className="mt-1 text-xs text-danger">No se pudo hacer.</p>}
+                </div>
               )}
               {m.respuesta?.acciones && m.respuesta.acciones.length > 0 && (
                 <div className="mt-2.5 flex flex-wrap gap-1.5">

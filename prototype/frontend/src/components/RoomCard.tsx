@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Bike, Car, CheckCircle2, Footprints, MoreVertical, Sparkles, Wrench } from 'lucide-react';
-import { Categoria, HabitacionConDetalles, RoomStatus } from '../types';
+import { BellRing, Bike, Car, CheckCircle2, Footprints, MoreVertical, Sparkles, Wrench } from 'lucide-react';
+import { Categoria, HabitacionConDetalles, PedidoVentanilla, RoomStatus } from '../types';
 import { formatDuration, formatMoney, formatRoomNumber } from '../utils/format';
 import { ESTADIA_BASE_MIN, elapsedMs, faseEstadia, formatMinutos, minutosExcedidos, minutosRestantes } from '../utils/turno';
 import { ChipCategoria } from './CategoriasConfig';
@@ -15,6 +15,7 @@ interface RoomCardProps {
   onClick: (room: HabitacionConDetalles) => void;
   onAddConsumo: (room: HabitacionConDetalles) => void;
   onChangeEstado: (room: HabitacionConDetalles, newState: RoomStatus) => void;
+  pedidos?: PedidoVentanilla[];
 }
 
 const CAMBIOS_ESTADO: { estado: RoomStatus; label: string; icon: React.ElementType }[] = [
@@ -26,7 +27,7 @@ const CAMBIOS_ESTADO: { estado: RoomStatus; label: string; icon: React.ElementTy
 const TIPO_ICON: Record<string, React.ElementType> = { Auto: Car, Moto: Bike, Peaton: Footprints };
 const TIPO_LABEL: Record<string, string> = { Auto: 'Auto', Moto: 'Moto', Peaton: 'Peatón' };
 
-const RoomCard: React.FC<RoomCardProps> = ({ room, categoria, now, onClick, onAddConsumo, onChangeEstado }) => {
+const RoomCard: React.FC<RoomCardProps> = ({ room, categoria, now, onClick, onAddConsumo, onChangeEstado, pedidos = [] }) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const meta = ESTADO_META[room.estado];
@@ -136,6 +137,15 @@ const RoomCard: React.FC<RoomCardProps> = ({ room, categoria, now, onClick, onAd
           </Button>
         ) : (
           <span />
+        )}
+
+        {/* Lo que pidió el cliente con su QR: se atiende abriendo la habitación. */}
+        {pedidos.length > 0 && (
+          <span title={pedidos.map((p) => (p.cantidad ? `${p.cantidad} × ${p.descripcion}` : p.descripcion)).join(' · ')} className="flex min-w-0 animate-pop-in items-center gap-1 rounded-full bg-warn-soft px-2 py-1 text-xs font-medium text-warn">
+            <BellRing className="h-3.5 w-3.5 shrink-0 animate-latido" aria-hidden="true" />
+            <span className="tabular-nums">{pedidos.length}</span>
+            <span className="sr-only">{pedidos.length === 1 ? 'pedido del cliente' : 'pedidos del cliente'}</span>
+          </span>
         )}
 
         {room.estado !== 'Ocupada' && (

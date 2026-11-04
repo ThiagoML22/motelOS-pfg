@@ -699,6 +699,66 @@ export interface RespuestaAsistente {
   // Ayuda para usar el sistema (services/ayuda.py): pasos a seguir y botones para ir.
   pasos?: string[];
   acciones?: AccionAsistente[];
+  // Una orden lista para confirmar: el asistente nunca la ejecuta por su cuenta.
+  confirmacion?: ConfirmacionAsistente | null;
+}
+
+export interface ConfirmacionAsistente {
+  tipo: 'estado' | 'abrir_turno' | 'consumo' | 'novedad' | 'cliente_perdido';
+  titulo: string;
+  hecho: string;
+  habitacion_id?: number | null;
+  estado?: string;
+  tipo_cliente?: TipoCliente;
+  patente?: string | null;
+  turno_id?: string;
+  articulo_id?: number;
+  cantidad?: number;
+  texto?: string;
+  importante?: boolean;
+  motivo?: MotivoPerdida;
+  categoria_id?: number | null;
+}
+
+// El cliente en su habitación (migración 013): lo que ve con el QR de su ticket.
+export interface EstadiaCliente {
+  activa: boolean;
+  motel: string;
+  color_marca: string | null;
+  numero?: number;
+  categoria?: string | null;
+  hora_inicio?: string;
+  ahora?: string;
+  estadia_base_min?: number;
+  tarifa_base?: number;
+  total_sobreturno?: number;
+  total_consumos?: number;
+  total?: number;
+  proximo_cargo?: { minutos: number; monto: number } | null;
+  consumos?: { descripcion: string; cantidad: number; subtotal: number }[];
+  articulos?: { id: number; descripcion: string; precio: number; categoria: string | null }[];
+  avisos?: { tipo: string; descripcion: string }[];
+  pedidos?: { id: number; tipo: string; descripcion: string; cantidad: number | null; estado: string }[];
+}
+
+// Un pedido del cliente que espera en la ventanilla.
+export interface PedidoVentanilla {
+  id: number;
+  turno_id: string;
+  habitacion_id: number;
+  numero: number;
+  tipo: string;
+  descripcion: string;
+  cantidad: number | null;
+  subtotal: number | null;
+  creado_en: string;
+}
+
+export interface TicketCliente {
+  direccion: string;
+  qr: string;
+  numero: number;
+  hora_inicio: string;
 }
 
 // Pedidos de reposición a proveedores (migración 010).

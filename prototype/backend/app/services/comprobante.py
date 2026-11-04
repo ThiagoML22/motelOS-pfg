@@ -142,8 +142,7 @@ def comprobante_arqueo(arqueo: ArqueoDetalle, establecimiento: Establecimiento) 
 
 
 def _direccion_para_verificar(codigo: str) -> str:
-    base = settings.URL_PUBLICA or settings.CORS_ORIGINS.split(",")[0].strip()
-    return f"{base.rstrip('/')}/?verificar={quote(codigo)}"
+    return f"{settings.url_aplicacion}/?verificar={quote(codigo)}"
 
 
 def _sello(hoja: Pagina, arqueo: ArqueoDetalle) -> None:

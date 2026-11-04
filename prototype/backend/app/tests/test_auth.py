@@ -108,7 +108,16 @@ def _rutas_protegidas() -> list[tuple[str, str]]:
     """Todas las rutas de la API según su esquema OpenAPI, salvo las públicas."""
     # /auth/marca (migración 009): el nombre y la apariencia de un motel para la pantalla de ingreso; no expone usuarios
     # ni datos de la operación (test_personalizacion_novedades.test_la_marca_publica_del_ingreso).
-    publicas = {"/health", "/api/v1/auth/login", "/api/v1/auth/logout", "/api/v1/auth/marca"}
+    # /cliente/{token} (migración 013): el cliente no tiene sesión; lo que abre la ruta es el enlace firmado de su ticket,
+    # y un enlace inventado o alterado responde 404 (test_cliente.test_un_enlace_inventado_no_abre_nada).
+    publicas = {
+        "/health",
+        "/api/v1/auth/login",
+        "/api/v1/auth/logout",
+        "/api/v1/auth/marca",
+        "/api/v1/cliente/{token}",
+        "/api/v1/cliente/{token}/pedidos",
+    }
     rutas = []
     for camino, operaciones in sorted(app.openapi()["paths"].items()):
         if not camino.startswith("/api/") or camino in publicas:

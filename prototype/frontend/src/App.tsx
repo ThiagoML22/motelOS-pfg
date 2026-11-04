@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BedDouble, Keyboard, LogOut, MessageSquarePlus, Moon, Rows3, UserRound, WifiOff } from 'lucide-react';
-import { Arqueo, Categoria, HabitacionConDetalles, Novedad, RoomStatus, Sesion, TipoCliente } from './types';
+import { Arqueo, Categoria, HabitacionConDetalles, Novedad, PedidoVentanilla, RoomStatus, Sesion, TipoCliente } from './types';
 import { AsistenteFlotante, AsistenteProvider, useAsistente } from './components/Asistente';
 import AtajosTeclado, { escribiendo } from './components/AtajosTeclado';
 import CentroAvisos from './components/CentroAvisos';
@@ -153,6 +153,9 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
   const [pendientes, setPendientes] = useState(0);
   // Novedades de guardia (migración 009), la paleta de comandos y una pregunta enviada desde ella al asistente.
   const [novedades, setNovedades] = useState<Novedad[]>([]);
+  // Lo que pidieron los clientes con el QR de su ticket y todavía espera en la ventanilla.
+  const [pedidosCliente, setPedidosCliente] = useState<PedidoVentanilla[]>([]);
+  const pedidosVistos = useRef<Set<number> | null>(null);
   const [nuevaNovedad, setNuevaNovedad] = useState(false);
   const [paleta, setPaleta] = useState(false);
   const [atajos, setAtajos] = useState(false);
@@ -185,6 +188,27 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
       setCarga((prev) => (prev === 'ok' ? 'ok' : 'error'));
     }
   }, []);
+
+  // Un pedido nuevo avisa con un mensaje y, si el motel lo activó, un sonido.
+  const alertasSonoras = Boolean(sesion.establecimiento?.alertas_sonoras);
+  const fetchPedidosCliente = useCallback(async () => {
+    if (esGerencia) return;
+    try {
+      const lista = await api.getPedidosCliente();
+      setPedidosCliente(lista);
+      const vistos = pedidosVistos.current;
+      const nuevos = vistos ? lista.filter((p) => !vistos.has(p.id)) : [];
+      pedidosVistos.current = new Set(lista.map((p) => p.id));
+      if (nuevos.length) {
+        const primero = nuevos[0];
+        const que = primero.cantidad ? `${primero.cantidad} × ${primero.descripcion}` : primero.descripcion;
+        toast(`${formatRoomNumber(primero.numero)}: ${que}${nuevos.length > 1 ? ` y ${nuevos.length - 1} más` : ''}.`, 'info');
+        if (alertasSonoras) sonarAviso('por_vencer');
+      }
+    } catch {
+      // se actualiza en el próximo sondeo
+    }
+  }, [esGerencia, alertasSonoras, toast]);
 
   const fetchPendientes = useCallback(async () => {
     try {
@@ -238,14 +262,18 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
 
   useEffect(() => {
     void fetchHabitaciones();
-    const interval = setInterval(fetchHabitaciones, POLL_MS);
+    void fetchPedidosCliente();
+    const interval = setInterval(() => {
+      void fetchHabitaciones();
+      void fetchPedidosCliente();
+    }, POLL_MS);
     const onFocus = () => void fetchHabitaciones();
     window.addEventListener('focus', onFocus);
     return () => {
       clearInterval(interval);
       window.removeEventListener('focus', onFocus);
     };
-  }, [fetchHabitaciones]);
+  }, [fetchHabitaciones, fetchPedidosCliente]);
 
   // El estado de la guardia de la ventanilla se refresca solo: el conserje que espera ve cuándo la anterior
   // se cerró, y la gerencia ve quién está atendiendo.
@@ -331,7 +359,15 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
   // Botones que propone el asistente: ir a una pantalla permitida para el rol o abrir una habitación.
   const habitacionesRef = useRef(habitaciones);
   habitacionesRef.current = habitaciones;
-  const { registrarAcciones, fijarPantalla } = asistente;
+  const { registrarAcciones, registrarCambios, fijarPantalla } = asistente;
+
+  // Una orden confirmada en el asistente cambió algo: la ventanilla se actualiza al momento.
+  useEffect(() => {
+    registrarCambios(() => {
+      void fetchHabitaciones();
+      void fetchPendientes();
+    });
+  }, [registrarCambios, fetchHabitaciones, fetchPendientes]);
 
   // El asistente sabe qué sección está a la vista; sin guardia propia, el conserje está en «Abrir su guardia».
   const enApertura = !conGuardiaPropia && !mostrandoComprobante && activeView !== 'inventario' && activeView !== 'perfil';
@@ -594,6 +630,7 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
                 onRoomClick={(h) => openRoom(h, false)}
                 onAddConsumo={(h) => openRoom(h, true)}
                 onChangeEstado={handleEstadoChange}
+                pedidos={pedidosCliente}
               />
             )}
             </>
@@ -694,6 +731,9 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
           onAperturaTurno={handleTurnoSubmit}
           onRefreshRooms={fetchHabitaciones}
           initialAddProduct={openAddProduct}
+          pedidos={pedidosCliente.filter((p) => p.habitacion_id === selectedRoom.id)}
+          onCambioPedidos={fetchPedidosCliente}
+          motel={sesion.establecimiento?.nombre}
         />
       )}
     </div>

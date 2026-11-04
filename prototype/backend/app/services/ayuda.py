@@ -30,7 +30,7 @@ from app.models.operador import ROL_ADMINISTRADOR, Operador
 from app.models.pedido import PENDIENTE, PedidoReposicion
 from app.models.tarifa import Tarifa
 from app.models.turno import Turno
-from app.services import conocimiento, rotacion
+from app.services import acciones, conocimiento, rotacion
 from app.services import inteligencia as ia
 from app.services.asistente import INTENCIONES, _intencion, normalizar
 from app.services.asistente import responder as responder_analisis
@@ -329,6 +329,28 @@ TEMAS: tuple[Tema, ...] = (
         "inventario",
     ),
     Tema(
+        "imprimir_ticket",
+        "Darle el ticket con QR al cliente",
+        (r"ticket", r"\bqr\b.*\bcliente\b", r"\bcliente\b.*\bqr\b"),
+        (
+            "Abrí la habitación ocupada y tocá «Ticket con QR».",
+            "Imprimilo y dáselo al cliente: con el QR ve su tiempo y su cuenta y pide sin llamar.",
+            "Vale mientras dure el turno; no pidas ni guardes ningún dato.",
+        ),
+        "dashboard",
+    ),
+    Tema(
+        "atender_pedido",
+        "Atender un pedido del cliente",
+        (r"(atend|entreg|rechaz)\w* .*pedido", r"pedido .*(cliente|habitacion)"),
+        (
+            "Cuando el cliente pide algo, suena un aviso y su tarjeta muestra el pedido.",
+            "Abrí la habitación: en «Pedidos del cliente» tocá «Entregado» o «No hay».",
+            "Al entregarlo se carga a la cuenta y se descuenta del stock.",
+        ),
+        "dashboard",
+    ),
+    Tema(
         "cliente_perdido",
         "Registrar un cliente que se fue",
         (
@@ -580,6 +602,8 @@ class Respuesta:
     sugerencias: list[str] = field(default_factory=list)
     detalle: str | None = None
     tabla: dict | None = None
+    # Una orden lista para confirmar (services/acciones.py): el asistente nunca la ejecuta por su cuenta.
+    confirmacion: dict | None = None
 
     def como_dict(self) -> dict:
         return {
@@ -591,6 +615,7 @@ class Respuesta:
             "sugerencias": self.sugerencias,
             "pasos": self.pasos,
             "acciones": self.acciones,
+            "confirmacion": self.confirmacion,
         }
 
 
@@ -634,6 +659,7 @@ PANTALLAS = {
             "Arriba filtrás por estado o categoría y ordenás por número o por vencimiento.",
             "«Línea de tiempo» muestra las últimas 24 horas de cada habitación.",
             "Con dos disponibles o menos aparece cuándo se libera la próxima; si alguien se va, «Se fue un cliente».",
+            "Los pedidos que hace el cliente con su QR aparecen en su tarjeta.",
             "Las novedades de la guardia están sobre la grilla; «Dejar novedad» agrega una.",
         ),
         (
@@ -1191,7 +1217,8 @@ def _charla(tipo: str, es_gerencia: bool) -> dict:
             "¡De nada! Si necesitás algo más, preguntame.", "charla", sugerencias=sugerencias[:3]
         ).como_dict()
     texto = (
-        "Soy el asistente de MotelOS y funciono acá mismo, sin internet. Te explico cómo usar cualquier parte del "
+        "Soy el asistente de MotelOS y funciono acá mismo, sin internet. Hago lo que me pidas, con tu confirmación "
+        "(«pasá la 7 a mantenimiento», «cargale dos aguas a la 5»). Te explico cómo usar cualquier parte del "
         "sistema y qué significa cada cosa («¿qué es la tolerancia?»), y te digo cómo está la ventanilla ahora "
         "(libres, ocupadas, vencimientos, la cuenta de una habitación, stock, novedades, pedidos). Si me preguntás "
         "«¿qué hago acá?», te explico la pantalla en la que estás."
@@ -1246,8 +1273,25 @@ async def responder(
         return sobre_pantalla.como_dict(), original
     texto = conocimiento.corregir(original, ENTRADAS, ventanilla.palabras_propias())
 
+    # Una orden («pasá la 7 a mantenimiento»): se propone para que quien atiende la confirme.
+    guardia = await guardia_abierta(db)
+    propuesta = acciones.interpretar(
+        pregunta, texto, ventanilla, guardia is not None and guardia.operador_id == operador.id
+    )
+    if propuesta is not None:
+        return (
+            Respuesta(
+                propuesta.texto,
+                propuesta.intencion,
+                acciones=propuesta.acciones,
+                detalle=propuesta.detalle,
+                confirmacion=propuesta.confirmacion,
+            ).como_dict(),
+            texto,
+        )
+
     # 1. Situaciones conocidas («me equivoqué en el arqueo») y «¿qué es…?», «¿para qué sirve…?»: el glosario.
-    definicion = conocimiento.situacion(texto, es_gerencia) or conocimiento.definicion(texto, es_gerencia)
+    definicion = conocimiento.definicion(texto, es_gerencia) or conocimiento.situacion(texto, es_gerencia)
     if definicion is not None:
         return _respuesta_de(definicion, es_gerencia), texto
 

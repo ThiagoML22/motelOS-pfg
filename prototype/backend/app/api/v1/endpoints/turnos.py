@@ -2,6 +2,7 @@ import uuid
 from datetime import UTC, datetime
 from decimal import Decimal
 
+import segno
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,7 +10,6 @@ from sqlalchemy.future import select
 
 from app.api.deps import operador_actual
 from app.core.database import get_db
-from app.models.articulo import Articulo
 from app.models.categoria import CategoriaHabitacion
 from app.models.consumo import Consumo
 from app.models.estadia_activa import EstadiaActiva
@@ -28,9 +28,10 @@ from app.schemas.turno import (
     TurnoResponse,
     TurnoResumen,
 )
-from app.services import rotacion
+from app.services import acceso_cliente, rotacion
 from app.services.caja import guardia_del_operador
 from app.services.configuracion import tarifa_vigente
+from app.services.consumos import cargar_consumo
 from app.services.estadia import cargar_estadia_base, cargar_nombres_de_apertura, cargar_patentes
 from app.services.liquidacion import liquidar_turno
 
@@ -103,49 +104,27 @@ async def add_consumo(
     db: AsyncSession = Depends(get_db),
     operador: Operador = Depends(operador_actual),
 ):
-    # RN-EXI-02: Check stock and atomically add consumption
-    # El turno se bloquea igual que en el cobro: un consumo y un cobro simultáneos no se intercalan.
-    turno_res = await db.execute(select(Turno).where(Turno.id == turno_id).with_for_update())
-    turno = turno_res.scalars().first()
-    if not turno or turno.estado != "En Curso":
-        raise HTTPException(status_code=400, detail="Turno no válido o no está en curso")
-
-    await guardia_del_operador(db, operador)
-
-    art_res = await db.execute(select(Articulo).where(Articulo.id == consumo_in.articulo_id).with_for_update())
-    articulo = art_res.scalars().first()
-    if not articulo:
-        raise HTTPException(status_code=404, detail="Artículo no encontrado")
-
-    if not articulo.activo:
-        raise HTTPException(status_code=409, detail="El artículo está dado de baja.")
-
-    if articulo.stock_actual < consumo_in.cantidad:
-        raise HTTPException(
-            status_code=400, detail=f"RN-EXI-02: Stock insuficiente. Stock actual: {articulo.stock_actual}"
-        )
-
-    # Descontar stock
-    articulo.stock_actual -= consumo_in.cantidad
-
-    subtotal = articulo.precio_unitario * consumo_in.cantidad
-
-    nuevo_consumo = Consumo(
-        turno_id=turno_id,
-        articulo_id=articulo.id,
-        cantidad=consumo_in.cantidad,
-        precio_unitario=articulo.precio_unitario,
-        subtotal=subtotal,
-        operador_id=operador.id,
-    )
-    db.add(nuevo_consumo)
-
-    # Actualizar totales en turno
-    turno.total_consumos += subtotal
-    turno.total_general += subtotal
-
+    subtotal = await cargar_consumo(db, turno_id, consumo_in.articulo_id, consumo_in.cantidad, operador)
     await db.commit()
     return {"status": "ok", "subtotal": float(subtotal)}
+
+
+@router.get("/{turno_id}/ticket")
+async def ticket(
+    turno_id: uuid.UUID, db: AsyncSession = Depends(get_db), operador: Operador = Depends(operador_actual)
+) -> dict:
+    """El ticket del cliente: un enlace firmado a su estadía, que vale mientras el turno esté en curso."""
+    turno = (await db.execute(select(Turno).where(Turno.id == turno_id))).scalars().first()
+    if not turno or turno.estado != "En Curso":
+        raise HTTPException(status_code=400, detail="Turno no válido o no está en curso")
+    direccion = acceso_cliente.direccion_de(acceso_cliente.token_de(operador.establecimiento_id, turno.id))
+    habitacion = await db.get(Habitacion, turno.habitacion_id)
+    return {
+        "direccion": direccion,
+        "qr": segno.make(direccion, error="m", boost_error=False).svg_data_uri(scale=4, border=2),
+        "numero": habitacion.numero,
+        "hora_inicio": turno.hora_inicio,
+    }
 
 
 @router.get("/{turno_id}/resumen", response_model=TurnoResumen)

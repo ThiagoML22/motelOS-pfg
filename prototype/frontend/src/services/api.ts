@@ -16,6 +16,7 @@ import {
   EstablecimientoAlta,
   EstablecimientoDatos,
   EstablecimientoResumen,
+  EstadiaCliente,
   EscenarioGemelo,
   FondoCambio,
   Guardia,
@@ -30,6 +31,7 @@ import {
   Novedad,
   OperadorEstado,
   Pedido,
+  PedidoVentanilla,
   Perfil,
   ProximaLibre,
   ResumenCategoria,
@@ -41,13 +43,15 @@ import {
   Tablero,
   Tarifa,
   TarifaDatos,
+  TicketCliente,
   Turno,
   TurnoCreate,
   TurnoResumen,
   VerificacionComprobante,
 } from '../types';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
+// Desde otro equipo de la red (el celular de un cliente), «localhost» sería ese equipo: se usa la dirección de la página.
+const API_URL = (import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1').replace('localhost', window.location.hostname);
 
 // RNF-04: la sesión viaja en una cookie httpOnly que el navegador envía solo (withCredentials); este código
 // nunca la lee. El encabezado X-Requested-With es la marca de la aplicación que el backend exige en las
@@ -185,6 +189,21 @@ export const api = {
       throw err;
     }
   },
+
+  // --- El cliente en su habitación (migración 013): sin sesión, con el enlace de su ticket ---
+  getEstadiaCliente: async (token: string): Promise<EstadiaCliente> => (await http.get(`/cliente/${token}`)).data,
+
+  pedirCliente: async (token: string, pedido: { tipo: string; articulo_id?: number; cantidad?: number }) =>
+    (await http.post(`/cliente/${token}/pedidos`, pedido)).data,
+
+  // --- Lo que pide el cliente, en la ventanilla ---
+  getTicket: async (turno_id: string): Promise<TicketCliente> => (await http.get(`/turnos/${turno_id}/ticket`)).data,
+
+  getPedidosCliente: async (): Promise<PedidoVentanilla[]> => (await http.get('/pedidos-cliente/')).data,
+
+  atenderPedidoCliente: async (id: number) => (await http.post(`/pedidos-cliente/${id}/atender`)).data,
+
+  rechazarPedidoCliente: async (id: number) => (await http.post(`/pedidos-cliente/${id}/rechazar`)).data,
 
   // --- Comprobantes verificables (migración 012) ---
   getIntegridad: async (): Promise<IntegridadComprobantes> => (await http.get('/arqueos/integridad')).data,

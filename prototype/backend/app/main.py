@@ -12,6 +12,7 @@ from app.api.v1.endpoints import (
     asistente,
     auth,
     categorias,
+    cliente,
     clientes_perdidos,
     configuracion,
     guardias,
@@ -20,6 +21,7 @@ from app.api.v1.endpoints import (
     novedades,
     operadores,
     pedidos,
+    pedidos_cliente,
     perfil,
     plataforma,
     turnos,
@@ -94,6 +96,11 @@ app.include_router(pedidos.router, prefix="/api/v1/pedidos", tags=["inventario"]
 # Clientes perdidos (migración 011): los registra el conserje en su guardia; los analiza la inteligencia.
 app.include_router(
     clientes_perdidos.router, prefix="/api/v1/clientes-perdidos", tags=["habitaciones"], dependencies=con_sesion
+)
+# El cliente en su habitación (migración 013): sin sesión, con el enlace firmado de su ticket; solo abre su turno.
+app.include_router(cliente.router, prefix="/api/v1/cliente", tags=["cliente"])
+app.include_router(
+    pedidos_cliente.router, prefix="/api/v1/pedidos-cliente", tags=["habitaciones"], dependencies=con_sesion
 )
 # Asistente para todo el personal (ayuda y ventanilla); a la gerencia además le responde el análisis de datos.
 app.include_router(asistente.router, prefix="/api/v1/asistente", tags=["asistente"], dependencies=con_sesion)

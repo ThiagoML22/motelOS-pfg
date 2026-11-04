@@ -457,6 +457,16 @@ DEFINICIONES: tuple[Definicion, ...] = (
         extra="integridad alterado sello hash",
     ),
     Definicion(
+        "ticket_cliente",
+        "El ticket con QR del cliente",
+        (r"ticket (con qr|del cliente|para el cliente)", r"\bqr del cliente\b", r"pedidos? del cliente"),
+        "Es un ticket que se le da al cliente al entrar. Con el QR ve en su celular su tiempo y su cuenta, y pide algo "
+        "del minibar o avisa que se va sin llamar, sin cuenta ni datos personales. El pedido llega a la ventanilla: "
+        "quien atiende lo entrega y recién ahí se carga a la cuenta. El enlace vale solo mientras dura el turno.",
+        "dashboard",
+        extra="celular escanear codigo pedir habitacion",
+    ),
+    Definicion(
         "limpieza_sin_turno",
         "Una limpieza sin turno",
         (r"limpiezas? sin (un )?turno",),
@@ -498,7 +508,6 @@ SINONIMOS = {
     "debito": "posnet",
     "credito": "posnet",
     "mp": "mercado pago",
-    "qr": "mercado pago",
     "heladera": "minibar",
     "frigobar": "minibar",
     "tele": "tv",
@@ -523,7 +532,9 @@ VOCABULARIO_BASE = set(
     "comprobante tolerancia fraccion pernocte cuanto cuantos cuantas cuales vence vencimiento excedidas sabados "
     "domingos viernes lunes martes miercoles jueves facturo cobramos vendimos cerveza agua gaseosa chocolate "
     # Palabras de conversación que no hay que «corregir» hacia términos del sistema.
-    "libera libere liberan liberen liberar liberara desocupa esperar espera "
+    "libera libere liberan liberen liberar liberara desocupa esperar espera habilita registra escribi "
+    "cargale cargame agregale agregame sumale sumame anotame anotale poneme pasame dejame liberame abrime ocupame "
+    "cobrale cerrale cliente perdido "
     "gracias hola buenas buenos genial perfecto listo barbaro necesito quiero podes puedes sabes ayuda ayudame favor "
     "porfa tardes noches dias entonces bueno claro cliente clientes quejo quedarse momento ahora mismo pagar pagan "
     "cobrar abrir cerrar dejar poner sacar cambiar agregar quiere quieren puede tiene tienen hacer llego llegaron "

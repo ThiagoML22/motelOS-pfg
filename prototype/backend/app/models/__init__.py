@@ -17,6 +17,7 @@ from app.models import (  # noqa: F401
     operador,
     pago,
     pedido,
+    pedido_cliente,
     sello_arqueo,
     tarifa,
     turno,

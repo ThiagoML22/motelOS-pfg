@@ -46,6 +46,11 @@ class Settings(BaseSettings):
     # una instalación de un solo motel se usa igual que antes.
     ESTABLECIMIENTO_PREDETERMINADO: str = "motelcc"
 
+    @property
+    def url_aplicacion(self) -> str:
+        """La dirección de la aplicación: la configurada o la primera de CORS_ORIGINS."""
+        return (self.URL_PUBLICA or self.CORS_ORIGINS.split(",")[0].strip()).rstrip("/")
+
     @model_validator(mode="after")
     def exigir_configuracion_segura(self) -> "Settings":
         if self.ENTORNO == "produccion":
