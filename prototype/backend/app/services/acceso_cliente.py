@@ -24,6 +24,7 @@ from app.models.articulo import Articulo
 from app.models.categoria import CategoriaHabitacion
 from app.models.consumo import Consumo
 from app.models.establecimiento import Establecimiento
+from app.models.franja_tarifa import FranjaTarifa
 from app.models.habitacion import Habitacion
 from app.models.pedido_cliente import ARTICULO, ATENDIDO, AVISOS, PENDIENTE, RECHAZADO, PedidoCliente
 from app.models.tarifa import Tarifa
@@ -97,6 +98,7 @@ async def estadia(db: AsyncSession, turno: Turno) -> dict:
     tarifa = await db.get(Tarifa, turno.tarifa_id)
     habitacion = await db.get(Habitacion, turno.habitacion_id)
     categoria = await db.get(CategoriaHabitacion, tarifa.categoria_id)
+    franja = await db.get(FranjaTarifa, tarifa.franja_id) if tarifa.franja_id else None
     articulos = list(
         (await db.execute(select(Articulo).where(Articulo.activo.is_(True)).order_by(Articulo.descripcion))).scalars()
     )
@@ -116,6 +118,7 @@ async def estadia(db: AsyncSession, turno: Turno) -> dict:
         **marca,
         "numero": habitacion.numero,
         "categoria": categoria.nombre if categoria else None,
+        "franja": franja.nombre if franja else None,
         "hora_inicio": con_zona(turno.hora_inicio).isoformat(),
         "ahora": ahora.isoformat(),
         "estadia_base_min": tarifa.estadia_base_min,

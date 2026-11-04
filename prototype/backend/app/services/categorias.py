@@ -5,6 +5,8 @@ turno que se abre en ella toma la tarifa vigente de esa categoría. Cambiar la t
 habitación rige para los turnos que se abran después: el turno en curso conserva la suya (RN-DER-06).
 """
 
+from datetime import UTC, datetime
+
 from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
@@ -12,12 +14,46 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.actividad import HABITACION
 from app.models.categoria import CategoriaHabitacion
+from app.models.franja_tarifa import FranjaTarifa
 from app.models.habitacion import Habitacion
 from app.models.operador import Operador
 from app.models.tarifa import Tarifa
-from app.schemas.configuracion import CategoriaAlta, CategoriaCambio, CategoriaResponse, TarifaResponse
+from app.schemas.configuracion import (
+    CategoriaAlta,
+    CategoriaCambio,
+    CategoriaResponse,
+    FranjaResponse,
+    TarifaAhora,
+    TarifaResponse,
+)
+from app.services import franjas as tarifas_especiales
 from app.services.actividad import registrar
 from app.services.configuracion import nueva_tarifa_de
+
+
+def franja_respuesta(franja: FranjaTarifa, tarifa: Tarifa | None) -> FranjaResponse:
+    return FranjaResponse(
+        id=franja.id,
+        categoria_id=franja.categoria_id,
+        nombre=franja.nombre,
+        dias=franja.dias,
+        desde=franja.desde,
+        hasta=franja.hasta,
+        regla=tarifas_especiales.regla_texto(franja.dias, franja.desde, franja.hasta),
+        tarifa=TarifaResponse.model_validate(tarifa) if tarifa else None,
+    )
+
+
+def _tarifa_ahora(vigente: tarifas_especiales.Vigente | None) -> TarifaAhora | None:
+    if vigente is None:
+        return None
+    datos = TarifaResponse.model_validate(vigente.tarifa).model_dump()
+    return TarifaAhora(
+        **{**datos, "franja": vigente.franja.nombre if vigente.franja else None},
+        cambia_en=vigente.cambia_en,
+        cambia_a=vigente.siguiente_franja.nombre if vigente.siguiente_franja else None,
+        cambia_a_precio=float(vigente.siguiente.tarifa_base) if vigente.siguiente else None,
+    )
 
 
 async def listar(db: AsyncSession, solo_activas: bool) -> list[CategoriaResponse]:
@@ -34,7 +70,8 @@ async def listar(db: AsyncSession, solo_activas: bool) -> list[CategoriaResponse
             )
         ).all()
     )
-    vigentes = {t.categoria_id: t for t in (await db.execute(select(Tarifa).where(Tarifa.vigente.is_(True)))).scalars()}
+    tarifas = await tarifas_especiales.tarifario(db)
+    ahora = datetime.now(UTC)
     return [
         CategoriaResponse(
             id=c.id,
@@ -44,7 +81,9 @@ async def listar(db: AsyncSession, solo_activas: bool) -> list[CategoriaResponse
             orden=c.orden,
             activa=c.activa,
             habitaciones=cantidades.get(c.id, 0),
-            tarifa=TarifaResponse.model_validate(vigentes[c.id]) if c.id in vigentes else None,
+            tarifa=TarifaResponse.model_validate(tarifas.generales[c.id]) if c.id in tarifas.generales else None,
+            tarifa_ahora=_tarifa_ahora(tarifas.en(c.id, ahora)),
+            franjas=[franja_respuesta(f, tarifas.de_franja.get(f.id)) for f in tarifas.franjas.get(c.id, [])],
         )
         for c in categorias
     ]

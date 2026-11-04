@@ -1,8 +1,8 @@
 """Panel de configuración de la gerencia (RF-11 ampliado, acta del 27/10/2026)."""
 
-from datetime import datetime
+from datetime import datetime, time
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.core.seguridad import LARGO_MINIMO_CLAVE, PATRON_USUARIO
 
@@ -42,6 +42,68 @@ class TarifaResponse(ParametrosTarifa):
     categoria_id: int
     vigente: bool
     vigente_desde: datetime
+    franja_id: int | None = None
+    # El nombre de la tarifa especial a la que pertenece, para el historial (migración 014).
+    franja: str | None = None
+
+
+# --- Tarifas especiales por día y franja (migración 014) --------------------------------------------------------------
+class _HorarioFranja(BaseModel):
+    @field_validator("desde", "hasta", check_fields=False)
+    @classmethod
+    def sin_segundos_ni_zona(cls, valor: time | None) -> time | None:
+        return None if valor is None else valor.replace(second=0, microsecond=0, tzinfo=None)
+
+    @field_validator("nombre", check_fields=False)
+    @classmethod
+    def con_nombre(cls, valor: str | None) -> str | None:
+        if valor is not None and len(valor.strip()) < 2:
+            raise ValueError("El nombre necesita al menos 2 letras.")
+        return valor
+
+
+class FranjaAlta(_HorarioFranja):
+    """Días de comienzo (lunes = 1 ... domingo = 64). Si `hasta` es menor que `desde`, cruza la medianoche; si son
+    iguales, es el día completo."""
+
+    categoria_id: int
+    nombre: str = Field(min_length=2, max_length=40)
+    dias: int = Field(ge=1, le=127)
+    desde: time
+    hasta: time
+    tarifa: ParametrosTarifa
+
+
+class FranjaCambio(_HorarioFranja):
+    """Solo los campos enviados cambian. Una tarifa nueva reemplaza a la vigente de la franja."""
+
+    nombre: str | None = Field(default=None, min_length=2, max_length=40)
+    dias: int | None = Field(default=None, ge=1, le=127)
+    desde: time | None = None
+    hasta: time | None = None
+    tarifa: ParametrosTarifa | None = None
+
+
+class FranjaResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    categoria_id: int
+    nombre: str
+    dias: int
+    desde: time
+    hasta: time
+    # «viernes y sábado de 20:00 a 06:00», ya armado por el servidor.
+    regla: str
+    tarifa: TarifaResponse | None = None
+
+
+class TarifaAhora(TarifaResponse):
+    """La tarifa que tomaría un turno abierto ahora y cuándo deja de regir."""
+
+    cambia_en: datetime | None = None
+    cambia_a: str | None = None
+    cambia_a_precio: float | None = None
 
 
 # --- Categorías de habitación (migración 008) -------------------------------------------------------------------------
@@ -79,7 +141,10 @@ class CategoriaResponse(BaseModel):
     orden: int
     activa: bool
     habitaciones: int = 0
+    # La general de la categoría, la que rige en este momento y las tarifas especiales (migración 014).
     tarifa: TarifaResponse | None = None
+    tarifa_ahora: TarifaAhora | None = None
+    franjas: list[FranjaResponse] = []
 
 
 class FondoCambio(BaseModel):

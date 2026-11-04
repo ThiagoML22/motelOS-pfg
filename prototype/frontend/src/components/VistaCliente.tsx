@@ -184,7 +184,9 @@ const VistaCliente: React.FC<{ token: string }> = ({ token }) => {
         <Tarjeta titulo="Tu cuenta">
           <dl className="space-y-1 text-sm">
             <div className="flex justify-between gap-3">
-              <dt className="text-white/70">Estadía</dt>
+              <dt className="text-white/70">
+                Estadía{datos.franja && <span className="text-white/40"> · {datos.franja}</span>}
+              </dt>
               <dd className="tabular-nums">{formatMoney(datos.tarifa_base ?? 0)}</dd>
             </div>
             {(datos.total_sobreturno ?? 0) > 0 && (

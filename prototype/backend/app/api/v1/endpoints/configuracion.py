@@ -15,6 +15,7 @@ from app.models.actividad import ESTABLECIMIENTO, HABITACION, INVENTARIO
 from app.models.articulo import Articulo
 from app.models.categoria import CategoriaHabitacion
 from app.models.establecimiento import Establecimiento
+from app.models.franja_tarifa import FranjaTarifa
 from app.models.habitacion import Habitacion
 from app.models.operador import Operador
 from app.models.tarifa import Tarifa
@@ -31,13 +32,16 @@ from app.schemas.configuracion import (
     EstablecimientoResponse,
     FondoCambio,
     FondoCambioResponse,
+    FranjaAlta,
+    FranjaCambio,
+    FranjaResponse,
     HabitacionAlta,
     HabitacionConfiguracion,
     HabitacionConfiguracionResponse,
     TarifaCreate,
     TarifaResponse,
 )
-from app.services import actividad, categorias
+from app.services import actividad, categorias, franjas
 from app.services.actividad import pesos, registrar
 from app.services.configuracion import (
     cambiar_fondo,
@@ -146,11 +150,20 @@ async def revisar_actividad(
 # --- Tarifa y fracción -----------------------------------------------------------------------------------------
 @router.get("/tarifas", response_model=list[TarifaResponse])
 async def listar_tarifas(categoria_id: int | None = None, db: AsyncSession = Depends(get_db)):
-    """Las vigentes primero y después las anteriores, de la más nueva a la más vieja; opcionalmente de una categoría."""
-    consulta = select(Tarifa).order_by(Tarifa.vigente.desc(), Tarifa.id.desc())
+    """Las vigentes primero (la general antes que las especiales) y después las anteriores, de la más nueva a la más
+    vieja; opcionalmente de una categoría."""
+    consulta = (
+        select(Tarifa, FranjaTarifa.nombre)
+        .outerjoin(FranjaTarifa, FranjaTarifa.id == Tarifa.franja_id)
+        .order_by(Tarifa.vigente.desc(), Tarifa.franja_id.is_not(None), Tarifa.id.desc())
+    )
     if categoria_id is not None:
         consulta = consulta.where(Tarifa.categoria_id == categoria_id)
-    return (await db.execute(consulta)).scalars().all()
+    filas = (await db.execute(consulta)).all()
+    return [
+        TarifaResponse(**TarifaResponse.model_validate(t).model_dump(exclude={"franja"}), franja=nombre)
+        for t, nombre in filas
+    ]
 
 
 @router.post("/tarifas", response_model=TarifaResponse, status_code=status.HTTP_201_CREATED)
@@ -158,6 +171,37 @@ async def nueva_tarifa(
     datos: TarifaCreate, db: AsyncSession = Depends(get_db), operador: Operador = Depends(operador_actual)
 ):
     return await cambiar_tarifa(db, datos, operador)
+
+
+# --- Tarifas especiales por día y franja (migración 014) ------------------------------------------------------------
+async def _franja_con_tarifa(db: AsyncSession, franja: FranjaTarifa) -> FranjaResponse:
+    tarifas = await franjas.tarifario(db, franja.categoria_id)
+    return categorias.franja_respuesta(franja, tarifas.de_franja.get(franja.id))
+
+
+@router.post("/franjas", response_model=FranjaResponse, status_code=status.HTTP_201_CREATED)
+async def alta_franja(
+    datos: FranjaAlta, db: AsyncSession = Depends(get_db), operador: Operador = Depends(operador_actual)
+):
+    return await _franja_con_tarifa(db, await franjas.crear(db, datos, operador))
+
+
+@router.patch("/franjas/{franja_id}", response_model=FranjaResponse)
+async def cambiar_franja(
+    franja_id: int,
+    datos: FranjaCambio,
+    db: AsyncSession = Depends(get_db),
+    operador: Operador = Depends(operador_actual),
+):
+    return await _franja_con_tarifa(db, await franjas.cambiar(db, franja_id, datos, operador))
+
+
+@router.delete("/franjas/{franja_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def baja_franja(
+    franja_id: int, db: AsyncSession = Depends(get_db), operador: Operador = Depends(operador_actual)
+):
+    """Da de baja la tarifa especial: no borra nada, los turnos que la usaron conservan su tarifa."""
+    await franjas.dar_de_baja(db, franja_id, operador)
 
 
 # --- Categorías de habitación (migración 008) -----------------------------------------------------------------------

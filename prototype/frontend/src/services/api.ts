@@ -8,6 +8,9 @@ import {
   Categoria,
   CategoriaActividad,
   CategoriaAlta,
+  Franja,
+  FranjaAlta,
+  FranjaCambio,
   CategoriaDatos,
   ConserjeAlta,
   ConstanciaCobro,
@@ -299,6 +302,16 @@ export const api = {
 
   getTarifasDe: async (categoriaId: number): Promise<Tarifa[]> =>
     (await http.get('/configuracion/tarifas', { params: { categoria_id: categoriaId } })).data,
+
+  // --- Tarifas especiales por día y franja (migración 014) ---
+  altaFranja: async (datos: FranjaAlta): Promise<Franja> => (await http.post('/configuracion/franjas', datos)).data,
+
+  cambiarFranja: async (id: number, datos: FranjaCambio): Promise<Franja> =>
+    (await http.patch(`/configuracion/franjas/${id}`, datos)).data,
+
+  bajaFranja: async (id: number): Promise<void> => {
+    await http.delete(`/configuracion/franjas/${id}`);
+  },
 
   // --- Mi perfil ---
   getPerfil: async (): Promise<Perfil> => (await http.get('/perfil/')).data,

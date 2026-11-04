@@ -119,6 +119,20 @@ DEFINICIONES: tuple[Definicion, ...] = (
         extra="precio cobro",
     ),
     Definicion(
+        "tarifa_especial",
+        "Tarifa especial",
+        (r"tarifas? especial(es)?", r"franjas? (de tarifa|de precio|horaria)"),
+        "Es un precio distinto para ciertos días y horas de una categoría, por ejemplo las noches de fin de semana. "
+        "El turno toma la que rige cuando se abre y la conserva hasta el cobro; fuera de esos horarios rige la tarifa "
+        "general. La noche del viernes sigue el sábado de madrugada.",
+        "configuracion",
+        extra="noche fin semana horario dia hora franja",
+        situaciones=(
+            r"por que .{0,30}(mas caro|mas barato|cobra mas|cobro mas|sale mas|cambio el precio|otro precio)",
+            r"(precio|tarifa) (distint|diferent|cambi)\w* .{0,20}(noche|hora|dia)",
+        ),
+    ),
+    Definicion(
         "arqueo",
         "Arqueo",
         (r"\barqueos?\b",),
@@ -402,8 +416,8 @@ DEFINICIONES: tuple[Definicion, ...] = (
         "Descuentos y promociones",
         (r"\bdescuentos?\b", r"\bpromo(cion)?(es)?\b"),
         "El cobro tiene que cubrir exactamente el saldo (RN-EXI-03): no hay descuentos manuales en la ventanilla. "
-        "Una promoción se hace cambiando la tarifa de la categoría (lo hace la gerencia); la inteligencia sugiere "
-        "cuándo conviene.",
+        "Una promoción se hace con una tarifa especial para ciertos días y horas (lo hace la gerencia); la "
+        "inteligencia sugiere cuándo conviene.",
         extra="rebaja oferta cortesia gratis",
         situaciones=(r"\b(descuento|rebaja|cortesia|gratis|regalar)",),
     ),
@@ -535,6 +549,7 @@ VOCABULARIO_BASE = set(
     "libera libere liberan liberen liberar liberara desocupa esperar espera habilita registra escribi "
     "cargale cargame agregale agregame sumale sumame anotame anotale poneme pasame dejame liberame abrime ocupame "
     "cobrale cerrale cliente perdido "
+    "especial especiales franja franjas noche noches tarde madrugada mediodia siesta sabado domingo miercoles rige "
     "gracias hola buenas buenos genial perfecto listo barbaro necesito quiero podes puedes sabes ayuda ayudame favor "
     "porfa tardes noches dias entonces bueno claro cliente clientes quejo quedarse momento ahora mismo pagar pagan "
     "cobrar abrir cerrar dejar poner sacar cambiar agregar quiere quieren puede tiene tienen hacer llego llegaron "

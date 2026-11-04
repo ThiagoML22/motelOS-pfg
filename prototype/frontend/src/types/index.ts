@@ -29,6 +29,8 @@ export interface TurnoCreate {
   habitacion_id: number;
   identificador_vehicular?: string;
   tipo_cliente: TipoCliente;
+  // La tarifa que se le mostró a quien atiende: si justo cambió, el servidor no abre el turno.
+  tarifa_id?: number;
 }
 
 export interface Consumo {
@@ -53,6 +55,7 @@ export interface Articulo {
 export interface TarifaDelTurno {
   categoria?: string | null;
   color?: string | null;
+  franja?: string | null;
   tarifa_base: number;
   estadia_base_min: number;
   fraccion_min: number;
@@ -245,9 +248,41 @@ export interface Tarifa extends TarifaDatos {
   categoria_id: number;
   vigente: boolean;
   vigente_desde: string;
+  franja_id?: number | null;
+  franja?: string | null;
 }
 
-// Categoría de habitación (Simple, Especial, VIP...) con su tarifa vigente.
+// Tarifa especial (migración 014): cuándo rige y con qué tarifa. `dias` es una máscara: lunes = 1 ... domingo = 64.
+export interface Franja {
+  id: number;
+  categoria_id: number;
+  nombre: string;
+  dias: number;
+  desde: string;
+  hasta: string;
+  regla: string;
+  tarifa?: Tarifa | null;
+}
+
+export interface FranjaAlta {
+  categoria_id: number;
+  nombre: string;
+  dias: number;
+  desde: string;
+  hasta: string;
+  tarifa: TarifaDatos;
+}
+
+export type FranjaCambio = Partial<Omit<FranjaAlta, 'categoria_id'>>;
+
+// Lo que tomaría un turno abierto ahora y cuándo deja de regir.
+export interface TarifaAhora extends Tarifa {
+  cambia_en?: string | null;
+  cambia_a?: string | null;
+  cambia_a_precio?: number | null;
+}
+
+// Categoría de habitación (Simple, Especial, VIP...) con su tarifa general, la que rige ahora y las especiales.
 export interface Categoria {
   id: number;
   nombre: string;
@@ -257,6 +292,8 @@ export interface Categoria {
   activa: boolean;
   habitaciones: number;
   tarifa?: Tarifa | null;
+  tarifa_ahora?: TarifaAhora | null;
+  franjas?: Franja[];
 }
 
 export interface CategoriaDatos {
@@ -498,6 +535,11 @@ export interface SugerenciaTarifa {
   supuesto: string | null;
   actual: ParametrosTarifa;
   propuesta: ParametrosTarifa | null;
+  // La propuesta puede ser sobre una tarifa especial que ya existe o una nueva para crear.
+  franja_id: number | null;
+  franja_nombre: string | null;
+  franja_nueva: { nombre: string; dias: number; desde: string; hasta: string; regla: string } | null;
+  rendimiento: { franja: string; turnos: number; ingresos: number }[];
 }
 
 export interface Reposicion {
@@ -718,6 +760,7 @@ export interface ConfirmacionAsistente {
   importante?: boolean;
   motivo?: MotivoPerdida;
   categoria_id?: number | null;
+  tarifa_id?: number | null;
 }
 
 // El cliente en su habitación (migración 013): lo que ve con el QR de su ticket.
@@ -727,6 +770,7 @@ export interface EstadiaCliente {
   color_marca: string | null;
   numero?: number;
   categoria?: string | null;
+  franja?: string | null;
   hora_inicio?: string;
   ahora?: string;
   estadia_base_min?: number;

@@ -111,6 +111,7 @@ const ejecutarOrden = async (c: ConfirmacionAsistente) => {
       habitacion_id: c.habitacion_id as number,
       tipo_cliente: c.tipo_cliente ?? 'Auto',
       identificador_vehicular: c.patente ?? undefined,
+      tarifa_id: c.tarifa_id ?? undefined,
     });
 };
 

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { BellRing, Banknote, Bike, Car, CreditCard, ExternalLink, Footprints, Minus, Plus, Printer, QrCode, Receipt } from 'lucide-react';
+import { BellRing, Banknote, Bike, CalendarClock, Car, CreditCard, ExternalLink, Footprints, Minus, Plus, Printer, QrCode, Receipt } from 'lucide-react';
 import { Articulo, Categoria, HabitacionConDetalles, MedioPago, PedidoVentanilla, TicketCliente, TipoCliente, TurnoResumen } from '../types';
 import { api, getErrorMessage } from '../services/api';
 import { formatDuration, formatMoney, formatRoomNumber } from '../utils/format';
@@ -17,7 +17,7 @@ interface RoomDialogProps {
   categoria?: Categoria;
   now: number;
   onClose: () => void;
-  onAperturaTurno: (patente: string | undefined, tipoCliente: TipoCliente) => Promise<void>;
+  onAperturaTurno: (patente: string | undefined, tipoCliente: TipoCliente, tarifaId?: number) => Promise<void>;
   onRefreshRooms: () => Promise<void>;
   initialAddProduct?: boolean;
   // Lo que el cliente de esta habitación pidió con su QR y todavía espera.
@@ -28,6 +28,8 @@ interface RoomDialogProps {
 }
 
 type Vista = 'cuenta' | 'productos' | 'cobro' | 'ticket';
+
+const AVISO_CAMBIO_TARIFA_MIN = 60;
 
 const TIPOS: { value: TipoCliente; label: string; icon: React.ElementType }[] = [
   { value: 'Auto', label: 'Auto', icon: Car },
@@ -206,12 +208,17 @@ const RoomDialog: React.FC<RoomDialogProps> = ({
   let footer: React.ReactNode = null;
 
   if (room.estado === 'Libre') {
+    const tarifa = categoria?.tarifa_ahora ?? categoria?.tarifa;
+    const ahora = categoria?.tarifa_ahora;
+    // Una franja que empieza o termina pronto se avisa: el precio del cliente que está en la puerta depende de eso.
+    const minutosParaElCambio = ahora?.cambia_en ? (new Date(ahora.cambia_en).getTime() - now) / 60000 : null;
+    const cambiaPronto = minutosParaElCambio !== null && minutosParaElCambio <= AVISO_CAMBIO_TARIFA_MIN;
     body = (
       <form
         id="form-apertura"
         onSubmit={(e) => {
           e.preventDefault();
-          void onAperturaTurno(tipoCliente === 'Peaton' ? undefined : patente.trim() || undefined, tipoCliente);
+          void onAperturaTurno(tipoCliente === 'Peaton' ? undefined : patente.trim() || undefined, tipoCliente, ahora?.id);
         }}
         className="space-y-6"
       >
@@ -258,18 +265,31 @@ const RoomDialog: React.FC<RoomDialogProps> = ({
           </Field>
         )}
 
-        {categoria?.tarifa ? (
+        {categoria && tarifa ? (
           <div className="rounded-md border border-line bg-surface-2 px-3 py-2.5 text-sm">
             <div className="mb-1.5 flex items-center justify-between gap-2">
-              <ChipCategoria categoria={categoria} />
-              <span className="font-semibold tabular-nums text-ink">{formatMoney(categoria.tarifa.tarifa_base)}</span>
+              <span className="flex min-w-0 items-center gap-2">
+                <ChipCategoria categoria={categoria} />
+                {tarifa.franja && <span className="truncate text-xs font-medium text-accent">{tarifa.franja}</span>}
+              </span>
+              <span className="font-semibold tabular-nums text-ink">{formatMoney(tarifa.tarifa_base)}</span>
             </div>
             <p className="text-muted">
-              Turno de {formatMinutos(categoria.tarifa.estadia_base_min)}. Superado
-              {categoria.tarifa.tolerancia_min > 0 && ` (con ${categoria.tarifa.tolerancia_min} min de tolerancia)`}, se
-              cobran {formatMoney(categoria.tarifa.tarifa_fraccion)} cada {formatMinutos(categoria.tarifa.fraccion_min)}
-              {categoria.tarifa.tope ? `, con un tope de ${formatMoney(categoria.tarifa.tope)} por estadía` : ''}.
+              Turno de {formatMinutos(tarifa.estadia_base_min)}. Superado
+              {tarifa.tolerancia_min > 0 && ` (con ${tarifa.tolerancia_min} min de tolerancia)`}, se
+              cobran {formatMoney(tarifa.tarifa_fraccion)} cada {formatMinutos(tarifa.fraccion_min)}
+              {tarifa.tope ? `, con un tope de ${formatMoney(tarifa.tope)} por estadía` : ''}.
             </p>
+            {cambiaPronto && ahora?.cambia_en && ahora.cambia_a_precio != null && (
+              <p className="mt-1.5 flex items-start gap-1.5 text-warn">
+                <CalendarClock className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                <span>
+                  A las {new Date(ahora.cambia_en).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })} pasa a{' '}
+                  {formatMoney(ahora.cambia_a_precio)}
+                  {ahora.cambia_a ? ` (${ahora.cambia_a})` : ' (tarifa general)'}. Este turno se abre con la de ahora.
+                </span>
+              </p>
+            )}
           </div>
         ) : (
           <p className="rounded-md bg-surface-2 px-3 py-2.5 text-sm text-muted">
@@ -412,7 +432,8 @@ const RoomDialog: React.FC<RoomDialogProps> = ({
               <tr>
                 <td className="py-2 text-muted">
                   Estadía base ({formatMinutos(baseMin)}
-                  {resumen.tarifa?.categoria ? ` · ${resumen.tarifa.categoria}` : ''})
+                  {resumen.tarifa?.categoria ? ` · ${resumen.tarifa.categoria}` : ''}
+                  {resumen.tarifa?.franja ? ` · ${resumen.tarifa.franja}` : ''})
                 </td>
                 <td className="py-2 text-right tabular-nums text-ink">{formatMoney(resumen.tarifa_base)}</td>
               </tr>

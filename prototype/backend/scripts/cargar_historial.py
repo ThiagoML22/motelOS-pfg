@@ -48,7 +48,7 @@ from app.models.operador import ROL_OPERADOR, Operador
 from app.models.pago import Pago
 from app.models.tarifa import Tarifa
 from app.models.turno import Turno
-from app.services import sellos
+from app.services import franjas, sellos
 from app.services.billing_service import calcular_sobreturno
 from app.services.caja import clasificar_diferencia
 
@@ -164,7 +164,9 @@ async def generar_historial(
             )
         ).scalars()
     )
-    tarifas = {t.categoria_id: t for t in (await db.execute(select(Tarifa).where(Tarifa.vigente.is_(True)))).scalars()}
+    # Cada turno se liquida con lo que regía cuando entró: la tarifa especial de esa hora o la general.
+    tarifario = await franjas.tarifario(db)
+    tarifas = tarifario.generales
     categorias = {
         c.id: c
         for c in (await db.execute(select(CategoriaHabitacion).where(CategoriaHabitacion.activa.is_(True)))).scalars()
@@ -309,7 +311,7 @@ async def generar_historial(
         if rng_extra.random() < SE_VAN_POR_PRECIO:
             perdido(llegada + timedelta(minutes=1), PRECIO, preferida)
 
-        tarifa = tarifas[elegida.categoria_id]
+        tarifa = tarifario.en(elegida.categoria_id, llegada).tarifa
         nombre = categorias[elegida.categoria_id].nombre.lower() if elegida.categoria_id in categorias else ""
         minutos = _duracion(rng, tarifa, nocturno, elegida.categoria_id == premium, SE_QUEDA_MAS.get(nombre, 0.3))
         salida = llegada + timedelta(minutes=minutos)

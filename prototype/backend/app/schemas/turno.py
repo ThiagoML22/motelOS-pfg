@@ -17,7 +17,9 @@ class TurnoBase(BaseModel):
 
 
 class TurnoCreate(TurnoBase):
-    pass
+    # La tarifa que le mostró la pantalla a quien atiende. Si justo cambió (una franja que empieza, la gerencia), la
+    # apertura se rechaza: lo que se le dijo al cliente es lo que se cobra.
+    tarifa_id: int | None = None
 
 
 class TurnoResponse(TurnoBase):
@@ -42,6 +44,8 @@ class TarifaDelTurno(BaseModel):
 
     categoria: str | None = None
     color: str | None = None
+    # Si el turno se abrió en una tarifa especial (migración 014), su nombre.
+    franja: str | None = None
     tarifa_base: float
     estadia_base_min: int
     fraccion_min: int

@@ -55,7 +55,8 @@ const RoomCard: React.FC<RoomCardProps> = ({ room, categoria, now, onClick, onAd
 
   const transcurrido = turno ? elapsedMs(turno, now) : 0;
   // El exceso se mide con la estadía base de la tarifa del turno (cada categoría tiene la suya).
-  const baseMin = turno?.estadia_base_min ?? categoria?.tarifa?.estadia_base_min ?? undefined;
+  const tarifa = categoria?.tarifa_ahora ?? categoria?.tarifa;
+  const baseMin = turno?.estadia_base_min ?? tarifa?.estadia_base_min ?? undefined;
   const fase = faseEstadia(transcurrido, baseMin);
   const faseMeta = FASE_META[fase];
   const barClass = turno && faseMeta.bar ? faseMeta.bar : meta.bar;
@@ -114,9 +115,12 @@ const RoomCard: React.FC<RoomCardProps> = ({ room, categoria, now, onClick, onAd
         ) : (
           <>
             <p className="text-sm text-muted">{meta.hint}</p>
-            {room.estado === 'Libre' && categoria?.tarifa && (
-              <p className="mt-1 text-xs tabular-nums text-subtle">
-                {formatMinutos(categoria.tarifa.estadia_base_min)} · {formatMoney(categoria.tarifa.tarifa_base)}
+            {room.estado === 'Libre' && tarifa && (
+              <p className="mt-1 flex min-w-0 items-baseline gap-1.5 text-xs tabular-nums text-subtle">
+                <span className="shrink-0">
+                  {formatMinutos(tarifa.estadia_base_min)} · {formatMoney(tarifa.tarifa_base)}
+                </span>
+                {tarifa.franja && <span className="truncate font-medium text-accent">{tarifa.franja}</span>}
               </p>
             )}
           </>

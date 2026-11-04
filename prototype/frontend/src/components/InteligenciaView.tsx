@@ -583,6 +583,15 @@ const Sugerencias: React.FC<{ sugerencias: SugerenciaTarifa[]; onAplicar: (s: Su
                 <dd className="font-medium text-ink">{porcentaje(s.con_sobreturno)}</dd>
               </div>
             </dl>
+            {s.rendimiento.length > 0 && (
+              <ul className="mt-2 space-y-0.5 text-xs text-muted">
+                {s.rendimiento.map((r) => (
+                  <li key={r.franja}>
+                    {r.franja}: {r.turnos} turnos, {formatMoney(r.ingresos)} en estadías
+                  </li>
+                ))}
+              </ul>
+            )}
             {s.propuesta && (
               <div className="mt-auto pt-3">
                 {s.impacto_mensual !== null && (
@@ -622,11 +631,21 @@ const AplicarTarifa: React.FC<{ sugerencia: SugerenciaTarifa; onClose: () => voi
     ['Tolerancia', `${actual.tolerancia_min} min`, `${propuesta.tolerancia_min} min`],
     ['Tope', actual.tope ? formatMoney(actual.tope) : 'Sin tope', propuesta.tope ? formatMoney(propuesta.tope) : 'Sin tope'],
   ];
+  const nueva = sugerencia.franja_nueva;
   const aplicar = async () => {
     setEnviando(true);
     try {
-      await api.nuevaTarifa({ ...propuesta, categoria_id: sugerencia.categoria_id });
-      toast(`Nueva tarifa de ${sugerencia.categoria} vigente desde ahora. Los turnos en curso conservan la suya.`, 'success');
+      if (nueva) {
+        const { nombre, dias, desde, hasta } = nueva;
+        await api.altaFranja({ categoria_id: sugerencia.categoria_id, nombre, dias, desde, hasta, tarifa: propuesta });
+        toast(`Tarifa especial ${nombre} creada en ${sugerencia.categoria}. El resto de la semana sigue la general.`, 'success');
+      } else if (sugerencia.franja_id) {
+        await api.cambiarFranja(sugerencia.franja_id, { tarifa: propuesta });
+        toast(`${sugerencia.franja_nombre} actualizada. Los turnos en curso conservan la suya.`, 'success');
+      } else {
+        await api.nuevaTarifa({ ...propuesta, categoria_id: sugerencia.categoria_id });
+        toast(`Nueva tarifa de ${sugerencia.categoria} vigente desde ahora. Los turnos en curso conservan la suya.`, 'success');
+      }
       onAplicada();
     } catch (err) {
       toast(getErrorMessage(err, 'No se pudo aplicar la tarifa.'), 'error');
@@ -644,11 +663,16 @@ const AplicarTarifa: React.FC<{ sugerencia: SugerenciaTarifa; onClose: () => voi
             Cancelar
           </Button>
           <Button onClick={() => void aplicar()} disabled={enviando}>
-            {enviando ? 'Aplicando…' : 'Aplicar nueva tarifa'}
+            {enviando ? 'Aplicando…' : nueva ? 'Crear tarifa especial' : 'Aplicar nueva tarifa'}
           </Button>
         </div>
       }
     >
+      {nueva && (
+        <p className="mb-3 rounded-md bg-accent-soft px-3 py-2 text-sm text-ink">
+          Tarifa especial «{nueva.nombre}»: rige {nueva.regla}. El resto de la semana sigue la general.
+        </p>
+      )}
       <table className="w-full text-left text-sm">
         <thead>
           <tr className="border-b border-line text-xs uppercase tracking-wide text-subtle">

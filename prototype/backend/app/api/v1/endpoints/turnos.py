@@ -14,6 +14,7 @@ from app.models.categoria import CategoriaHabitacion
 from app.models.consumo import Consumo
 from app.models.estadia_activa import EstadiaActiva
 from app.models.evento_habitacion import COBRO, TURNO
+from app.models.franja_tarifa import FranjaTarifa
 from app.models.habitacion import Habitacion
 from app.models.operador import Operador
 from app.models.pago import Pago
@@ -28,9 +29,9 @@ from app.schemas.turno import (
     TurnoResponse,
     TurnoResumen,
 )
-from app.services import acceso_cliente, rotacion
+from app.services import acceso_cliente, franjas, rotacion
+from app.services.actividad import pesos
 from app.services.caja import guardia_del_operador
-from app.services.configuracion import tarifa_vigente
 from app.services.consumos import cargar_consumo
 from app.services.estadia import cargar_estadia_base, cargar_nombres_de_apertura, cargar_patentes
 from app.services.liquidacion import liquidar_turno
@@ -59,17 +60,25 @@ async def create_turno(
 
     guardia = await guardia_del_operador(db, operador)
 
-    # La tarifa vigente de la categoría de la habitación (migración 008). El turno la conserva aunque después cambie
-    # la tarifa o la categoría (RN-DER-06).
-    tarifa = await tarifa_vigente(db, habitacion.categoria_id)
-    if not tarifa:
+    # La tarifa que rige ahora para la categoría de la habitación: la especial de esta franja o la general. El turno la
+    # conserva aunque después cambie la franja, la tarifa o la categoría (RN-DER-06).
+    ahora = datetime.now(UTC)
+    vigente = await franjas.tarifa_en(db, habitacion.categoria_id, ahora)
+    if vigente is None:
         raise HTTPException(status_code=409, detail="No hay una tarifa vigente para la categoría de la habitación")
+    tarifa = vigente.tarifa
+    if turno_in.tarifa_id is not None and turno_in.tarifa_id != tarifa.id:
+        nombre = f" ({vigente.franja.nombre})" if vigente.franja else ""
+        raise HTTPException(
+            status_code=409,
+            detail=f"La tarifa acaba de cambiar: ahora rige {pesos(tarifa.tarifa_base)}{nombre}. Revísela.",
+        )
 
     nuevo_turno = Turno(
         habitacion_id=turno_in.habitacion_id,
         tarifa_id=tarifa.id,
         tipo_cliente=turno_in.tipo_cliente,
-        hora_inicio=datetime.now(UTC),
+        hora_inicio=ahora,
         estado="En Curso",
         tarifa_base=tarifa.tarifa_base,
         total_general=tarifa.tarifa_base,
@@ -152,9 +161,11 @@ async def get_resumen(turno_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
     tarifa = await db.get(Tarifa, turno.tarifa_id)
     if tarifa is not None:
         categoria = await db.get(CategoriaHabitacion, tarifa.categoria_id)
+        franja = await db.get(FranjaTarifa, tarifa.franja_id) if tarifa.franja_id else None
         resumen_dict["tarifa"] = {
             "categoria": categoria.nombre if categoria else None,
             "color": categoria.color if categoria else None,
+            "franja": franja.nombre if franja else None,
             "tarifa_base": tarifa.tarifa_base,
             "estadia_base_min": tarifa.estadia_base_min,
             "fraccion_min": tarifa.fraccion_min,

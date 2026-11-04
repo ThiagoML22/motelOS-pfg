@@ -123,17 +123,22 @@ def _abrir_turno(texto: str, resto: str, ventanilla, tiene_guardia: bool) -> Pro
         tipo_cliente = "Peaton"
     encontrada = PATENTE.search(texto) if tipo_cliente != "Peaton" else None
     patente = encontrada.group(1).replace(" ", "").upper() if encontrada else None
-    tarifa = ventanilla.tarifas.get(habitacion.categoria_id)
+    vigente = ventanilla.vigentes.get(habitacion.categoria_id)
     nombre = ventanilla.nombre_categoria(habitacion)
+    etiqueta = f"{nombre} · {vigente.franja.nombre}" if vigente and vigente.franja else nombre
     partes = [p for p in (nombre, "Peatón" if tipo_cliente == "Peaton" else tipo_cliente, patente) if p]
     return _a_confirmar(
         "abrir_turno",
         f"Abrir la {habitacion.numero} ({' · '.join(partes)})",
         f"Listo: la {habitacion.numero} quedó ocupada.",
-        detalle=f"Tarifa de {nombre}: ${float(tarifa.tarifa_base):,.0f}.".replace(",", ".") if tarifa else None,
+        detalle=(
+            f"Tarifa de {etiqueta}: ${float(vigente.tarifa.tarifa_base):,.0f}.".replace(",", ".") if vigente else None
+        ),
         habitacion_id=habitacion.id,
         tipo_cliente=tipo_cliente,
         patente=patente,
+        # Lo que se le dijo al cliente es lo que se cobra: si cambió antes de confirmar, no abre.
+        tarifa_id=vigente.tarifa.id if vigente else None,
     )
 
 

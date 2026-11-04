@@ -23,8 +23,8 @@ from app.models.evento_habitacion import COBRO, TURNO, EventoHabitacion
 from app.models.guardia import Guardia
 from app.models.habitacion import Habitacion
 from app.models.operador import Operador
-from app.models.tarifa import Tarifa
 from app.models.turno import Turno
+from app.services import franjas
 from scripts.cargar_historial import inicio_de_franja
 
 CODIGO = "motelcc"
@@ -62,9 +62,7 @@ async def llenar(disponibles: int) -> None:
                 )
                 db.add(guardia)
                 await db.flush()
-            tarifas = {
-                t.categoria_id: t for t in (await db.execute(select(Tarifa).where(Tarifa.vigente.is_(True)))).scalars()
-            }
+            tarifario = await franjas.tarifario(db)
             libres = list(
                 (
                     await db.execute(
@@ -90,8 +88,8 @@ async def llenar(disponibles: int) -> None:
                         )
                     )
                     continue
-                tarifa = tarifas[habitacion.categoria_id]
                 inicio_turno = ahora - timedelta(minutes=rng.randint(10, 170))
+                tarifa = tarifario.en(habitacion.categoria_id, inicio_turno).tarifa
                 turno = Turno(
                     habitacion_id=habitacion.id,
                     tarifa_id=tarifa.id,

@@ -30,13 +30,16 @@ from app.models.operador import ROL_ADMINISTRADOR, Operador
 from app.models.pedido import PENDIENTE, PedidoReposicion
 from app.models.tarifa import Tarifa
 from app.models.turno import Turno
-from app.services import acciones, conocimiento, rotacion
+from app.services import acciones, conocimiento, franjas, rotacion
 from app.services import inteligencia as ia
 from app.services.asistente import INTENCIONES, _intencion, normalizar
 from app.services.asistente import responder as responder_analisis
 from app.services.caja import guardia_abierta
 from app.services.liquidacion import con_zona, liquidar_turno
 
+ESPECIALES = re.compile(r"tarifas? especial(es)?")
+CUANDO_CAMBIA = re.compile(r"cuando (cambia|sube|baja) (la tarifa|el precio)")
+RIGE = re.compile(r"\b(rige|corre|vigente|actual|ahora)\b")
 # Frases que piden instrucciones: con ellas, un tema de ayuda gana sobre el análisis de datos.
 COMO = re.compile(
     r"\b(como|donde|que hago|que tengo que|puedo|se puede|hay que|pasos|ayuda|explica|para que sirve|no puedo"
@@ -461,6 +464,25 @@ TEMAS: tuple[Tema, ...] = (
         GERENCIA,
     ),
     Tema(
+        "config_franjas",
+        "Crear una tarifa especial por día y hora",
+        (
+            r"tarifas? especial",
+            r"(cre|agreg|pon|carg|arm)\w* .{0,20}tarifa .{0,12}(noche|fin de semana|feriado|domingo|sabado|viernes)",
+            r"(cobrar|precios?|tarifas?) (mas |menos |distinto |diferente )?(de noche|el fin de semana|los fines de "
+            r"semana|por (dia|hora|horario))",
+        ),
+        (
+            "Configuración → «Categorías y tarifas» → «Tarifas especiales» de la categoría.",
+            "Arrastrá sobre el mapa de la semana o usá un atajo, y completá nombre, días, horario y precio.",
+            "Los días son los de comienzo: la noche del viernes sigue el sábado de madrugada. Dos tarifas especiales "
+            "de una categoría no pueden pisarse.",
+            "Al abrirse, el turno toma la que rige en ese momento y la conserva hasta el cobro.",
+        ),
+        "configuracion",
+        GERENCIA,
+    ),
+    Tema(
         "config_tarifas",
         "Cambiar tarifas y categorías",
         (
@@ -727,7 +749,8 @@ PANTALLAS = {
         "Es donde la gerencia ajusta el motel: categorías y tarifas, habitaciones, artículos, conserjes, fondo de "
         "cambio y apariencia. Cada cambio queda en Actividad.",
         (
-            "«Categorías y tarifas»: la tarifa de cada categoría, con el simulador de lo que paga el cliente.",
+            "«Categorías y tarifas»: la tarifa de cada categoría, con el simulador de lo que paga el cliente, y sus "
+            "tarifas especiales por día y hora en un mapa de la semana.",
             "«Habitaciones» y «Artículos»: altas, bajas, números, categorías y precios.",
             "«Conserjes»: altas, bajas y clave restablecida.",
             "«Fondo de cambio» y «Apariencia y avisos»: el fondo de cada guardia, el color, el eslogan y las alertas.",
@@ -735,9 +758,9 @@ PANTALLAS = {
         (),
         (
             "¿Cómo cambio una tarifa?",
+            "¿Cómo creo una tarifa especial?",
             "¿Cómo agrego una habitación?",
             "¿Cómo doy de alta un conserje?",
-            "¿Cómo cambio el fondo de cambio?",
         ),
         GERENCIA,
     ),
@@ -841,9 +864,12 @@ class Ventanilla:
             ).scalars()
         )
         self.categorias = {c.id: c for c in (await self.db.execute(select(CategoriaHabitacion))).scalars()}
-        self.tarifas = {
-            t.categoria_id: t for t in (await self.db.execute(select(Tarifa).where(Tarifa.vigente.is_(True)))).scalars()
+        self.tarifario = await franjas.tarifario(self.db)
+        # Lo que tomaría un turno abierto ahora: la tarifa especial de esta hora o la general.
+        self.vigentes = {
+            c.id: v for c in self.categorias.values() if (v := self.tarifario.en(c.id, self.ahora)) is not None
         }
+        self.tarifas = {categoria_id: v.tarifa for categoria_id, v in self.vigentes.items()}
         self.turnos = {
             t.habitacion_id: t
             for t in (await self.db.execute(select(Turno).where(Turno.estado == "En Curso"))).scalars()
@@ -1004,7 +1030,9 @@ class Ventanilla:
             detalle="Calculado ahora con la tarifa del turno (RN-DER-01).",
         )
 
-    def tarifas_texto(self, categoria: CategoriaHabitacion | None) -> Respuesta:
+    def tarifas_texto(
+        self, categoria: CategoriaHabitacion | None, momento: datetime | None = None, cuando: str | None = None
+    ) -> Respuesta:
         elegidas = (
             [categoria]
             if categoria
@@ -1014,11 +1042,13 @@ class Ventanilla:
         )
         partes = []
         for c in elegidas:
-            t = self.tarifas.get(c.id)
-            if t is None:
+            vigente = self.tarifario.en(c.id, momento or self.ahora)
+            if vigente is None:
                 continue
+            t = vigente.tarifa
+            nombre = f"{c.nombre} ({vigente.franja.nombre})" if vigente.franja else c.nombre
             texto = (
-                f"{c.nombre}: {ia.pesos(float(t.tarifa_base))} por {ia.minutos_texto(t.estadia_base_min)}; después "
+                f"{nombre}: {ia.pesos(float(t.tarifa_base))} por {ia.minutos_texto(t.estadia_base_min)}; después "
                 f"{ia.pesos(float(t.tarifa_fraccion))} cada {t.fraccion_min} min"
             )
             extras = []
@@ -1029,8 +1059,59 @@ class Ventanilla:
             partes.append(texto + (f" ({', '.join(extras)})" if extras else ""))
         if not partes:
             return Respuesta("No encuentro tarifas vigentes.", "tarifas")
+        cierre = ""
+        if categoria is not None and momento is None:
+            vigente = self.vigentes.get(categoria.id)
+            if vigente is not None and vigente.cambia_en and vigente.siguiente:
+                proxima = vigente.siguiente_franja.nombre if vigente.siguiente_franja else "tarifa general"
+                cuando_cambia = franjas.cuando_texto(franjas.local(vigente.cambia_en), franjas.local(self.ahora))
+                precio = ia.pesos(float(vigente.siguiente.tarifa_base))
+                cierre = f" {cuando_cambia.capitalize()} pasa a {precio} ({proxima})."
         return Respuesta(
-            ". ".join(partes) + ".", "tarifas", detalle="Tarifas vigentes para los turnos que se abran ahora."
+            ". ".join(partes) + "." + cierre,
+            "tarifas",
+            detalle=(
+                f"Para un turno que se abra {cuando}: lo conserva hasta el cobro."
+                if cuando
+                else "Tarifas vigentes para los turnos que se abran ahora."
+            ),
+        )
+
+    def cambios_texto(self) -> Respuesta:
+        """Cuándo cambia lo que rige en cada categoría."""
+        ahora = franjas.local(self.ahora)
+        partes = []
+        for c in sorted((c for c in self.categorias.values() if c.activa), key=lambda c: c.orden):
+            vigente = self.vigentes.get(c.id)
+            if vigente is not None and vigente.cambia_en and vigente.siguiente:
+                proxima = vigente.siguiente_franja.nombre if vigente.siguiente_franja else "tarifa general"
+                cuando = franjas.cuando_texto(franjas.local(vigente.cambia_en), ahora)
+                partes.append(f"{c.nombre}: {cuando} pasa a {ia.pesos(float(vigente.siguiente.tarifa_base))} ({proxima})")
+        if not partes:
+            return Respuesta("No hay cambios por delante: rige la tarifa general toda la semana.", "tarifas")
+        return Respuesta(". ".join(partes) + ".", "tarifas", detalle="Los turnos abiertos conservan su tarifa.")
+
+    def especiales_texto(self, categoria: CategoriaHabitacion | None) -> Respuesta:
+        """Las tarifas especiales de una categoría, o las de todas."""
+        activas = sorted((c for c in self.categorias.values() if c.activa), key=lambda c: c.orden)
+        elegidas = [categoria] if categoria else activas
+        filas = []
+        for c in elegidas:
+            for f in self.tarifario.franjas.get(c.id, []):
+                t = self.tarifario.de_franja.get(f.id)
+                if t is not None:
+                    filas.append(
+                        f"{'' if categoria else f'{c.nombre}: '}{f.nombre}, "
+                        f"{franjas.regla_texto(f.dias, f.desde, f.hasta)}, {ia.pesos(float(t.tarifa_base))} por "
+                        f"{ia.minutos_texto(t.estadia_base_min)}"
+                    )
+        if not filas:
+            sujeto = f"{categoria.nombre} no tiene" if categoria else "No hay"
+            return Respuesta(f"{sujeto} tarifas especiales: rige la tarifa general toda la semana.", "tarifas")
+        return Respuesta(
+            "Tarifas especiales: " + "; ".join(filas) + ".",
+            "tarifas",
+            detalle="Fuera de esos horarios rige la general. El turno conserva la tarifa con la que se abrió.",
         )
 
     async def stock(self, texto: str) -> Respuesta | None:
@@ -1057,6 +1138,7 @@ class Ventanilla:
         """Palabras del motel (categorías, artículos, personal) que el corrector no debe tocar."""
         textos = [c.nombre for c in self.categorias.values()] + [a.descripcion for a in self.articulos]
         textos += list(self.nombres.values())
+        textos += [f.nombre for lista in self.tarifario.franjas.values() for f in lista]
         return {p for t in textos for p in normalizar(t).split() if len(p) >= 4}
 
     def estado_general(self) -> Respuesta:
@@ -1290,6 +1372,10 @@ async def responder(
             texto,
         )
 
+    # «¿Cuándo cambia la tarifa?» va antes que todo lo demás: la guardia también «cambia».
+    if CUANDO_CAMBIA.search(texto):
+        return ventanilla.cambios_texto().como_dict(), texto
+
     # 1. Situaciones conocidas («me equivoqué en el arqueo») y «¿qué es…?», «¿para qué sirve…?»: el glosario.
     definicion = conocimiento.definicion(texto, es_gerencia) or conocimiento.situacion(texto, es_gerencia)
     if definicion is not None:
@@ -1406,7 +1492,13 @@ async def _ventanilla_ahora(
     ):
         return await ventanilla.cuenta(numero)
     categoria = ventanilla.categoria_mencionada(texto)
-    if (re.search(r"\b(cuanto (sale|cuesta|vale)|precios?|tarifas?)\b", texto) and (categoria or not es_gerencia)) or (
+    if ESPECIALES.search(texto):
+        return ventanilla.especiales_texto(categoria)
+    pide_precio = re.search(r"\b(cuanto (sale|cuesta|vale)|precios?|tarifas?)\b", texto)
+    momento = franjas.momento_mencionado(texto, franjas.local(ventanilla.ahora)) if pide_precio else None
+    if momento is not None:
+        return ventanilla.tarifas_texto(categoria, *momento)
+    if (pide_precio and (categoria or not es_gerencia or RIGE.search(texto))) or (
         anterior == "tarifas" and categoria is not None
     ):
         return ventanilla.tarifas_texto(categoria)

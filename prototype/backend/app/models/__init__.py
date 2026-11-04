@@ -11,6 +11,7 @@ from app.models import (  # noqa: F401
     establecimiento,
     estadia_activa,
     evento_habitacion,
+    franja_tarifa,
     guardia,
     habitacion,
     novedad,

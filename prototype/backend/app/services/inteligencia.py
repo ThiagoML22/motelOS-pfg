@@ -11,7 +11,7 @@ importes. La ocupación «ahora» sale del estado de las habitaciones, que la gr
 
 import math
 from collections import Counter, defaultdict
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 from statistics import mean, median, pstdev
@@ -26,12 +26,14 @@ from app.models.articulo import Articulo
 from app.models.categoria import CategoriaHabitacion
 from app.models.cliente_perdido import MOTIVOS, SIN_LUGAR, ClientePerdido
 from app.models.consumo import Consumo
+from app.models.franja_tarifa import FranjaTarifa
 from app.models.guardia import Guardia
 from app.models.habitacion import Habitacion
 from app.models.operador import Operador
 from app.models.pago import Pago
 from app.models.tarifa import Tarifa
 from app.models.turno import Turno
+from app.services import franjas
 from app.services.billing_service import ParametrosTarifa, calcular_sobreturno
 from app.services.caja import FALTANTE, SOBRANTE, guardia_abierta
 from app.services.liquidacion import con_zona
@@ -46,6 +48,22 @@ PESO_SEMANA = 0.75
 # Supuestos de las sugerencias de tarifa (elasticidad precio-demanda): se muestran junto a cada sugerencia.
 ELASTICIDAD_PICO = -0.5
 ELASTICIDAD_VALLE = -1.6
+
+
+@dataclass(frozen=True)
+class ReglaSugerida:
+    """La tarifa especial que se propone crear: cobrar distinto solo cuando la demanda lo justifica."""
+
+    nombre: str
+    dias: int
+    desde: time
+    hasta: time
+
+
+REGLA_PICO = ReglaSugerida("Noche de fin de semana", franjas.mascara(4, 5), time(20), time(6))
+REGLA_VALLE = ReglaSugerida("De día en la semana", franjas.mascara(0, 1, 2, 3), time(8), time(18))
+# El viernes a las 23: si una tarifa especial rige ahí, el pico ya tiene la suya.
+MINUTO_DEL_PICO = 4 * franjas.MINUTOS_DIA + 23 * 60
 
 
 # --- Formato ------------------------------------------------------------------------------------------------------
@@ -158,6 +176,14 @@ class Contexto:
     nombres: dict[int, str]
     perdidos: list[Perdido] = field(default_factory=list)
     limpiezas: list[Tramo] = field(default_factory=list)
+    # Todas, también las dadas de baja: lo cobrado con ellas sigue en el historial.
+    franjas: list[FranjaTarifa] = field(default_factory=list)
+
+    def franjas_de(self, categoria_id: int) -> list[FranjaTarifa]:
+        return [f for f in self.franjas if f.activa and f.categoria_id == categoria_id]
+
+    def tarifa_de_franja(self, franja_id: int) -> Tarifa | None:
+        return next((t for t in self.tarifas_por_id.values() if t.franja_id == franja_id and t.vigente), None)
 
     def inicio_dia(self, dia: date) -> datetime:
         return datetime.combine(dia, time.min, self.zona)
@@ -259,6 +285,7 @@ async def contexto(db: AsyncSession, ahora: datetime | None = None) -> Contexto:
         c.id: c for c in (await db.execute(select(CategoriaHabitacion).order_by(CategoriaHabitacion.orden))).scalars()
     }
     todas_las_tarifas = list((await db.execute(select(Tarifa))).scalars())
+    todas_las_franjas = list((await db.execute(select(FranjaTarifa).order_by(FranjaTarifa.id))).scalars())
     articulos = list(
         (await db.execute(select(Articulo).where(Articulo.activo.is_(True)).order_by(Articulo.descripcion))).scalars()
     )
@@ -292,12 +319,13 @@ async def contexto(db: AsyncSession, ahora: datetime | None = None) -> Contexto:
         cobros=cobros,
         habitaciones=habitaciones,
         categorias=categorias,
-        tarifas={t.categoria_id: t for t in todas_las_tarifas if t.vigente},
+        tarifas={t.categoria_id: t for t in todas_las_tarifas if t.vigente and t.franja_id is None},
         tarifas_por_id={t.id: t for t in todas_las_tarifas},
         articulos=articulos,
         nombres=nombres,
         perdidos=perdidos,
         limpiezas=limpiezas,
+        franjas=todas_las_franjas,
     )
 
 
@@ -1009,6 +1037,47 @@ def _estadia_mas_larga(turnos: list[TurnoCerrado], actual: ParametrosTarifa) -> 
     return None
 
 
+def _ajustada(parametros: ParametrosTarifa, factor: float, con_fraccion: bool) -> ParametrosTarifa:
+    """La misma tarifa con el precio cambiado por `factor`, redondeado."""
+    fraccion = float(parametros.tarifa_fraccion)
+    return replace(
+        parametros,
+        tarifa_base=Decimal(_redondear(float(parametros.tarifa_base) * factor)),
+        tarifa_fraccion=Decimal(_redondear(fraccion * factor)) if con_fraccion else parametros.tarifa_fraccion,
+    )
+
+
+def _abiertos_en(turnos: list[TurnoCerrado], dias: int, desde: time, hasta: time) -> list[TurnoCerrado]:
+    """Los turnos que se abrieron dentro de una regla: los que habrían pagado esa tarifa."""
+    rangos = franjas.tramos(dias, desde, hasta)
+    return [t for t in turnos if any(a <= franjas.minuto_de_semana(t.inicio) < b for a, b in rangos)]
+
+
+def _regla_libre(regla: ReglaSugerida, propias: list[FranjaTarifa]) -> ReglaSugerida | None:
+    """La regla, si no se pisa con ninguna tarifa especial de la categoría."""
+    rangos = franjas.tramos(regla.dias, regla.desde, regla.hasta)
+    pisa = any(franjas.primer_cruce(rangos, franjas.tramos(f.dias, f.desde, f.hasta)) is not None for f in propias)
+    return None if pisa else regla
+
+
+def _rendimiento(ctx: Contexto, turnos: list[TurnoCerrado]) -> list[dict]:
+    """Cuánto rindió cada tarifa especial: turnos y lo cobrado por estadías."""
+    por_franja: dict[int, list[TurnoCerrado]] = defaultdict(list)
+    for t in turnos:
+        tarifa = ctx.tarifas_por_id.get(t.tarifa_id)
+        if tarifa is not None and tarifa.franja_id is not None:
+            por_franja[tarifa.franja_id].append(t)
+    nombres = {f.id: f.nombre for f in ctx.franjas}
+    return [
+        {
+            "franja": nombres.get(franja_id, "Tarifa especial"),
+            "turnos": len(lista),
+            "ingresos": round(sum(t.total - t.consumos for t in lista), 2),
+        }
+        for franja_id, lista in sorted(por_franja.items(), key=lambda p: -len(p[1]))
+    ]
+
+
 def sugerencias_de_tarifa(ctx: Contexto, dias: int = 28) -> list[dict]:
     pico = _ventanas(ctx, dias, (4, 5), 22, 4)  # viernes y sábado de 22 a 2
     valle = _ventanas(ctx, dias, (0, 1, 2, 3), 6, 12)  # lunes a jueves de 6 a 18
@@ -1023,31 +1092,54 @@ def sugerencias_de_tarifa(ctx: Contexto, dias: int = 28) -> list[dict]:
             continue
         propios = [t for t in ctx.turnos if t.categoria_id == categoria_id and t.fin > todo[0][0]]
         en_periodo = [t for t in propios if t.fin >= todo[0][0]]
+        # La tarifa general solo la pagó quien no entró en una especial: sobre ellos se simula un cambio de la general.
+        generales = [
+            t
+            for t in en_periodo
+            if (pagada := ctx.tarifas_por_id.get(t.tarifa_id)) is None or pagada.franja_id is None
+        ]
         o_pico, o_valle, o_total = (ocupacion(propios, v, cupo) for v in (pico, valle, todo))
         con_sobreturno = sum(1 for t in en_periodo if t.sobreturno > 0) / len(en_periodo) if en_periodo else 0.0
         actual = tarifa.parametros()
-        ingreso_actual = _simular(en_periodo, actual, 0, 0)
         accion, propuesta, elasticidad, cambio = "mantener", None, 0.0, 0.0
+        # Lo que se compara con la propuesta, quiénes la pagarían y, si es una tarifa especial, cuál.
+        referencia, afectados = actual, generales
+        franja, regla_nueva = None, None
+        propias_franjas = ctx.franjas_de(categoria_id)
         if len(en_periodo) < 15:
             titulo = "Pocos datos todavía"
             explicacion = f"Solo {len(en_periodo)} turnos en {dias} días: se necesitan más para sugerir un cambio."
         elif o_pico is not None and o_pico >= 0.7:
             accion, cambio, elasticidad = "subir", 0.10, ELASTICIDAD_PICO
-            propuesta = ParametrosTarifa(
-                tarifa_base=Decimal(_redondear(float(actual.tarifa_base) * 1.1)),
-                estadia_base_min=actual.estadia_base_min,
-                tolerancia_min=actual.tolerancia_min,
-                fraccion_min=actual.fraccion_min,
-                tarifa_fraccion=Decimal(_redondear(float(actual.tarifa_fraccion) * 1.1)),
-                tope=actual.tope,
-            )
-            titulo = "Subir la tarifa un 10%"
-            explicacion = (
-                f"Las noches de viernes y sábado (de 22 a 2 h) está ocupada el {porcentaje(o_pico)} del tiempo: "
-                f"en el pico casi no hay "
-                f"lugar y los clientes que llegan se van a otro lado. Hay margen para cobrar más."
-            )
-        elif con_sobreturno >= 0.35 and (larga := _estadia_mas_larga(en_periodo, actual)) is not None:
+            ocupada = f"Las noches de viernes y sábado (de 22 a 2 h) está ocupada el {porcentaje(o_pico)} del tiempo"
+            franja = franjas.franja_en(propias_franjas, MINUTO_DEL_PICO)
+            tarifa_pico = ctx.tarifa_de_franja(franja.id) if franja else None
+            regla_nueva = None if franja else _regla_libre(REGLA_PICO, propias_franjas)
+            if franja is not None and tarifa_pico is not None:
+                referencia = tarifa_pico.parametros()
+                afectados = _abiertos_en(en_periodo, franja.dias, franja.desde, franja.hasta)
+                propuesta = _ajustada(referencia, 1.1, True)
+                titulo = f"Subir «{franja.nombre}» un 10%"
+                explicacion = (
+                    f"{ocupada}, aun con su tarifa especial: los clientes siguen llegando. Hay margen para cobrar más."
+                )
+            elif regla_nueva is not None:
+                afectados = _abiertos_en(generales, regla_nueva.dias, regla_nueva.desde, regla_nueva.hasta)
+                propuesta = _ajustada(actual, 1.1, True)
+                titulo = "Cobrar 10% más las noches de fin de semana"
+                explicacion = (
+                    f"{ocupada}: en el pico casi no hay lugar y los clientes que llegan se van a otro lado. Una tarifa "
+                    "especial cobra más solo cuando hay demanda, sin tocar el resto de la semana."
+                )
+            else:
+                franja = None
+                propuesta = _ajustada(actual, 1.1, True)
+                titulo = "Subir la tarifa un 10%"
+                explicacion = (
+                    f"{ocupada}: en el pico casi no hay lugar y los clientes que llegan se van a otro lado. Hay margen "
+                    "para cobrar más."
+                )
+        elif con_sobreturno >= 0.35 and (larga := _estadia_mas_larga(generales, actual)) is not None:
             accion, propuesta = "estadia", larga
             titulo = "Alargar la estadía base 30 minutos"
             explicacion = (
@@ -1057,19 +1149,22 @@ def sugerencias_de_tarifa(ctx: Contexto, dias: int = 28) -> list[dict]:
             )
         elif o_total is not None and o_total < 0.25 and (o_valle or 0) < 0.2:
             accion, cambio, elasticidad = "bajar", -0.10, ELASTICIDAD_VALLE
-            propuesta = ParametrosTarifa(
-                tarifa_base=Decimal(_redondear(float(actual.tarifa_base) * 0.9)),
-                estadia_base_min=actual.estadia_base_min,
-                tolerancia_min=actual.tolerancia_min,
-                fraccion_min=actual.fraccion_min,
-                tarifa_fraccion=actual.tarifa_fraccion,
-                tope=actual.tope,
-            )
-            titulo = "Bajar la tarifa un 10%"
-            explicacion = (
+            propuesta = _ajustada(actual, 0.9, False)
+            regla_nueva = _regla_libre(REGLA_VALLE, propias_franjas)
+            ocupada = (
                 f"Está ocupada solo el {porcentaje(o_total)} del tiempo (de lunes a jueves de día, el "
-                f"{porcentaje(o_valle or 0)}). Con la demanda tan floja, un precio menor atrae más turnos."
+                f"{porcentaje(o_valle or 0)})"
             )
+            if regla_nueva is not None:
+                afectados = _abiertos_en(generales, regla_nueva.dias, regla_nueva.desde, regla_nueva.hasta)
+                titulo = "Bajar 10% de lunes a jueves de día"
+                explicacion = (
+                    f"{ocupada}. Una tarifa especial para esos horarios atrae más turnos sin tocar las noches ni el "
+                    "fin de semana."
+                )
+            else:
+                titulo = "Bajar la tarifa un 10%"
+                explicacion = f"{ocupada}. Con la demanda tan floja, un precio menor atrae más turnos."
         else:
             titulo = "La tarifa está en equilibrio"
             explicacion = (
@@ -1080,8 +1175,8 @@ def sugerencias_de_tarifa(ctx: Contexto, dias: int = 28) -> list[dict]:
         if propuesta is not None:
             if propuesta.tope is not None and propuesta.tope < propuesta.tarifa_base:
                 propuesta = ParametrosTarifa(**{**propuesta.__dict__, "tope": propuesta.tarifa_base})
-            ingreso_nuevo = _simular(en_periodo, propuesta, cambio, elasticidad)
-            impacto = round((ingreso_nuevo - ingreso_actual) * 30 / dias, -2)
+            ingreso_nuevo = _simular(afectados, propuesta, cambio, elasticidad)
+            impacto = round((ingreso_nuevo - _simular(afectados, referencia, 0, 0)) * 30 / dias, -2)
         categoria = ctx.categorias.get(categoria_id)
         resultado.append(
             {
@@ -1098,8 +1193,23 @@ def sugerencias_de_tarifa(ctx: Contexto, dias: int = 28) -> list[dict]:
                 "titulo": titulo,
                 "explicacion": explicacion,
                 "impacto_mensual": impacto,
-                "supuesto": _supuesto(len(en_periodo), dias, elasticidad) if propuesta is not None else None,
-                "actual": _parametros(tarifa),
+                "supuesto": _supuesto(len(afectados), dias, elasticidad) if propuesta is not None else None,
+                "actual": _parametros(referencia),
+                # Si la propuesta es sobre una tarifa especial que ya existe, o una nueva para crear.
+                "franja_id": franja.id if franja is not None else None,
+                "franja_nombre": franja.nombre if franja is not None else None,
+                "franja_nueva": (
+                    {
+                        "nombre": regla_nueva.nombre,
+                        "dias": regla_nueva.dias,
+                        "desde": franjas.hora_texto(regla_nueva.desde),
+                        "hasta": franjas.hora_texto(regla_nueva.hasta),
+                        "regla": franjas.regla_texto(regla_nueva.dias, regla_nueva.desde, regla_nueva.hasta),
+                    }
+                    if regla_nueva is not None
+                    else None
+                ),
+                "rendimiento": _rendimiento(ctx, en_periodo),
                 "propuesta": (
                     {
                         "tarifa_base": float(propuesta.tarifa_base),

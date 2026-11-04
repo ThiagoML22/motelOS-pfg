@@ -402,13 +402,14 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
     setOpenAddProduct(false);
   };
 
-  const handleTurnoSubmit = async (patente: string | undefined, tipoCliente: TipoCliente) => {
+  const handleTurnoSubmit = async (patente: string | undefined, tipoCliente: TipoCliente, tarifaId?: number) => {
     if (!selectedRoom) return;
     try {
       await api.createTurno({
         habitacion_id: selectedRoom.id,
         identificador_vehicular: patente,
         tipo_cliente: tipoCliente,
+        tarifa_id: tarifaId,
       });
       toast(`Turno abierto en ${formatRoomNumber(selectedRoom.numero)}.`, 'success');
       closePanel();
