@@ -42,7 +42,7 @@ const PaletaComandos: React.FC<PaletaComandosProps> = ({ comandos, onClose, onPr
         ? [
             {
               id: 'preguntar',
-              titulo: `Preguntar al asistente: «${texto.trim()}»`,
+              titulo: `Preguntarle a Mot: «${texto.trim()}»`,
               grupo: 'Inteligencia',
               icono: Sparkles,
               accion: () => onPreguntar(texto.trim()),

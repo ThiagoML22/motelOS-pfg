@@ -369,8 +369,8 @@ class Asistente:
 
     def ayuda(self) -> dict:
         return _respuesta(
-            "Soy el asistente de MotelOS. Respondo con los datos del motel, calculados acá mismo (nada sale de esta "
-            "computadora). Probá preguntar por ingresos, turnos, ocupación, estadías, horarios, categorías, "
+            "Soy Mot, el asistente de MotelOS. Respondo con los datos del motel, calculados acá mismo (nada sale de "
+            "esta computadora). Probá preguntar por ingresos, turnos, ocupación, estadías, horarios, categorías, "
             "habitaciones, caja, artículos o el pronóstico. Podés agregar un período («ayer», «la semana pasada», "
             "«en octubre», «los sábados», «últimos 15 días»), una categoría o un conserje.",
             "ayuda",

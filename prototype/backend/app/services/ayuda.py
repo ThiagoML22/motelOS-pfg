@@ -293,7 +293,7 @@ TEMAS: tuple[Tema, ...] = (
             "Ctrl+K o «/» (o la lupa del encabezado) abre el buscador.",
             "Escribí una sección, el número de una habitación («7») o una acción («novedad», «oscuro»).",
             "Con las flechas elegís y con Enter vas.",
-            "Fuera de los campos: «A» abre el asistente, «N» deja una novedad, «L» cambia entre grilla y línea de "
+            "Fuera de los campos: «A» abre a Mot, «N» deja una novedad, «L» cambia entre grilla y línea de "
             "tiempo y los números 1, 2, 3… van a cada sección.",
             "«?» muestra todos los atajos.",
         ),
@@ -786,7 +786,7 @@ PANTALLAS = {
             "En el gemelo del motel probás un cambio de limpieza, habitaciones o precio antes de hacerlo.",
             "«Ver y aplicar» en una sugerencia de tarifa muestra el efecto estimado antes de confirmar.",
             "«Armar pedido con esto» convierte la reposición sugerida en un pedido al proveedor.",
-            "A la derecha está el asistente: preguntale por los datos con tus palabras.",
+            "A la derecha estoy yo, Mot: preguntame por los datos con tus palabras.",
         ),
         (),
         (
@@ -1281,6 +1281,16 @@ def _como_pregunta(entrada) -> str:
     return f"¿{entrada.titulo}?" if entrada.titulo.lower().startswith(("cómo", "qué", "por qué")) else entrada.titulo
 
 
+# Le hablan por su nombre: «Mot, pasá la 7 a limpieza», «hola Mot», «gracias, Mot». «Moto» es otra palabra.
+NOMBRE_AL_INICIO = re.compile(r"^[\s¿¡]*(?:(?:hola|che|ey|eh|dale)[\s,]+)?mot\b[\s,:;.!?]*", re.IGNORECASE)
+NOMBRE_AL_FINAL = re.compile(r"[\s,]+mot[\s.!?]*$", re.IGNORECASE)
+SOBRE_MOT = re.compile(r"\b(quien|que) es mot\b|\bsos mot\b|\bcomo te llamas\b|\bcual es tu nombre\b|\btu nombre\b")
+
+
+def sin_nombre(pregunta: str) -> str:
+    return NOMBRE_AL_FINAL.sub("", NOMBRE_AL_INICIO.sub("", pregunta, count=1))
+
+
 CHARLA = (
     (re.compile(r"^(hola|buen(os|as)? (dia|dias|tarde|tardes|noche|noches)|que tal|buenas)\b"), "saludo"),
     (re.compile(r"^(gracias|muchas gracias|genial|perfecto|joya|barbaro|listo)\b"), "gracias"),
@@ -1300,11 +1310,11 @@ def _charla(tipo: str, es_gerencia: bool) -> dict:
             "¡De nada! Si necesitás algo más, preguntame.", "charla", sugerencias=sugerencias[:3]
         ).como_dict()
     texto = (
-        "Soy el asistente de MotelOS y funciono acá mismo, sin internet. Hago lo que me pidas, con tu confirmación "
-        "(«pasá la 7 a mantenimiento», «cargale dos aguas a la 5»). Te explico cómo usar cualquier parte del "
-        "sistema y qué significa cada cosa («¿qué es la tolerancia?»), y te digo cómo está la ventanilla ahora "
-        "(libres, ocupadas, vencimientos, la cuenta de una habitación, stock, novedades, pedidos). Si me preguntás "
-        "«¿qué hago acá?», te explico la pantalla en la que estás."
+        "Soy Mot, el asistente de MotelOS, y funciono acá mismo, sin internet. Hago lo que me pidas, con tu "
+        "confirmación («pasá la 7 a mantenimiento», «cargale dos aguas a la 5»). Te explico cómo usar cualquier "
+        "parte del sistema y qué significa cada cosa («¿qué es la tolerancia?»), y te digo cómo está la ventanilla "
+        "ahora (libres, ocupadas, vencimientos, la cuenta de una habitación, stock, novedades, pedidos). Si me "
+        "preguntás «¿qué hago acá?», te explico la pantalla en la que estás."
     )
     if es_gerencia:
         texto += (
@@ -1342,9 +1352,14 @@ async def responder(
     es_gerencia = operador.rol == ROL_ADMINISTRADOR
     ventanilla = Ventanilla(db)
     await ventanilla.cargar()
+    completa = normalizar(pregunta)
+    if SOBRE_MOT.search(completa):
+        return _charla("capacidades", es_gerencia), completa
+    pregunta = sin_nombre(pregunta)
     original = normalizar(pregunta)
     if not original:
-        return _charla("capacidades", es_gerencia), original
+        # Solo lo llamaron («Mot», «hola Mot»): saluda. Sin nada escrito, cuenta qué puede hacer.
+        return _charla("saludo" if completa else "capacidades", es_gerencia), original
 
     # 0. Saludos, agradecimientos y «¿qué podés hacer?» (antes de corregir: son palabras de conversación).
     for patron, tipo in CHARLA:
@@ -1414,7 +1429,7 @@ async def responder(
     )
     intencion_efectiva = intencion_datos or (anterior_intencion if seguimiento else None)
     fuera_de_alcance = Respuesta(
-        "Eso lo responde el asistente de la gerencia (ingresos, caja y análisis del motel). Yo te ayudo a usar el "
+        "Eso lo ve solo la gerencia (ingresos, caja y análisis del motel). Yo te ayudo a usar el "
         "sistema, te explico cómo funciona y te digo cómo está la ventanilla ahora.",
         "fuera_de_alcance",
         sugerencias=SUGERENCIAS_CONSERJE,

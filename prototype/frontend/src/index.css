@@ -557,3 +557,706 @@
     padding: 16px;
   }
 }
+
+/* Mot, el robotcito del asistente (components/Mot.tsx). El cuerpo toma el color de marca; la pantalla y los ojos no
+   cambian con el tema: es su cara. Con «reducir movimiento» queda quieto pero sigue cambiando de expresión. */
+.mot {
+  --mot-cuerpo: rgb(var(--accent));
+  --mot-pantalla: #0b1220;
+  --mot-ojo: #5eead4;
+  --mot-llama: #fb923c;
+  overflow: visible;
+}
+
+.mot * {
+  transform-box: view-box;
+}
+
+.mot-flotante {
+  filter: drop-shadow(0 6px 6px rgb(0 0 0 / 0.28));
+}
+
+.mot-cuerpo,
+.mot-craneo,
+.mot-oreja,
+.mot-cuello {
+  fill: var(--mot-cuerpo);
+}
+
+.mot-oreja,
+.mot-cuello {
+  filter: brightness(0.8);
+}
+
+.mot-brillo {
+  fill: rgb(255 255 255 / 0.28);
+}
+
+.mot-pantalla {
+  fill: var(--mot-pantalla);
+  stroke: rgb(255 255 255 / 0.35);
+  stroke-width: 1;
+}
+
+.mot-ojo,
+.mot-boca-hablar,
+.mot-puntos circle {
+  fill: var(--mot-ojo);
+}
+
+.mot-trazo path,
+.mot-trazo-solo {
+  fill: none;
+  stroke: var(--mot-ojo);
+  stroke-width: 2.4;
+  stroke-linecap: round;
+}
+
+.mot-antena line {
+  stroke: var(--mot-cuerpo);
+  stroke-width: 2.6;
+  stroke-linecap: round;
+}
+
+.mot-luz,
+.mot-pecho {
+  fill: var(--mot-ojo);
+}
+
+.mot-brazo path {
+  fill: none;
+  stroke: var(--mot-cuerpo);
+  stroke-width: 5;
+  stroke-linecap: round;
+}
+
+.mot-brazo circle {
+  fill: var(--mot-cuerpo);
+  filter: brightness(0.85);
+}
+
+.mot-llama {
+  fill: var(--mot-llama);
+}
+
+.mot-llama-centro {
+  fill: #fde047;
+}
+
+.mot-mejilla {
+  fill: #fb7185;
+}
+
+.mot-chispa {
+  fill: #fde047;
+}
+
+.mot-zeta {
+  fill: rgb(var(--muted));
+  font-weight: 700;
+}
+
+/* Lo que solo se ve en algún estado. */
+.mot-ojos,
+.mot-ojos-felices,
+.mot-ojos-tristes,
+.mot-ojos-dormidos,
+.mot-boca,
+.mot-boca-triste,
+.mot-boca-hablar,
+.mot-puntos,
+.mot-mejilla,
+.mot-chispas,
+.mot-zetas {
+  transition: opacity 140ms ease-out;
+}
+
+.mot-ojos-felices,
+.mot-ojos-tristes,
+.mot-ojos-dormidos,
+.mot-boca-triste,
+.mot-boca-hablar,
+.mot-puntos,
+.mot-mejilla,
+.mot-chispas,
+.mot-zetas {
+  opacity: 0;
+}
+
+/* Siempre: flota con su propulsor, mueve la antena, parpadea, balancea los brazos y le late el pecho. */
+.mot-flotar {
+  animation: mot-flotar 2.8s ease-in-out infinite;
+}
+
+.mot-llama,
+.mot-llama-centro {
+  transform-origin: 36px 73px;
+  animation: mot-llama 0.2s ease-in-out infinite alternate;
+}
+
+.mot-llama-centro {
+  animation-duration: 0.14s;
+}
+
+.mot-cabeza {
+  transform-origin: 36px 50px;
+  transition: transform 220ms ease-out;
+}
+
+.mot-antena {
+  transform-origin: 36px 14px;
+  animation: mot-antena 3.2s ease-in-out infinite;
+}
+
+.mot-luz {
+  animation: mot-luz 2s ease-in-out infinite;
+}
+
+.mot-pecho {
+  transform-origin: 36px 67px;
+  animation: mot-pecho 2s ease-in-out infinite;
+}
+
+.mot-ojos {
+  transform-origin: 36px 31.5px;
+  animation: mot-parpadeo 4.8s linear infinite;
+}
+
+.mot-mirada {
+  transform: translate(var(--mirar-x, 0), var(--mirar-y, 0));
+  transition: transform 110ms ease-out;
+}
+
+.mot-brazo-izq {
+  transform-origin: 24px 60px;
+  animation: mot-brazo-izq 2.8s ease-in-out infinite;
+}
+
+.mot-brazo-der {
+  transform-origin: 48px 60px;
+  animation: mot-brazo-der 2.8s ease-in-out infinite;
+}
+
+.mot-gesto {
+  transform-origin: 36px 75px;
+}
+
+/* En el encabezado del chat solo se mueve lo suave. */
+.mot[viewBox^='4 0'] .mot-flotar {
+  animation: none;
+}
+
+/* Saludando: ojos contentos y agita el brazo. */
+.mot[data-estado='saludando'] .mot-ojos,
+.mot[data-estado='contento'] .mot-ojos {
+  opacity: 0;
+}
+
+.mot[data-estado='saludando'] .mot-ojos-felices,
+.mot[data-estado='contento'] .mot-ojos-felices,
+.mot[data-estado='saludando'] .mot-mejilla,
+.mot[data-estado='contento'] .mot-mejilla {
+  opacity: 1;
+}
+
+.mot[data-estado='saludando'] .mot-brazo-izq,
+.mot[data-gesto='saludo'] .mot-brazo-izq {
+  animation: mot-saludar 0.26s ease-in-out infinite alternate;
+}
+
+.mot[data-estado='saludando'] .mot-cabeza {
+  transform: rotate(-5deg);
+}
+
+/* Pensando: se balancea, los ojos recorren la pantalla, se rasca y la antena titila en ámbar. */
+.mot[data-estado='pensando'] {
+  --mot-ojo: #fbbf24;
+}
+
+.mot[data-estado='pensando'] .mot-boca {
+  opacity: 0;
+}
+
+.mot[data-estado='pensando'] .mot-puntos {
+  opacity: 1;
+}
+
+.mot[data-estado='pensando'] .mot-puntos circle {
+  animation: mot-punto 0.8s ease-in-out infinite;
+}
+
+.mot[data-estado='pensando'] .mot-puntos circle:nth-child(2) {
+  animation-delay: 0.14s;
+}
+
+.mot[data-estado='pensando'] .mot-puntos circle:nth-child(3) {
+  animation-delay: 0.28s;
+}
+
+.mot[data-estado='pensando'] .mot-cabeza {
+  animation: mot-pensar 1.1s ease-in-out infinite;
+}
+
+.mot[data-estado='pensando'] .mot-mirada {
+  animation: mot-escanear 1.1s ease-in-out infinite;
+}
+
+.mot[data-estado='pensando'] .mot-luz {
+  animation-duration: 0.36s;
+}
+
+.mot[data-estado='pensando'] .mot-brazo-der {
+  animation: mot-rascar 0.32s ease-in-out infinite alternate;
+}
+
+/* Hablando: mueve la boca y gesticula. */
+.mot[data-estado='hablando'] .mot-boca {
+  opacity: 0;
+}
+
+.mot[data-estado='hablando'] .mot-boca-hablar {
+  opacity: 1;
+  transform-origin: 36px 40px;
+  animation: mot-hablar 0.13s ease-in-out infinite alternate;
+}
+
+.mot[data-estado='hablando'] .mot-cabeza {
+  animation: mot-asentir 0.5s ease-in-out infinite alternate;
+}
+
+.mot[data-estado='hablando'] .mot-brazo-izq {
+  animation: mot-gesticular-izq 0.4s ease-in-out infinite alternate;
+}
+
+.mot[data-estado='hablando'] .mot-brazo-der {
+  animation: mot-gesticular-der 0.46s ease-in-out infinite alternate;
+}
+
+/* Contento: salta con los brazos arriba y tira chispas. */
+.mot[data-estado='contento'] .mot-gesto {
+  animation: mot-salto 0.7s ease-in-out 3;
+}
+
+.mot[data-estado='contento'] .mot-brazo-izq {
+  animation: mot-festejo-izq 0.2s ease-in-out infinite alternate;
+}
+
+.mot[data-estado='contento'] .mot-brazo-der {
+  animation: mot-festejo-der 0.2s ease-in-out infinite alternate;
+}
+
+.mot[data-estado='contento'] .mot-chispas {
+  opacity: 1;
+}
+
+.mot .mot-chispa,
+.mot .mot-zeta {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.mot[data-estado='contento'] .mot-chispa {
+  animation: mot-chispa 0.8s ease-in-out infinite;
+}
+
+.mot[data-estado='contento'] .mot-chispa:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.mot[data-estado='contento'] .mot-chispa:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+.mot[data-estado='contento'] .mot-chispa:nth-child(4) {
+  animation-delay: 0.6s;
+}
+
+/* Triste: no pudo. Baja la cabeza y el propulsor afloja. */
+.mot[data-estado='triste'] .mot-ojos,
+.mot[data-estado='triste'] .mot-boca {
+  opacity: 0;
+}
+
+.mot[data-estado='triste'] .mot-ojos-tristes,
+.mot[data-estado='triste'] .mot-boca-triste {
+  opacity: 1;
+}
+
+.mot[data-estado='triste'] .mot-cabeza {
+  transform: translateY(1.5px) rotate(4deg);
+}
+
+.mot[data-estado='triste'] .mot-antena {
+  animation: none;
+  transform: rotate(16deg);
+}
+
+.mot[data-estado='triste'] .mot-llama,
+.mot[data-estado='triste'] .mot-llama-centro {
+  animation: none;
+  transform: scale(0.65);
+}
+
+/* Durmiendo: nadie lo usa hace un rato. Queda casi quieto, con la luz apagada. */
+.mot[data-estado='durmiendo'] .mot-flotar {
+  animation-duration: 6s;
+}
+
+.mot[data-estado='durmiendo'] .mot-ojos,
+.mot[data-estado='durmiendo'] .mot-boca {
+  opacity: 0;
+}
+
+.mot[data-estado='durmiendo'] .mot-ojos-dormidos,
+.mot[data-estado='durmiendo'] .mot-zetas {
+  opacity: 1;
+}
+
+.mot[data-estado='durmiendo'] .mot-cabeza {
+  transform: translateY(2px) rotate(7deg);
+}
+
+.mot[data-estado='durmiendo'] .mot-antena {
+  animation: none;
+  transform: rotate(24deg);
+}
+
+.mot[data-estado='durmiendo'] .mot-luz,
+.mot[data-estado='durmiendo'] .mot-pecho {
+  animation: none;
+  opacity: 0.25;
+}
+
+.mot[data-estado='durmiendo'] .mot-llama,
+.mot[data-estado='durmiendo'] .mot-llama-centro {
+  opacity: 0;
+}
+
+.mot[data-estado='durmiendo'] .mot-brazo-izq,
+.mot[data-estado='durmiendo'] .mot-brazo-der {
+  animation: none;
+}
+
+.mot[data-estado='durmiendo'] .mot-zeta {
+  animation: mot-zeta 2.7s ease-in-out infinite;
+}
+
+.mot[data-estado='durmiendo'] .mot-zeta:nth-child(2) {
+  animation-delay: 0.9s;
+}
+
+.mot[data-estado='durmiendo'] .mot-zeta:nth-child(3) {
+  animation-delay: 1.8s;
+}
+
+/* Gestos sueltos. */
+.mot[data-gesto='salto'] .mot-gesto {
+  animation: mot-salto 0.8s ease-in-out;
+}
+
+.mot[data-gesto='voltereta'] .mot-gesto {
+  transform-origin: 36px 44px;
+  animation: mot-voltereta 1s cubic-bezier(0.5, 0, 0.3, 1);
+}
+
+.mot[data-gesto='mirar'] .mot-mirada {
+  animation: mot-curiosear 1.4s ease-in-out;
+}
+
+/* Mot al tocarlo: se aplasta un poco. */
+.mot-boton:active .mot-gesto {
+  transform: scale(1.08, 0.9);
+}
+
+@keyframes mot-flotar {
+  0%,
+  100% {
+    transform: translateY(2px);
+  }
+
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
+@keyframes mot-llama {
+  from {
+    transform: scale(0.9, 0.72);
+  }
+
+  to {
+    transform: scale(1.06, 1.14);
+  }
+}
+
+@keyframes mot-antena {
+  0%,
+  100% {
+    transform: rotate(-8deg);
+  }
+
+  50% {
+    transform: rotate(8deg);
+  }
+}
+
+@keyframes mot-luz {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@keyframes mot-pecho {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(0.82);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+}
+
+@keyframes mot-parpadeo {
+  0%,
+  60%,
+  66%,
+  88%,
+  91%,
+  94%,
+  100% {
+    transform: scaleY(1);
+  }
+
+  63%,
+  89.5%,
+  92.5% {
+    transform: scaleY(0.08);
+  }
+}
+
+@keyframes mot-brazo-izq {
+  0%,
+  100% {
+    transform: rotate(-6deg);
+  }
+
+  50% {
+    transform: rotate(10deg);
+  }
+}
+
+@keyframes mot-brazo-der {
+  0%,
+  100% {
+    transform: rotate(6deg);
+  }
+
+  50% {
+    transform: rotate(-10deg);
+  }
+}
+
+@keyframes mot-saludar {
+  from {
+    transform: rotate(62deg);
+  }
+
+  to {
+    transform: rotate(104deg);
+  }
+}
+
+@keyframes mot-pensar {
+  0%,
+  100% {
+    transform: rotate(-6deg);
+  }
+
+  50% {
+    transform: rotate(6deg);
+  }
+}
+
+@keyframes mot-escanear {
+  0%,
+  100% {
+    transform: translate(-3.6px, -1.5px);
+  }
+
+  50% {
+    transform: translate(3.6px, -1.5px);
+  }
+}
+
+@keyframes mot-punto {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+  }
+
+  30% {
+    transform: translateY(-2.4px);
+  }
+}
+
+@keyframes mot-rascar {
+  from {
+    transform: rotate(-128deg);
+  }
+
+  to {
+    transform: rotate(-108deg);
+  }
+}
+
+@keyframes mot-hablar {
+  from {
+    transform: scaleY(0.25);
+  }
+
+  to {
+    transform: scaleY(1.15);
+  }
+}
+
+@keyframes mot-asentir {
+  from {
+    transform: rotate(-2.5deg);
+  }
+
+  to {
+    transform: translateY(1px) rotate(2.5deg);
+  }
+}
+
+@keyframes mot-gesticular-izq {
+  from {
+    transform: rotate(4deg);
+  }
+
+  to {
+    transform: rotate(48deg);
+  }
+}
+
+@keyframes mot-gesticular-der {
+  from {
+    transform: rotate(-4deg);
+  }
+
+  to {
+    transform: rotate(-48deg);
+  }
+}
+
+@keyframes mot-salto {
+  0%,
+  100% {
+    transform: none;
+  }
+
+  20% {
+    transform: translateY(3px) scale(1.1, 0.86);
+  }
+
+  48% {
+    transform: translateY(-15px) scale(0.96, 1.07);
+  }
+
+  76% {
+    transform: translateY(2px) scale(1.06, 0.92);
+  }
+}
+
+@keyframes mot-festejo-izq {
+  from {
+    transform: rotate(70deg);
+  }
+
+  to {
+    transform: rotate(100deg);
+  }
+}
+
+@keyframes mot-festejo-der {
+  from {
+    transform: rotate(-70deg);
+  }
+
+  to {
+    transform: rotate(-100deg);
+  }
+}
+
+@keyframes mot-chispa {
+  0%,
+  100% {
+    opacity: 0;
+    transform: scale(0.2) rotate(0deg);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1.25) rotate(60deg);
+  }
+}
+
+@keyframes mot-zeta {
+  0% {
+    opacity: 0;
+    transform: translate(-3px, 8px) scale(0.6);
+  }
+
+  30% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate(6px, -10px) scale(1.15);
+  }
+}
+
+@keyframes mot-voltereta {
+  0% {
+    transform: none;
+  }
+
+  18% {
+    transform: translateY(5px) scale(1.06, 0.92);
+  }
+
+  60% {
+    transform: translateY(-16px) rotate(220deg);
+  }
+
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes mot-curiosear {
+  0%,
+  100% {
+    transform: none;
+  }
+
+  20%,
+  42% {
+    transform: translate(-3.6px, 0);
+  }
+
+  58%,
+  80% {
+    transform: translate(3.6px, 1px);
+  }
+}

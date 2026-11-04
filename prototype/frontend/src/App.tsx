@@ -688,7 +688,7 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
               titulo: 'General',
               atajos: [
                 { teclas: ['Ctrl K', '/'], descripcion: 'Buscar una sección, una habitación o una acción' },
-                { teclas: ['A'], descripcion: 'Abrir o cerrar el asistente' },
+                { teclas: ['A'], descripcion: 'Abrir o cerrar a Mot, el asistente' },
                 ...(conGuardiaPropia
                   ? [
                       { teclas: ['N'], descripcion: 'Dejar una novedad para la próxima guardia' },
@@ -704,11 +704,11 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
               atajos: seccionesDelRol.map((s, i) => ({ teclas: [String(i + 1)], descripcion: `Ir a ${s.label}` })),
             },
             {
-              titulo: 'En las listas y el asistente',
+              titulo: 'En las listas y con Mot',
               atajos: [
                 { teclas: ['Tab'], descripcion: 'Pasar de una habitación a la siguiente' },
                 { teclas: ['Enter'], descripcion: 'Abrir la habitación elegida o enviar la pregunta' },
-                { teclas: ['↑'], descripcion: 'Recuperar la pregunta anterior en el asistente' },
+                { teclas: ['↑'], descripcion: 'Recuperar la pregunta anterior en Mot' },
               ],
             },
           ]}

@@ -77,11 +77,6 @@ export default {
         // Latido suave del cronómetro de un turno excedido.
         latido: { '0%, 100%': { opacity: '1' }, '50%': { opacity: '0.55' } },
         // El botón del asistente invita a usarlo con una onda.
-        llamado: {
-          '0%': { boxShadow: '0 0 0 0 rgb(var(--accent) / 0.45)' },
-          '70%': { boxShadow: '0 0 0 14px rgb(var(--accent) / 0)' },
-          '100%': { boxShadow: '0 0 0 0 rgb(var(--accent) / 0)' },
-        },
       },
       // Las entradas usan `backwards`: si el estado final quedara aplicado, el elemento encerraría a los diálogos
       // (`fixed`) que tiene adentro y anularía su propio transform al pasar el mouse.
@@ -98,7 +93,6 @@ export default {
         dibujar: 'dibujar 900ms ease-out both',
         brillo: 'brillo 1.6s linear infinite',
         latido: 'latido 1.6s ease-in-out infinite',
-        llamado: 'llamado 1.8s ease-out 3',
       },
     },
   },

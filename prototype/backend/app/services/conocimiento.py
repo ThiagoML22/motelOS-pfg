@@ -146,7 +146,7 @@ DEFINICIONES: tuple[Definicion, ...] = (
         "cierre_ciego",
         "Cierre ciego",
         (r"cierre ciego", r"\bciego\b", r"rn ?res ?03"),
-        "Mientras la guardia está abierta, nadie (ni el conserje ni la gerencia ni este asistente) ve el total "
+        "Mientras la guardia está abierta, nadie (ni el conserje ni la gerencia ni yo) ve el total "
         "que espera el sistema. El conserje cuenta la gaveta sin saber cuánto «debería» haber, y recién al "
         "confirmar ve la diferencia. Así el recuento es honesto (RN-RES-03).",
         "caja",
@@ -548,7 +548,7 @@ VOCABULARIO_BASE = set(
     # Palabras de conversación que no hay que «corregir» hacia términos del sistema.
     "libera libere liberan liberen liberar liberara desocupa esperar espera habilita registra escribi "
     "cargale cargame agregale agregame sumale sumame anotame anotale poneme pasame dejame liberame abrime ocupame "
-    "cobrale cerrale cliente perdido "
+    "cobrale cerrale cliente perdido mot "
     "especial especiales franja franjas noche noches tarde madrugada mediodia siesta sabado domingo miercoles rige "
     "gracias hola buenas buenos genial perfecto listo barbaro necesito quiero podes puedes sabes ayuda ayudame favor "
     "porfa tardes noches dias entonces bueno claro cliente clientes quejo quedarse momento ahora mismo pagar pagan "

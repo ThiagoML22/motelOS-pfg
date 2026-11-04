@@ -1,10 +1,11 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
-import { ArrowRight, Bot, Check, RotateCcw, Send, X } from 'lucide-react';
+import { ArrowRight, Check, RotateCcw, Send, X } from 'lucide-react';
 import { AccionAsistente, ConfirmacionAsistente, RespuestaAsistente } from '../types';
 import { api, getErrorMessage } from '../services/api';
+import Mot, { GestoMot, sinMovimiento } from './Mot';
 import Button from './ui/Button';
 
-// Asistente de todo el personal: ayuda para usar el sistema y el estado de la ventanilla, y para la gerencia además
+// Mot, el asistente de todo el personal: ayuda para usar el sistema y el estado de la ventanilla, y para la gerencia además
 // el análisis de los datos del motel; todo calculado en su servidor. La conversación vive en un contexto: la misma se
 // ve en el costado de Inteligencia y en el botón flotante de cualquier pantalla, y la paleta (Ctrl+K) le manda preguntas.
 
@@ -32,9 +33,18 @@ const SUGERENCIAS: Record<'gerencia' | 'conserje', string[]> = {
 
 const SALUDO = {
   gerencia:
-    'Hola. Te ayudo a usar el sistema y a entender los datos del motel: ingresos, turnos, ocupación, horarios, categorías, caja, stock o lo que se espera para mañana. También hago lo que me pidas, con tu confirmación: «pasá la 7 a mantenimiento».',
+    '¡Hola! Soy Mot. Te ayudo a usar el sistema y a entender los datos del motel: ingresos, turnos, ocupación, horarios, categorías, caja, stock o lo que se espera para mañana. También hago lo que me pidas, con tu confirmación: «pasá la 7 a mantenimiento».',
   conserje:
-    'Hola. Te ayudo a usar el sistema («¿cómo cobro un turno?»), te digo cómo está la ventanilla («¿qué habitaciones están libres?») y hago lo que me pidas, con tu confirmación: «cargale dos aguas a la 5», «pasá la 7 a limpieza».',
+    '¡Hola! Soy Mot. Te ayudo a usar el sistema («¿cómo cobro un turno?»), te digo cómo está la ventanilla («¿qué habitaciones están libres?») y hago lo que me pidas, con tu confirmación: «cargale dos aguas a la 5», «pasá la 7 a limpieza».',
+};
+
+// Cómo reacciona Mot a lo que acaba de pasar, por un momento.
+type Reaccion = 'hablando' | 'contento' | 'triste';
+const REACCION_FESTEJO_MS = 2400;
+
+const reaccionDe = (intencion: string): Reaccion => {
+  if (intencion === 'charla') return 'contento';
+  return ['desconocida', 'fuera_de_alcance', 'accion:rechazada'].includes(intencion) ? 'triste' : 'hablando';
 };
 
 interface Mensaje {
@@ -50,6 +60,7 @@ interface Mensaje {
 interface Conversacion {
   mensajes: Mensaje[];
   pensando: boolean;
+  reaccion: Reaccion | null;
   sugeridas: string[];
   esGerencia: boolean;
   preguntar: (texto: string) => Promise<void>;
@@ -127,6 +138,14 @@ export const AsistenteProvider: React.FC<{ esGerencia: boolean; children: React.
   const perfil = esGerencia ? 'gerencia' : 'conserje';
   const [mensajes, setMensajes] = useState<Mensaje[]>([{ de: 'asistente', texto: SALUDO[perfil] }]);
   const [pensando, setPensando] = useState(false);
+  const [reaccion, setReaccion] = useState<Reaccion | null>(null);
+  const finReaccion = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const reaccionar = useCallback((tipo: Reaccion, duracion = REACCION_FESTEJO_MS) => {
+    clearTimeout(finReaccion.current);
+    setReaccion(tipo);
+    finReaccion.current = setTimeout(() => setReaccion(null), duracion);
+  }, []);
+  useEffect(() => () => clearTimeout(finReaccion.current), []);
   const [sugeridas, setSugeridas] = useState(SUGERENCIAS[perfil]);
   const ocupado = useRef(false);
   const manejador = useRef<((accion: AccionAsistente) => void) | null>(null);
@@ -157,14 +176,16 @@ export const AsistenteProvider: React.FC<{ esGerencia: boolean; children: React.
       try {
         await ejecutarOrden(pendiente.confirmacion);
         marcarOrden(indice, 'hecha');
+        reaccionar('contento');
         setMensajes((m) => [...m, { de: 'asistente', texto: pendiente.confirmacion.hecho, nuevo: true }]);
         alCambiar.current?.();
       } catch (err) {
         marcarOrden(indice, 'fallida');
+        reaccionar('triste');
         setMensajes((m) => [...m, { de: 'asistente', texto: getErrorMessage(err, 'No se pudo hacer.') }]);
       }
     },
-    [marcarOrden],
+    [marcarOrden, reaccionar],
   );
 
   const cancelar = useCallback(
@@ -208,13 +229,17 @@ export const AsistenteProvider: React.FC<{ esGerencia: boolean; children: React.
         return [...m, { de: 'asistente', texto: respuesta.respuesta, respuesta, nuevo: true, orden: confirmacion ? 'pendiente' : undefined }];
       });
       if (respuesta.sugerencias.length) setSugeridas(respuesta.sugerencias);
+      // Habla mientras se escribe la respuesta (TextoAnimado tarda hasta 900 ms); un rato más si es larga.
+      const tipo = reaccionDe(respuesta.intencion);
+      reaccionar(tipo, tipo === 'hablando' ? Math.min(2600, 700 + respuesta.respuesta.length * 8) : REACCION_FESTEJO_MS);
     } catch (err) {
+      reaccionar('triste');
       setMensajes((m) => [...m, { de: 'asistente', texto: getErrorMessage(err, 'No pude responder ahora. Probá de nuevo.') }]);
     } finally {
       ocupado.current = false;
       setPensando(false);
     }
-  }, [confirmar, cancelar]);
+  }, [confirmar, cancelar, reaccionar]);
 
   const reiniciar = useCallback(() => {
     ultima.current = null;
@@ -230,6 +255,7 @@ export const AsistenteProvider: React.FC<{ esGerencia: boolean; children: React.
       value={{
         mensajes,
         pensando,
+        reaccion,
         sugeridas,
         esGerencia,
         preguntar,
@@ -255,7 +281,7 @@ interface ChatAsistenteProps {
 }
 
 export const ChatAsistente: React.FC<ChatAsistenteProps> = ({ className = 'h-[min(78vh,46rem)]', onCerrar }) => {
-  const { mensajes, pensando, sugeridas, esGerencia, preguntar, ejecutar, reiniciar, preguntasHechas, tituloPantalla, confirmar, cancelar } = useAsistente();
+  const { mensajes, pensando, reaccion, sugeridas, esGerencia, preguntar, ejecutar, reiniciar, preguntasHechas, tituloPantalla, confirmar, cancelar } = useAsistente();
   const [texto, setTexto] = useState('');
   const lista = useRef<HTMLDivElement>(null);
   const entrada = useRef<HTMLInputElement>(null);
@@ -275,13 +301,11 @@ export const ChatAsistente: React.FC<ChatAsistenteProps> = ({ className = 'h-[mi
   };
 
   return (
-    <section className={`flex flex-col overflow-hidden rounded-lg border border-line bg-surface ${className}`} aria-label="Asistente">
+    <section className={`flex flex-col overflow-hidden rounded-lg border border-line bg-surface ${className}`} aria-label="Mot, el asistente">
       <header className="flex items-center gap-2.5 border-b border-line px-4 py-3">
-        <span className="grid h-8 w-8 place-items-center rounded-full bg-accent text-accent-fg">
-          <Bot className="h-4 w-4" aria-hidden="true" />
-        </span>
+        <Mot estado={pensando ? 'pensando' : (reaccion ?? 'reposo')} soloCabeza className="h-9 w-10 shrink-0" />
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-ink">Asistente</p>
+          <p className="text-sm font-semibold text-ink">Mot</p>
           <p className="text-xs text-muted">
             {esGerencia ? 'Ayuda y datos del motel, sin internet' : 'Te ayuda a usar el sistema, sin internet'}
           </p>
@@ -301,7 +325,7 @@ export const ChatAsistente: React.FC<ChatAsistenteProps> = ({ className = 'h-[mi
           <button
             type="button"
             onClick={onCerrar}
-            aria-label="Cerrar el asistente"
+            aria-label="Cerrar a Mot"
             className="press hit rounded-md p-1.5 text-muted hover:bg-surface-2 hover:text-ink"
           >
             <X className="h-4 w-4" aria-hidden="true" />
@@ -410,8 +434,9 @@ export const ChatAsistente: React.FC<ChatAsistenteProps> = ({ className = 'h-[mi
           </div>
         ))}
         {pensando && (
-          <div className="flex justify-start">
-            <div className="flex gap-1 rounded-lg rounded-bl-sm bg-surface-2 px-3 py-3" aria-label="Pensando">
+          <div className="flex items-end justify-start gap-1.5">
+            <Mot estado="pensando" soloCabeza className="h-6 w-7 shrink-0" />
+            <div className="flex gap-1 rounded-lg rounded-bl-sm bg-surface-2 px-3 py-3" aria-label="Mot está pensando">
               {[0, 1, 2].map((i) => (
                 <span key={i} className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted" style={{ animationDelay: `${i * 150}ms` }} />
               ))}
@@ -451,8 +476,8 @@ export const ChatAsistente: React.FC<ChatAsistenteProps> = ({ className = 'h-[mi
               }
             }}
             maxLength={300}
-            placeholder={tituloPantalla ? `Preguntá sobre ${tituloPantalla}…` : 'Escribí tu pregunta…'}
-            aria-label="Pregunta para el asistente"
+            placeholder={tituloPantalla ? `Preguntale a Mot sobre ${tituloPantalla}…` : 'Preguntale a Mot…'}
+            aria-label="Pregunta para Mot"
             className="min-w-0 flex-1 rounded-md border border-line-strong bg-surface px-3 py-2 text-sm text-ink placeholder:text-subtle focus:border-accent focus:ring-1 focus:ring-accent focus-visible:outline-none"
           />
           <Button type="submit" disabled={!texto.trim() || pensando} aria-label="Enviar pregunta">
@@ -471,28 +496,123 @@ interface AsistenteFlotanteProps {
   ocultarEnPantallaAncha: boolean;
 }
 
-// Botón redondo abajo a la derecha que abre el asistente desde cualquier pantalla, para todo el personal.
+const BIENVENIDA_MS = 4200;
+const DORMIRSE_TRAS_MS = 120_000;
+const GESTO_MS = 1300;
+const GESTOS: GestoMot[] = ['salto', 'saludo', 'mirar', 'voltereta', 'mirar', 'saludo'];
+
+// Mot, abajo a la derecha de cualquier pantalla y para todo el personal. Abre el chat, saluda al llegar y al pasarle el
+// mouse, piensa, festeja lo que sale bien y hace algún gesto suelto. Si nadie toca nada se duerme, y entonces deja de
+// moverse: no distrae cuando no hay nadie atendiendo.
 export const AsistenteFlotante: React.FC<AsistenteFlotanteProps> = ({ abierto, onCambiar, ocultarEnPantallaAncha }) => {
-  const { pensando } = useAsistente();
+  const { pensando, reaccion } = useAsistente();
+  const [encima, setEncima] = useState(false);
+  const [bienvenida, setBienvenida] = useState(true);
+  const [dormido, setDormido] = useState(false);
+  const [gesto, setGesto] = useState<GestoMot | null>(null);
+  const dormidoAhora = useRef(false);
+  const finGesto = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  const hacerGesto = useCallback((nuevo: GestoMot) => {
+    if (sinMovimiento()) return;
+    clearTimeout(finGesto.current);
+    setGesto(nuevo);
+    finGesto.current = setTimeout(() => setGesto(null), GESTO_MS);
+  }, []);
+
+  useEffect(() => {
+    const fin = setTimeout(() => setBienvenida(false), BIENVENIDA_MS);
+    return () => {
+      clearTimeout(fin);
+      clearTimeout(finGesto.current);
+    };
+  }, []);
+
+  // Se duerme sin actividad y se despierta de un salto. Moverse por la página no le pide nada a React mientras esté despierto.
+  useEffect(() => {
+    let ultima = Date.now();
+    const actividad = () => {
+      ultima = Date.now();
+      if (dormidoAhora.current) {
+        dormidoAhora.current = false;
+        setDormido(false);
+        hacerGesto('salto');
+      }
+    };
+    const reloj = setInterval(() => {
+      if (!dormidoAhora.current && Date.now() - ultima > DORMIRSE_TRAS_MS) {
+        dormidoAhora.current = true;
+        setDormido(true);
+      }
+    }, 5000);
+    const eventos = ['pointermove', 'pointerdown', 'keydown'] as const;
+    eventos.forEach((e) => window.addEventListener(e, actividad, { passive: true }));
+    return () => {
+      clearInterval(reloj);
+      eventos.forEach((e) => window.removeEventListener(e, actividad));
+    };
+  }, [hacerGesto]);
+
+  // Un gesto suelto cada tanto, a intervalos distintos para que no parezca una máquina.
+  useEffect(() => {
+    if (sinMovimiento()) return;
+    let proximo: ReturnType<typeof setTimeout>;
+    const programar = () => {
+      proximo = setTimeout(() => {
+        if (!dormidoAhora.current && !document.hidden) hacerGesto(GESTOS[Math.floor(Math.random() * GESTOS.length)]);
+        programar();
+      }, 8000 + Math.random() * 12000);
+    };
+    programar();
+    return () => clearTimeout(proximo);
+  }, [hacerGesto]);
+
+  const estado = pensando ? 'pensando' : (reaccion ?? (encima || bienvenida ? 'saludando' : dormido ? 'durmiendo' : 'reposo'));
+  const burbuja = abierto
+    ? null
+    : pensando
+      ? 'Pensando…'
+      : reaccion === 'contento'
+        ? '¡Listo!'
+        : bienvenida
+          ? '¡Hola! Soy Mot'
+          : encima
+            ? '¿Te ayudo?'
+            : null;
+
   return (
     <div className={`print:hidden ${ocultarEnPantallaAncha ? 'xl:hidden' : ''}`}>
       {abierto && (
-        <div className="fixed inset-x-3 bottom-24 z-40 animate-pop-in sm:inset-x-auto sm:right-6 sm:w-[24rem]">
+        <div className="fixed inset-x-3 bottom-[6.5rem] z-40 animate-pop-in sm:inset-x-auto sm:right-6 sm:w-[24rem]">
           <ChatAsistente className="h-[min(70vh,40rem)] shadow-panel" onCerrar={() => onCambiar(false)} />
         </div>
       )}
       <button
         type="button"
         onClick={() => onCambiar(!abierto)}
+        onPointerEnter={() => setEncima(true)}
+        onPointerLeave={() => setEncima(false)}
+        onFocus={() => setEncima(true)}
+        onBlur={() => setEncima(false)}
         aria-expanded={abierto}
-        aria-label={abierto ? 'Cerrar el asistente' : 'Abrir el asistente'}
-        title="Asistente"
-        className={`press fixed bottom-6 right-6 z-40 flex h-14 items-center gap-2 rounded-full bg-accent px-5 text-sm font-medium text-accent-fg shadow-panel transition-transform hover:-translate-y-0.5 hover:bg-accent-hover ${
-          abierto ? '' : 'animate-llamado'
-        }`}
+        aria-label={abierto ? 'Cerrar a Mot' : 'Abrir a Mot, el asistente'}
+        title="Mot"
+        className="mot-boton fixed bottom-2 right-4 z-40 h-[5.75rem] w-[4.5rem] animate-pop-in rounded-2xl"
       >
-        {abierto ? <X className="h-5 w-5" aria-hidden="true" /> : <Bot className="h-5 w-5" aria-hidden="true" />}
-        <span className="hidden sm:inline">{abierto ? 'Cerrar' : pensando ? 'Pensando…' : 'Asistente'}</span>
+        <Mot estado={estado} gesto={estado === 'reposo' ? gesto : null} seguirCursor className="mot-flotante h-full w-full" />
+        {abierto && (
+          <span className="absolute -right-1 top-3 grid h-6 w-6 animate-pop-in place-items-center rounded-full bg-ink text-surface shadow-panel">
+            <X className="h-3.5 w-3.5" aria-hidden="true" />
+          </span>
+        )}
+        {burbuja && (
+          <span
+            key={burbuja}
+            className="pointer-events-none absolute right-full top-2 mr-1 origin-bottom-right animate-pop-in whitespace-nowrap rounded-2xl rounded-br-sm border border-line bg-surface px-3 py-1.5 text-sm font-medium text-ink shadow-panel"
+          >
+            {burbuja}
+          </span>
+        )}
       </button>
     </div>
   );
