@@ -13,6 +13,7 @@ from app.models.articulo import Articulo
 from app.models.categoria import CategoriaHabitacion
 from app.models.consumo import Consumo
 from app.models.estadia_activa import EstadiaActiva
+from app.models.evento_habitacion import COBRO, TURNO
 from app.models.habitacion import Habitacion
 from app.models.operador import Operador
 from app.models.pago import Pago
@@ -27,6 +28,7 @@ from app.schemas.turno import (
     TurnoResponse,
     TurnoResumen,
 )
+from app.services import rotacion
 from app.services.caja import guardia_del_operador
 from app.services.configuracion import tarifa_vigente
 from app.services.estadia import cargar_estadia_base, cargar_nombres_de_apertura, cargar_patentes
@@ -77,11 +79,11 @@ async def create_turno(
     db.add(nuevo_turno)
     patente = (turno_in.identificador_vehicular or "").strip() or None
     try:
+        await db.flush()
         if patente:
             # RNF-08: la patente vive en la estadía activa, no en el turno inmutable.
-            await db.flush()
             db.add(EstadiaActiva(turno_id=nuevo_turno.id, identificador_vehicular=patente))
-        habitacion.estado = "Ocupada"
+        await rotacion.cambiar_estado(db, habitacion, "Ocupada", operador, TURNO, nuevo_turno.id)
         await db.commit()
     except IntegrityError:
         # RN-EXI-01: el índice turnos_uno_en_curso_por_habitacion deja pasar un solo turno en curso.
@@ -252,7 +254,7 @@ async def cerrar_turno(
     hab_res = await db.execute(select(Habitacion).where(Habitacion.id == turno.habitacion_id))
     habitacion = hab_res.scalars().first()
     if habitacion:
-        habitacion.estado = "En Limpieza"
+        await rotacion.cambiar_estado(db, habitacion, "En Limpieza", operador, COBRO, turno.id)
 
     await db.commit()
     await db.refresh(turno)

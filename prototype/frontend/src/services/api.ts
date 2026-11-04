@@ -20,13 +20,16 @@ import {
   Guardia,
   HabitacionConDetalles,
   HabitacionConfiguracion,
+  LineaDeTiempoDatos,
   MarcaPublica,
   MedioPago,
   MetricasCaja,
+  MotivoPerdida,
   Novedad,
   OperadorEstado,
   Pedido,
   Perfil,
+  ProximaLibre,
   ResumenCategoria,
   ResumenMes,
   RespuestaAsistente,
@@ -178,6 +181,15 @@ export const api = {
       throw err;
     }
   },
+
+  // --- Rotación (migración 011): próxima libre, línea de tiempo y clientes perdidos ---
+  getProximaLibre: async (): Promise<ProximaLibre> => (await http.get('/habitaciones/proxima-libre')).data,
+
+  getLineaDeTiempo: async (dia?: string): Promise<LineaDeTiempoDatos> =>
+    (await http.get('/habitaciones/linea-de-tiempo', { params: { dia } })).data,
+
+  registrarClientePerdido: async (motivo: MotivoPerdida, categoria_id: number | null): Promise<{ en_la_guardia: number }> =>
+    (await http.post('/clientes-perdidos/', { motivo, categoria_id })).data,
 
   // --- Novedades de guardia (migración 009) ---
   getNovedades: async (limite = 30): Promise<Novedad[]> => (await http.get('/novedades/', { params: { limite } })).data,

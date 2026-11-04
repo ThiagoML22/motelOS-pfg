@@ -407,6 +407,37 @@ DEFINICIONES: tuple[Definicion, ...] = (
         extra="rebaja oferta cortesia gratis",
         situaciones=(r"\b(descuento|rebaja|cortesia|gratis|regalar)",),
     ),
+    Definicion(
+        "proxima_libre",
+        "La próxima libre",
+        (r"proxima libre", r"proxima disponible"),
+        "Es la estimación de cuándo queda disponible cada habitación. Mira cuánto lleva el turno, cuánto les faltó a "
+        "las estadías de esa categoría que llegaron a ese tiempo, y suma una limpieza típica. Aparece en Habitaciones "
+        "cuando quedan dos disponibles o menos. Es una estimación: el cliente puede irse antes o quedarse más.",
+        "dashboard",
+        extra="estimacion espera cuanto falta se libera",
+    ),
+    Definicion(
+        "cliente_perdido",
+        "Un cliente perdido",
+        (r"clientes? perdidos?",),
+        "Es el cliente que llegó y se fue sin quedarse: no había lugar, no quiso esperar o le pareció caro. El "
+        "conserje lo registra con «Se fue un cliente» en Habitaciones, sin ningún dato de la persona. Así la gerencia "
+        "ve la demanda que no se atendió, que de otro modo no queda en ninguna parte.",
+        "dashboard",
+        extra="demanda perdida rechazado lleno completo",
+    ),
+    Definicion(
+        "limpieza_sin_turno",
+        "Una limpieza sin turno",
+        (r"limpiezas? sin (un )?turno",),
+        "Es una habitación que pasó a limpieza a mano, sin que se haya cobrado un turno antes. Puede ser un repaso de "
+        "rutina o una estadía que no se registró: por eso la inteligencia las muestra y dice quién las marcó, pero no "
+        "alcanza para sacar conclusiones. Conviene cruzarlas con las novedades y con el stock del minibar.",
+        "inteligencia",
+        GERENCIA,
+        extra="fantasma registro manual rotacion",
+    ),
 )
 
 # Sinónimos: se reemplazan antes de interpretar la pregunta.
@@ -463,6 +494,7 @@ VOCABULARIO_BASE = set(
     "comprobante tolerancia fraccion pernocte cuanto cuantos cuantas cuales vence vencimiento excedidas sabados "
     "domingos viernes lunes martes miercoles jueves facturo cobramos vendimos cerveza agua gaseosa chocolate "
     # Palabras de conversación que no hay que «corregir» hacia términos del sistema.
+    "libera libere liberan liberen liberar liberara desocupa esperar espera "
     "gracias hola buenas buenos genial perfecto listo barbaro necesito quiero podes puedes sabes ayuda ayudame favor "
     "porfa tardes noches dias entonces bueno claro cliente clientes quejo quedarse momento ahora mismo pagar pagan "
     "cobrar abrir cerrar dejar poner sacar cambiar agregar quiere quieren puede tiene tienen hacer llego llegaron "
@@ -564,9 +596,15 @@ def definicion(texto: str, es_gerencia: bool) -> Definicion | None:
         return None
     resto = PREGUNTA_DEFINICION.sub("", texto).strip()
     candidatas = [d for d in DEFINICIONES if d.roles == TODOS or (d.roles == GERENCIA) == es_gerencia]
+    # La coincidencia más larga: «limpieza sin turno» es más precisa que «turno».
+    elegida, largo = None, 0
     for d in candidatas:
-        if any(re.search(p, resto) for p in d.patrones):
-            return d
+        for patron in d.patrones:
+            coincidencia = re.search(patron, resto)
+            if coincidencia and len(coincidencia.group(0)) > largo:
+                elegida, largo = d, len(coincidencia.group(0))
+    if elegida is not None:
+        return elegida
     mejores = buscar(resto, candidatas, es_gerencia, 1)
     return mejores[0][1] if mejores and mejores[0][0] >= 0.5 else None
 

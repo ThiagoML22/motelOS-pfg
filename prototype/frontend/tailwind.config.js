@@ -52,6 +52,12 @@ export default {
           from: { opacity: '0', transform: 'translateY(10px) scale(0.985)' },
           to: { opacity: '1', transform: 'translateY(0) scale(1)' },
         },
+        // Los tramos de la línea de tiempo crecen desde su inicio; el reloj de arena se da vuelta cada tanto.
+        tramo: { from: { transform: 'scaleX(0)', opacity: '0.4' }, to: { transform: 'scaleX(1)', opacity: '1' } },
+        reloj: {
+          '0%, 70%': { transform: 'rotate(0deg)' },
+          '85%, 100%': { transform: 'rotate(180deg)' },
+        },
         // Una habitación que cambió de estado se ilumina un momento con el acento.
         destello: {
           '0%': { boxShadow: '0 0 0 0 rgb(var(--accent) / 0.55)' },
@@ -79,6 +85,8 @@ export default {
         'pop-in': 'pop-in 200ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards',
         'toast-in': 'toast-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both',
         'tarjeta-in': 'tarjeta-in 320ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards',
+        tramo: 'tramo 520ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards',
+        reloj: 'reloj 2.8s ease-in-out infinite',
         destello: 'destello 1.4s ease-out',
         crecer: 'crecer 650ms cubic-bezier(0.2, 0.8, 0.2, 1) both',
         dibujar: 'dibujar 900ms ease-out both',

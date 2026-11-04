@@ -12,6 +12,7 @@ from app.api.v1.endpoints import (
     asistente,
     auth,
     categorias,
+    clientes_perdidos,
     configuracion,
     guardias,
     habitaciones,
@@ -90,6 +91,10 @@ app.include_router(categorias.router, prefix="/api/v1/categorias", tags=["habita
 app.include_router(novedades.router, prefix="/api/v1/novedades", tags=["novedades"], dependencies=con_sesion)
 # Pedidos de reposición (migración 010): los arma la gerencia; los recibe el conserje o la gerencia.
 app.include_router(pedidos.router, prefix="/api/v1/pedidos", tags=["inventario"], dependencies=con_sesion)
+# Clientes perdidos (migración 011): los registra el conserje en su guardia; los analiza la inteligencia.
+app.include_router(
+    clientes_perdidos.router, prefix="/api/v1/clientes-perdidos", tags=["habitaciones"], dependencies=con_sesion
+)
 # Asistente para todo el personal (ayuda y ventanilla); a la gerencia además le responde el análisis de datos.
 app.include_router(asistente.router, prefix="/api/v1/asistente", tags=["asistente"], dependencies=con_sesion)
 # Mi perfil: cualquier sesión, también la plataforma.

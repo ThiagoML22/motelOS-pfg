@@ -1,10 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { BedDouble, Keyboard, LogOut, MessageSquarePlus, Moon, UserRound, WifiOff } from 'lucide-react';
+import { BedDouble, Keyboard, LogOut, MessageSquarePlus, Moon, Rows3, UserRound, WifiOff } from 'lucide-react';
 import { Arqueo, Categoria, HabitacionConDetalles, Novedad, RoomStatus, Sesion, TipoCliente } from './types';
 import { AsistenteFlotante, AsistenteProvider, useAsistente } from './components/Asistente';
 import AtajosTeclado, { escribiendo } from './components/AtajosTeclado';
 import CentroAvisos from './components/CentroAvisos';
+import LineaDeTiempo, {
+  guardarVistaHabitaciones,
+  leerVistaHabitaciones,
+  SelectorVista,
+  VistaHabitaciones,
+} from './components/LineaDeTiempo';
 import PaletaComandos, { Comando } from './components/PaletaComandos';
+import { AvisoProximaLibre, BotonClientePerdido } from './components/ProximaLibre';
 import { NovedadesCard, NuevaNovedadModal } from './components/NovedadesPanel';
 import { elegirTema, modoActual } from './utils/tema';
 import { api, esSinRespuesta, getErrorMessage, onSesionVencida } from './services/api';
@@ -134,6 +141,14 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
       // sin almacenamiento local, vuelve a «por número» al recargar
     }
   };
+  // Habitaciones en grilla o en línea de tiempo: se recuerda en el puesto.
+  const [vistaHabitaciones, setVistaHabitaciones] = useState<VistaHabitaciones>(leerVistaHabitaciones);
+  const cambiarVistaHabitaciones = useCallback((vista: VistaHabitaciones) => {
+    setVistaHabitaciones(vista);
+    guardarVistaHabitaciones(vista);
+  }, []);
+  const vistaActual = useRef(vistaHabitaciones);
+  vistaActual.current = vistaHabitaciones;
   // Registro de actividad: entradas de los conserjes que la gerencia todavía no vio.
   const [pendientes, setPendientes] = useState(0);
   // Novedades de guardia (migración 009), la paleta de comandos y una pregunta enviada desde ella al asistente.
@@ -195,13 +210,17 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
       else if (tecla === '?') setAtajos(true);
       else if (tecla === 'a') setAsistenteAbierto((v) => !v);
       else if (tecla === 'n' && conGuardiaPropia) setNuevaNovedad(true);
+      else if (tecla === 'l' && conGuardiaPropia) {
+        setActiveView('dashboard');
+        cambiarVistaHabitaciones(vistaActual.current === 'grilla' ? 'linea' : 'grilla');
+      }
       else if (seccion) setActiveView(seccion.view);
       else return;
       e.preventDefault();
     };
     window.addEventListener('keydown', teclas);
     return () => window.removeEventListener('keydown', teclas);
-  }, [seccionesDelRol, conGuardiaPropia]);
+  }, [seccionesDelRol, conGuardiaPropia, cambiarVistaHabitaciones]);
 
   // RNF-09: al volver la conexión se traen la sesión, la grilla y el contador del registro (en menos de 5 s).
   const conexion = useConexion(async () => {
@@ -281,6 +300,17 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
         });
       }
       lista.push({ id: 'novedad', titulo: 'Dejar una novedad', grupo: 'Acciones', icono: MessageSquarePlus, claves: 'nota aviso', accion: () => setNuevaNovedad(true) });
+      lista.push({
+        id: 'linea-tiempo',
+        titulo: 'Línea de tiempo de las habitaciones',
+        grupo: 'Ir a',
+        icono: Rows3,
+        claves: 'historial cronograma 24 horas',
+        accion: () => {
+          setActiveView('dashboard');
+          cambiarVistaHabitaciones('linea');
+        },
+      });
     }
     lista.push({
       id: 'tema',
@@ -294,7 +324,7 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
     lista.push({ id: 'salir', titulo: 'Cerrar sesión', grupo: 'Acciones', icono: LogOut, claves: 'salir', accion: onSalir });
     return lista;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sesion.operador.rol, conGuardiaPropia, habitaciones, categorias, onSalir, paleta]);
+  }, [sesion.operador.rol, conGuardiaPropia, habitaciones, categorias, onSalir, paleta, cambiarVistaHabitaciones]);
 
   // Botones que propone el asistente: ir a una pantalla permitida para el rol o abrir una habitación.
   const habitacionesRef = useRef(habitaciones);
@@ -367,6 +397,11 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
   const filtradas = filtro === 'Todas' ? deCategoria : deCategoria.filter((h) => h.estado === filtro);
   const visibles = orden === 'numero' ? filtradas : ordenarPorVencimiento(filtradas, categorias, now);
   const categoriasConHabitaciones = categorias.filter((c) => habitaciones.some((h) => h.categoria_id === c.id));
+  const disponibles = habitaciones.filter((h) => h.estado === 'Libre').length;
+  const firmaEstados = habitaciones.map((h) => `${h.id}:${h.estado}`).join();
+  // Registrar un cliente que se fue es de quien atiende; la gerencia mira.
+  const puedeRegistrar = !esGerencia && conGuardiaPropia;
+  const conPocoLugar = carga === 'ok' && habitaciones.length > 0 && disponibles <= 2;
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -412,6 +447,8 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
                 </p>
               </div>
 
+              <div className="flex flex-wrap items-center gap-3">
+              {vistaHabitaciones === 'grilla' && (
               <div role="group" aria-label="Filtrar por estado" className="flex flex-wrap items-center gap-1.5">
                 <button
                   type="button"
@@ -452,9 +489,36 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
                     <option value="vencimiento">por vencimiento</option>
                   </select>
                 </label>
+                {puedeRegistrar && !conPocoLugar && <BotonClientePerdido categorias={categoriasConHabitaciones} />}
+              </div>
+              )}
+              <SelectorVista vista={vistaHabitaciones} onCambiar={cambiarVistaHabitaciones} />
               </div>
             </div>
 
+            {conPocoLugar && (
+              <AvisoProximaLibre
+                firma={firmaEstados}
+                categorias={categoriasConHabitaciones}
+                puedeRegistrar={puedeRegistrar}
+                onAbrir={(id) => {
+                  setSelectedId(id);
+                  setOpenAddProduct(false);
+                }}
+              />
+            )}
+
+            {vistaHabitaciones === 'linea' && (
+              <LineaDeTiempo
+                onAbrir={(id) => {
+                  setSelectedId(id);
+                  setOpenAddProduct(false);
+                }}
+              />
+            )}
+
+            {vistaHabitaciones === 'grilla' && (
+            <>
             {/* Filtro por categoría: solo si el motel tiene más de una en uso. Cada una muestra su ocupación. */}
             {categoriasConHabitaciones.length > 1 && (
               <div role="group" aria-label="Filtrar por categoría" className="-mt-2 mb-5 flex flex-wrap items-center gap-1.5">
@@ -525,6 +589,8 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
                 onChangeEstado={handleEstadoChange}
               />
             )}
+            </>
+            )}
           </>
         )}
 
@@ -578,7 +644,12 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
               atajos: [
                 { teclas: ['Ctrl K', '/'], descripcion: 'Buscar una sección, una habitación o una acción' },
                 { teclas: ['A'], descripcion: 'Abrir o cerrar el asistente' },
-                ...(conGuardiaPropia ? [{ teclas: ['N'], descripcion: 'Dejar una novedad para la próxima guardia' }] : []),
+                ...(conGuardiaPropia
+                  ? [
+                      { teclas: ['N'], descripcion: 'Dejar una novedad para la próxima guardia' },
+                      { teclas: ['L'], descripcion: 'Cambiar entre la grilla y la línea de tiempo' },
+                    ]
+                  : []),
                 { teclas: ['?'], descripcion: 'Ver estos atajos' },
                 { teclas: ['Esc'], descripcion: 'Cerrar el diálogo o el panel abierto' },
               ],

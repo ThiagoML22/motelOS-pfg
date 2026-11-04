@@ -86,12 +86,116 @@
   filter: invert(1) hue-rotate(180deg) brightness(1.15);
 }
 
-/* Cambio de tema: la página nueva aparece en un círculo que crece desde la lunita (View Transitions). Donde el navegador
-   no lo soporta, los colores se funden en 400 ms. */
-::view-transition-old(root),
-::view-transition-new(root) {
+/* Cambio de tema: la página nueva aparece en una onda de borde suave que nace del botón (View Transitions). Un resplandor
+   viaja con el borde y, al anochecer, se encienden estrellas. El botón va por encima, para verlo cambiar. Donde el
+   navegador no lo soporta, los colores se funden en 400 ms. */
+@property --tema-r {
+  syntax: '<length>';
+  inherits: true;
+  initial-value: 0px;
+}
+
+@keyframes tema-onda {
+  from {
+    --tema-r: 0px;
+  }
+  to {
+    --tema-r: var(--tema-radio);
+  }
+}
+
+::view-transition-old(root) {
   animation: none;
   mix-blend-mode: normal;
+  z-index: 1;
+}
+
+::view-transition-new(root) {
+  animation: tema-onda var(--tema-duracion) cubic-bezier(0.45, 0, 0.2, 1) both;
+  mix-blend-mode: normal;
+  z-index: 2;
+  -webkit-mask-image: radial-gradient(
+    circle at var(--tema-x) var(--tema-y),
+    #000 calc(var(--tema-r) - 200px),
+    transparent var(--tema-r)
+  );
+  mask-image: radial-gradient(
+    circle at var(--tema-x) var(--tema-y),
+    #000 calc(var(--tema-r) - 200px),
+    transparent var(--tema-r)
+  );
+}
+
+::view-transition-group(tema-resplandor) {
+  animation: none;
+  z-index: 3;
+}
+
+::view-transition-new(tema-resplandor) {
+  animation: none;
+}
+
+::view-transition-group(tema-boton) {
+  animation: none;
+  z-index: 4;
+}
+
+::view-transition-old(tema-boton) {
+  display: none;
+}
+
+::view-transition-new(tema-boton) {
+  animation: none;
+}
+
+.tema-resplandor {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  overflow: hidden;
+  pointer-events: none;
+  view-transition-name: tema-resplandor;
+  animation: tema-onda var(--tema-duracion) cubic-bezier(0.45, 0, 0.2, 1) both;
+  background: radial-gradient(
+    circle at var(--tema-x) var(--tema-y),
+    transparent calc(var(--tema-r) - 230px),
+    var(--tema-brillo) calc(var(--tema-r) - 110px),
+    transparent var(--tema-r)
+  );
+}
+
+.tema-resplandor-claro {
+  --tema-brillo: rgb(255 190 100 / 0.42);
+}
+
+.tema-resplandor-oscuro {
+  --tema-brillo: rgb(120 145 255 / 0.32);
+}
+
+.tema-resplandor i {
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  border-radius: 9999px;
+  background: white;
+  box-shadow: 0 0 6px 1px rgb(200 215 255 / 0.9);
+  opacity: 0;
+  animation: tema-estrella 620ms ease-out forwards;
+}
+
+@keyframes tema-estrella {
+  0% {
+    opacity: 0;
+    transform: scale(0.2);
+  }
+  35% {
+    opacity: 1;
+    transform: scale(1.3);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.6);
+  }
 }
 
 .tema-en-transicion,
@@ -114,9 +218,10 @@
   height: 40px;
   border-radius: 9999px;
   color: rgb(var(--muted));
+  view-transition-name: tema-boton;
   transition:
     background-color 200ms ease,
-    color 200ms ease,
+    color 400ms ease,
     transform 150ms ease;
 }
 
@@ -129,40 +234,66 @@
   transform: scale(0.86);
 }
 
-.tema-boton .astro {
-  position: absolute;
-  transition:
-    transform 600ms cubic-bezier(0.34, 1.56, 0.64, 1),
-    opacity 300ms ease;
-}
-
-/* Claro: se ve la luna (invita a pasar a oscuro). Oscuro: se ve el sol. */
-.tema-boton .luna {
-  transform: rotate(0deg) scale(1);
-  opacity: 1;
-}
-
-.tema-boton .sol {
-  transform: rotate(-120deg) scale(0.3);
-  opacity: 0;
-}
-
-.tema-boton[data-modo='oscuro'] .luna {
-  transform: rotate(120deg) scale(0.3);
-  opacity: 0;
-}
-
-.tema-boton[data-modo='oscuro'] .sol {
-  transform: rotate(0deg) scale(1);
-  opacity: 1;
+/* Modo oscuro: el sol, en su color. */
+.tema-boton[data-modo='oscuro'] {
   color: rgb(236 183 82);
 }
 
-/* La luna se balancea al pasar el mouse y sus estrellas titilan; el sol gira sus rayos. */
-.tema-boton:hover .luna .cuerpo {
-  animation: luna-balanceo 900ms ease-in-out;
-  transform-origin: center;
+.tema-boton[data-modo='oscuro']:hover {
+  color: rgb(246 200 110);
+}
+
+/* Un solo astro: la sombra recorta la luna; al correrse queda el disco del sol, que se achica para dejar lugar a los
+   rayos. Todo con un rebote leve. */
+.tema-boton .astro {
+  overflow: visible;
+  transition: transform 700ms cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+
+.tema-boton[data-modo='oscuro'] .astro {
+  transform: rotate(90deg);
+}
+
+.tema-boton .disco,
+.tema-boton .sombra,
+.tema-boton .rayos {
   transform-box: fill-box;
+  transform-origin: center;
+  transition:
+    transform 700ms cubic-bezier(0.34, 1.4, 0.64, 1),
+    opacity 350ms ease;
+}
+
+.tema-boton .sombra {
+  transform: translate(0, 0);
+}
+
+.tema-boton[data-modo='oscuro'] .sombra {
+  transform: translate(10px, -10px);
+}
+
+.tema-boton .disco {
+  transform: scale(1);
+}
+
+.tema-boton[data-modo='oscuro'] .disco {
+  transform: scale(0.56);
+}
+
+.tema-boton .rayos {
+  opacity: 0;
+  transform: scale(0.45) rotate(-60deg);
+}
+
+.tema-boton[data-modo='oscuro'] .rayos {
+  opacity: 1;
+  transform: scale(1) rotate(0deg);
+  transition-delay: 120ms;
+}
+
+/* La luna se balancea al pasar el mouse y sus estrellas titilan; el sol gira sus rayos. */
+.tema-boton[data-modo='claro']:hover .astro {
+  animation: luna-balanceo 900ms ease-in-out;
 }
 
 .tema-boton .estrella {
@@ -171,20 +302,20 @@
   transform-box: fill-box;
 }
 
-.tema-boton:hover .estrella,
-.tema-boton:focus-visible .estrella {
+.tema-boton[data-modo='claro']:hover .estrella,
+.tema-boton[data-modo='claro']:focus-visible .estrella {
   animation: titilar 1200ms ease-in-out infinite;
 }
 
-.tema-boton:hover .estrella-2 {
+.tema-boton[data-modo='claro']:hover .estrella-2 {
   animation-delay: 300ms;
 }
 
-.tema-boton:hover .estrella-3 {
+.tema-boton[data-modo='claro']:hover .estrella-3 {
   animation-delay: 600ms;
 }
 
-.tema-boton:hover .rayos {
+.tema-boton[data-modo='oscuro']:hover .rayos-giro {
   animation: girar 6s linear infinite;
   transform-origin: center;
   transform-box: fill-box;

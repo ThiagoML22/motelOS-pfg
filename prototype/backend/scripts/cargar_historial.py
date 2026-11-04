@@ -5,7 +5,9 @@ Por cada establecimiento de la demo genera guardias de 8 h ya arqueadas, con sus
   y un leve crecimiento a lo largo del período;
 - estadías por categoría con la tarifa vigente (sobreturnos, algún pernocte con tope) y limpieza entre turnos;
 - arqueos casi siempre correctos, con más faltantes en uno de los conserjes y una habitación que se usa poco:
-  así la detección de anomalías tiene algo real para mostrar.
+  así la detección de anomalías tiene algo real para mostrar;
+- el historial de estados de cada habitación y los clientes que se fueron sin quedarse (no todos: el conserje no
+  registra a todos), con algunas limpiezas sin turno y un par de arreglos, para la línea de tiempo y el análisis.
 
 El pasado no se puede escribir por la aplicación: los triggers de la base (RN-RES-01 y RN-RES-02) rechazan cobros en
 guardias cerradas y recalculan el arqueo con la hora actual. Por eso el script corre como dueño de las tablas y, solo
@@ -34,9 +36,11 @@ from app.core.inquilino import CLAVE
 from app.models.arqueo import ArqueoCaja
 from app.models.articulo import Articulo
 from app.models.categoria import CategoriaHabitacion
+from app.models.cliente_perdido import ESPERA, PRECIO, SIN_LUGAR, ClientePerdido
 from app.models.configuracion import ConfiguracionCaja
 from app.models.consumo import Consumo
 from app.models.establecimiento import Establecimiento
+from app.models.evento_habitacion import COBRO, LIBERAR, MANUAL, TURNO, EventoHabitacion
 from app.models.guardia import Guardia
 from app.models.habitacion import Habitacion
 from app.models.novedad import Novedad
@@ -67,6 +71,12 @@ FALTANTES = (500, 1000, 1000, 1500, 2000, 3000, 5000)
 SOBRANTES = (200, 500, 500, 1000)
 # Días de stock que quedan al final, en rotación: algunos artículos quedan al borde de agotarse.
 COBERTURA_DIAS = (1.5, 4, 9, 14, 22, 35)
+# Parte de los clientes que se fueron que el conserje llega a registrar, y parte de los que entran que preguntan el
+# precio y se van.
+REGISTRADOS = 0.8
+SE_VAN_POR_PRECIO = 0.012
+# Limpiezas sin turno antes (repasos o estadías sin registrar), la mayoría del conserje más desprolijo.
+LIMPIEZAS_SIN_TURNO = 7
 
 
 @dataclass
@@ -121,13 +131,17 @@ async def generar_historial(
     semilla: int = 7,
     intensidad: float = 1.0,
     habitacion_poco_usada: int | None = None,
+    arreglos: int = 0,
 ) -> dict[str, int]:
     """Genera `dias` días de operación que terminan en `hasta` (por defecto, el comienzo de la franja actual).
 
     La sesión debe estar asociada a un establecimiento (session.info). Devuelve cuántas filas creó de cada tipo.
+    `arreglos` habitaciones pasan unas horas en mantenimiento durante la última semana.
     """
     zona = ZoneInfo(settings.ZONA_HORARIA)
     rng = random.Random(semilla)
+    # Lo que se agrega por encima de la operación usa su propia secuencia: no cambia los turnos que salen de `semilla`.
+    rng_extra = random.Random(semilla + 1)
     fin_periodo = inicio_de_franja(hasta or datetime.now(UTC), zona)
     inicio_periodo = fin_periodo - timedelta(days=dias)
 
@@ -205,6 +219,13 @@ async def generar_historial(
     llegadas.sort()
 
     libre_desde = {h.id: inicio_periodo for h in habitaciones}
+    # Tramos en los que cada habitación estuvo ocupada o en limpieza: en los huecos caben las limpiezas sin turno.
+    tomada: dict[int, list[tuple[datetime, datetime]]] = {h.id: [] for h in habitaciones}
+    pendientes_arreglo = []
+    for i in range(arreglos):
+        h = habitaciones[(i * 5 + 3) % len(habitaciones)]
+        desde_arreglo = fin_periodo - timedelta(days=2 + i * 2, hours=rng_extra.randint(1, 9))
+        pendientes_arreglo.append((desde_arreglo, h, timedelta(hours=rng_extra.randint(4, 9))))
     por_categoria: dict[int, list[Habitacion]] = {}
     for h in habitaciones:
         if h.categoria_id in tarifas:
@@ -217,9 +238,53 @@ async def generar_historial(
     premium = max(precio, key=precio.get) if len(precio) > 1 else None
     pesos_articulo = [1.6 if i < 3 else 0.4 + (i * 37 % 10) / 8 for i in range(len(articulos))]
     consumido = {a.id: 0 for a in articulos}
-    contador = {"turnos": 0, "consumos": 0, "pagos": 0, "guardias": len(guardias), "arqueos": 0, "perdidos": 0}
+    contador = {
+        "turnos": 0,
+        "consumos": 0,
+        "pagos": 0,
+        "guardias": len(guardias),
+        "arqueos": 0,
+        "perdidos": 0,
+        "registrados": 0,
+    }
+
+    def perdido(momento: datetime, motivo: str, categoria_id: int | None) -> None:
+        guardia = guardia_en(momento)
+        db.add(
+            ClientePerdido(
+                motivo=motivo,
+                categoria_id=categoria_id,
+                operador_id=guardia.operador.id,
+                guardia_id=guardia.modelo.id,
+                creado_en=momento.astimezone(UTC),
+            )
+        )
+        contador["registrados"] += 1
+
+    def evento(habitacion_id, anterior, nuevo, origen, momento, turno_id=None, operador=None) -> None:
+        db.add(
+            EventoHabitacion(
+                habitacion_id=habitacion_id,
+                estado_anterior=anterior,
+                estado_nuevo=nuevo,
+                origen=origen,
+                turno_id=turno_id,
+                operador_id=(operador or guardia_en(momento).operador).id,
+                creado_en=momento.astimezone(UTC),
+            )
+        )
 
     for llegada in llegadas:
+        # Un arreglo que empieza: la habitación espera a quedar libre y no se usa hasta que termine.
+        while pendientes_arreglo and min(pendientes_arreglo, key=lambda p: p[0])[0] <= llegada:
+            arreglo = min(pendientes_arreglo, key=lambda p: p[0])
+            pendientes_arreglo.remove(arreglo)
+            _, h, duracion_arreglo = arreglo
+            desde_arreglo = max(libre_desde[h.id], arreglo[0])
+            libre_desde[h.id] = desde_arreglo + duracion_arreglo
+            evento(h.id, "Libre", "Mantenimiento", MANUAL, desde_arreglo)
+            evento(h.id, "Mantenimiento", "Libre", MANUAL, min(libre_desde[h.id], fin_periodo))
+            tomada[h.id].append((desde_arreglo, libre_desde[h.id]))
         nocturno = llegada.hour >= 21 or llegada.hour < 4
         preferida = _elegir(rng, opciones_categoria)
         if premium is not None and nocturno and llegada.weekday() in (4, 5) and rng.random() < 0.4:
@@ -237,7 +302,11 @@ async def generar_historial(
                 break  # el cliente no acepta otra categoría y se va
         if elegida is None:
             contador["perdidos"] += 1
+            if rng_extra.random() < REGISTRADOS:
+                perdido(llegada, ESPERA if rng_extra.random() < 0.3 else SIN_LUGAR, preferida)
             continue
+        if rng_extra.random() < SE_VAN_POR_PRECIO:
+            perdido(llegada + timedelta(minutes=1), PRECIO, preferida)
 
         tarifa = tarifas[elegida.categoria_id]
         nombre = categorias[elegida.categoria_id].nombre.lower() if elegida.categoria_id in categorias else ""
@@ -246,6 +315,7 @@ async def generar_historial(
         if salida >= fin_periodo:
             continue  # quedaría en curso: el historial termina con todas las habitaciones libres
         libre_desde[elegida.id] = salida + timedelta(minutes=rng.randint(18, 40))  # limpieza
+        tomada[elegida.id].append((llegada, libre_desde[elegida.id]))
 
         apertura, cierre = guardia_en(llegada), guardia_en(salida)
         turno_id = uuid.uuid4()
@@ -306,6 +376,29 @@ async def generar_historial(
         cierre.pagos.append(pago)
         contador["turnos"] += 1
         contador["pagos"] += 1
+        evento(elegida.id, "Libre", "Ocupada", TURNO, llegada, turno_id, apertura.operador)
+        evento(elegida.id, "Ocupada", "En Limpieza", COBRO, salida, turno_id, cierre.operador)
+        evento(elegida.id, "En Limpieza", "Libre", LIBERAR, min(libre_desde[elegida.id], fin_periodo))
+
+    # Limpiezas sin un turno antes, en huecos reales de las últimas semanas.
+    huecos = []
+    for habitacion_id, tramos in tomada.items():
+        ordenados = sorted(tramos)
+        for (_, fin_tramo), (inicio_siguiente, _) in zip(ordenados, ordenados[1:], strict=False):
+            if inicio_siguiente - fin_tramo >= timedelta(minutes=50) and fin_tramo >= fin_periodo - timedelta(days=25):
+                huecos.append((habitacion_id, fin_tramo))
+    for habitacion_id, fin_tramo in rng_extra.sample(huecos, min(LIMPIEZAS_SIN_TURNO, len(huecos))):
+        inicio_limpieza = fin_tramo + timedelta(minutes=rng_extra.randint(3, 12))
+        responsable = conserjes[min(1, len(conserjes) - 1)] if rng_extra.random() < 0.8 else None
+        evento(habitacion_id, "Libre", "En Limpieza", MANUAL, inicio_limpieza, operador=responsable)
+        evento(
+            habitacion_id,
+            "En Limpieza",
+            "Libre",
+            LIBERAR,
+            inicio_limpieza + timedelta(minutes=rng_extra.randint(14, 24)),
+            operador=responsable,
+        )
     await db.flush()
 
     # Arqueos: el total del sistema sale de los cobros de cada guardia más el fondo (como calcular_arqueo).
@@ -366,7 +459,7 @@ ARTICULOS_EXTRA = {
         ("HIG-001", "Kit de higiene", 1600, "Cuidado personal"),
     ],
 }
-DEMO = (("motelcc", 60, 1.5, 6), ("luna", 30, 0.7, None))
+DEMO = (("motelcc", 60, 1.5, 6, 2), ("luna", 30, 0.7, None, 1))
 
 # Novedades de guardia de ejemplo (migración 009): horas antes del fin del historial, usuario, texto, importante y
 # número de habitación. La de la 6 explica por qué esa habitación se usa menos (la detecta la inteligencia).
@@ -424,7 +517,7 @@ async def cargar() -> None:
     engine = create_async_engine(settings.DATABASE_URL)
     sesiones = async_sessionmaker(engine, expire_on_commit=False)
     try:
-        for codigo, dias, intensidad, poco_usada in DEMO:
+        for codigo, dias, intensidad, poco_usada, arreglos in DEMO:
             async with sesiones() as db:
                 establecimiento = (
                     (await db.execute(select(Establecimiento).where(Establecimiento.codigo == codigo)))
@@ -456,13 +549,15 @@ async def cargar() -> None:
                     dias=dias,
                     intensidad=intensidad,
                     habitacion_poco_usada=poco_usada,
+                    arreglos=arreglos,
                     semilla=11 if codigo == "luna" else 7,
                 )
             async with sesiones(info={CLAVE: establecimiento.id}) as db:
                 await _novedades_demo(db, codigo, inicio_de_franja(datetime.now(UTC), ZoneInfo(settings.ZONA_HORARIA)))
             print(
                 f"{codigo}: {dias} días de historial · {resultado.get('turnos', 0)} turnos, "
-                f"{resultado.get('consumos', 0)} consumos, {resultado.get('guardias', 0)} guardias arqueadas."
+                f"{resultado.get('consumos', 0)} consumos, {resultado.get('guardias', 0)} guardias arqueadas, "
+                f"{resultado.get('registrados', 0)} clientes perdidos registrados."
             )
     finally:
         await engine.dispose()

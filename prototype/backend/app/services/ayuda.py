@@ -30,7 +30,7 @@ from app.models.operador import ROL_ADMINISTRADOR, Operador
 from app.models.pedido import PENDIENTE, PedidoReposicion
 from app.models.tarifa import Tarifa
 from app.models.turno import Turno
-from app.services import conocimiento
+from app.services import conocimiento, rotacion
 from app.services import inteligencia as ia
 from app.services.asistente import INTENCIONES, _intencion, normalizar
 from app.services.asistente import responder as responder_analisis
@@ -290,8 +290,8 @@ TEMAS: tuple[Tema, ...] = (
             "Ctrl+K o «/» (o la lupa del encabezado) abre el buscador.",
             "Escribí una sección, el número de una habitación («7») o una acción («novedad», «oscuro»).",
             "Con las flechas elegís y con Enter vas.",
-            "Fuera de los campos: «A» abre el asistente, «N» deja una novedad y los números 1, 2, 3… "
-            "van a cada sección.",
+            "Fuera de los campos: «A» abre el asistente, «N» deja una novedad, «L» cambia entre grilla y línea de "
+            "tiempo y los números 1, 2, 3… van a cada sección.",
             "«?» muestra todos los atajos.",
         ),
         None,
@@ -327,6 +327,36 @@ TEMAS: tuple[Tema, ...] = (
             "Al confirmar se suma al stock y queda en Actividad a tu nombre.",
         ),
         "inventario",
+    ),
+    Tema(
+        "cliente_perdido",
+        "Registrar un cliente que se fue",
+        (
+            r"se (me |nos )?fue (un |el |una )?cliente",
+            r"\bcliente\b.*\bno (quiso|quiere) esperar",
+            r"(no habia|no hay|sin) lugar",
+            r"(registr|anot|carg)\w* .*\bcliente\b.*\bfue\b",
+            r"(estamos|esta todo) (lleno|completo)",
+        ),
+        (
+            "En Habitaciones tocá «Se fue un cliente».",
+            "Elegí por qué se fue: no había lugar, no quiso esperar o le pareció caro. "
+            "Si sabés qué categoría buscaba, marcala antes.",
+            "No se guarda ningún dato del cliente; queda a tu nombre y en tu guardia.",
+            "Con esto la gerencia ve cuánta demanda se pierde y en qué horarios.",
+        ),
+        "dashboard",
+    ),
+    Tema(
+        "linea_tiempo",
+        "Ver la línea de tiempo de las habitaciones",
+        (r"linea de tiempo", r"\bcronograma\b", r"historial de (la |las )?habitacion"),
+        (
+            "En Habitaciones, arriba de todo, cambiá de «Grilla» a «Línea de tiempo».",
+            "Cada fila es una habitación y cada barra, un turno, una limpieza o un arreglo de las últimas 24 horas.",
+            "Con las flechas vas a otro día. Tocá un turno en curso para abrirlo.",
+        ),
+        "dashboard",
     ),
     # Solo la gerencia.
     Tema(
@@ -571,14 +601,21 @@ PANTALLAS = {
             "En una ocupada, «+ consumo» carga el minibar; abriéndola, cobrás y cerrás el turno.",
             "«Liberar» la deja disponible cuando terminó la limpieza; el menú ⋮ la pone en mantenimiento.",
             "Arriba filtrás por estado o categoría y ordenás por número o por vencimiento.",
+            "«Línea de tiempo» muestra las últimas 24 horas de cada habitación.",
+            "Con dos disponibles o menos aparece cuándo se libera la próxima; si alguien se va, «Se fue un cliente».",
             "Las novedades de la guardia están sobre la grilla; «Dejar novedad» agrega una.",
         ),
-        ("¿Cómo abro un turno?", "¿Cuál vence primero?", "¿Qué habitaciones están libres?", "¿Qué es el sobreturno?"),
+        (
+            "¿Cómo abro un turno?",
+            "¿Cuál vence primero?",
+            "¿Cuándo se libera la próxima?",
+            "Se fue un cliente, ¿qué hago?",
+        ),
         (
             "¿Cómo está la ventanilla?",
             "¿Quién está de guardia?",
-            "¿Qué habitaciones están ocupadas?",
-            "¿Qué es el sobreturno?",
+            "¿Cuándo se libera la próxima?",
+            "¿Cuántos clientes perdimos?",
         ),
     ),
     "inventario": Pantalla(
@@ -661,9 +698,10 @@ PANTALLAS = {
     "inteligencia": Pantalla(
         "Inteligencia",
         "Es el análisis del motel calculado en su propio servidor, sin internet: resumen, alertas, pronóstico de "
-        "turnos, demanda por hora, sugerencias de tarifa y reposición sugerida. Solo usa lo ya arqueado.",
+        "turnos, demanda por hora, clientes que se fueron, limpieza, sugerencias de tarifa y reposición sugerida. "
+        "Solo usa lo ya arqueado.",
         (
-            "Elegí el período arriba; los gráficos muestran cada valor al pasar el mouse.",
+            "Los gráficos muestran cada valor al pasar el mouse.",
             "«Ver y aplicar» en una sugerencia de tarifa muestra el efecto estimado antes de confirmar.",
             "«Armar pedido con esto» convierte la reposición sugerida en un pedido al proveedor.",
             "A la derecha está el asistente: preguntale por los datos con tus palabras.",
@@ -671,9 +709,9 @@ PANTALLAS = {
         (),
         (
             "¿Cuántos turnos esperamos mañana?",
-            "¿Qué categoría deja más plata?",
+            "¿Cuántos clientes perdimos?",
+            "¿Cuánto tarda la limpieza?",
             "¿Cómo aplico una sugerencia de tarifa?",
-            "¿Cómo armo un pedido?",
         ),
         GERENCIA,
     ),
@@ -801,6 +839,49 @@ class Ventanilla:
             {"etiqueta": f"Abrir la {h.numero}", "vista": "dashboard", "habitacion_id": h.id} for h in libres[:3]
         ]
         return Respuesta(texto, "libres", acciones=acciones)
+
+    async def proxima(self, texto: str) -> Respuesta:
+        datos = await rotacion.proxima_libre(self.db, self.ahora)
+        detalle = (
+            "Es una estimación con la duración real de las estadías de cada categoría y una limpieza típica de "
+            f"{datos['limpieza_min']} min."
+        )
+        proximas = datos["proximas"]
+        numero, categoria = _numero(texto), self.categoria_mencionada(texto)
+        if numero is not None:
+            propia = next((p for p in proximas if p["numero"] == numero), None)
+            if propia is None:
+                return Respuesta(f"La {numero} no está ocupada ni en limpieza.", "proxima")
+            return Respuesta(
+                f"La {numero} quedaría disponible en unos {propia['minutos']} minutos "
+                f"(entre {propia['minimo']} y {propia['maximo']}).",
+                "proxima",
+                detalle=detalle,
+            )
+        if categoria is not None:
+            proximas = [p for p in proximas if p["categoria_id"] == categoria.id]
+        if not proximas:
+            return Respuesta("No hay habitaciones ocupadas ni en limpieza para estimar.", "proxima")
+        primera = proximas[0]
+        respuesta = (
+            f"La próxima sería la {primera['numero']} ({primera['categoria']}), en unos {primera['minutos']} minutos "
+            f"(entre {primera['minimo']} y {primera['maximo']})."
+        )
+        if len(proximas) > 1:
+            siguientes = ", ".join(f"la {p['numero']} en {p['minutos']} min" for p in proximas[1:3])
+            respuesta += f" Después, {siguientes}."
+        if datos["disponibles"] and categoria is None:
+            disponibles = datos["disponibles"]
+            respuesta = f"Ahora hay {disponibles} {'disponible' if disponibles == 1 else 'disponibles'}. {respuesta}"
+        return Respuesta(respuesta, "proxima", detalle=detalle)
+
+    async def limpieza(self) -> Respuesta:
+        minutos = round(await rotacion.limpieza_tipica(self.db, self.ahora))
+        return Respuesta(
+            f"Una limpieza típica tarda unos {minutos} minutos, desde que se cobra el turno hasta que se libera.",
+            "limpieza",
+            detalle="Mediana de los últimos 30 días.",
+        )
 
     def por_vencer(self) -> Respuesta:
         filas = []
@@ -1032,7 +1113,7 @@ ENTRADAS = TEMAS + conocimiento.DEFINICIONES
 # Lo que un conserje puede preguntar del análisis: no muestra dinero (RN-RES-03 y datos de la gerencia).
 ANALISIS_CONSERJE = {"horas", "pronostico", "estadia", "ocupacion"}
 # Lo que es dinero o caja: al conserje se le dice que es de la gerencia sin buscar otra respuesta.
-DINERO = {"ingresos", "caja", "ticket", "medios", "sobreturno", "resumen"}
+DINERO = {"ingresos", "caja", "ticket", "medios", "sobreturno", "resumen", "perdidos"}
 INTENCIONES_ANALISIS = {nombre for nombre, _ in INTENCIONES}
 
 
@@ -1206,6 +1287,16 @@ def _sugerencias_de(pantalla: str | None, es_gerencia: bool) -> list[str]:
 async def _ventanilla_ahora(
     ventanilla: Ventanilla, texto: str, es_gerencia: bool, anterior: str | None
 ) -> Respuesta | None:
+    if re.search(
+        r"(cuando|cuanto falta|en cuanto|a que hora)\b.*\b(liber(a|e|an|en|ara)\b|desocup|queda libre)"
+        r"|(cuando|cuanto falta|en cuanto|a que hora)\b.*\b(hay|habra) lugar"
+        r"|proxima (libre|disponible|en liberarse|que se libera)|se libera primero|cual se libera"
+        r"|cuanto (hay|tiene|tengo|tienen) que esperar",
+        texto,
+    ):
+        return await ventanilla.proxima(texto)
+    if re.search(r"cuanto (tarda|demora|lleva)\w* (la |una )?limpieza|tiempo de limpieza", texto):
+        return await ventanilla.limpieza()
     if re.search(
         r"como (esta|anda|viene) (la ventanilla|el motel|todo|la cosa)|estado (de la ventanilla|general)"
         r"|resumen de (la )?ventanilla",
