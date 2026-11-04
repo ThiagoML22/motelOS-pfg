@@ -431,81 +431,129 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
 
       {/* Cada sección aparece con un fundido corto (la clave reinicia la animación). Solo opacidad: moverla desbordaría
           la página un instante y la barra de desplazamiento correría el encabezado. */}
-      <main key={activeView} className="mx-auto flex w-full max-w-[1600px] flex-1 animate-fade-in flex-col px-4 py-6 sm:px-6">
+      <main key={activeView} className="mx-auto flex w-full max-w-[1600px] flex-1 animate-fade-in flex-col px-4 pb-6 pt-4 sm:px-6">
         {enApertura && (
           <GuardiaView sesion={sesion} onGuardiaAbierta={onRefrescarSesion} onSalir={onSalir} />
         )}
 
         {conGuardiaPropia && activeView === 'dashboard' && (
           <>
-            <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
-              <div>
-                <h1 className="text-xl font-semibold text-ink">Habitaciones</h1>
-                <p className="mt-0.5 text-sm text-muted">
-                  {habitaciones.length} habitaciones
-                  {esGerencia && ' · vista de consulta: la ventanilla la opera el conserje con su guardia'}
-                </p>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-3">
+            {/* Lo principal de la ventanilla son las habitaciones: arriba de ellas, dos filas finas y una línea de novedades. */}
+            <div className="mb-2.5 flex flex-wrap items-center gap-x-3 gap-y-2">
+              <h1 className="flex items-baseline gap-2 text-xl font-semibold text-ink">
+                Habitaciones
+                <span className="text-sm font-normal tabular-nums text-muted">{habitaciones.length}</span>
+              </h1>
+              {esGerencia && (
+                <span title="La ventanilla la opera el conserje con su guardia" className="rounded-full bg-surface-2 px-2 py-0.5 text-xs text-muted">
+                  Solo consulta
+                </span>
+              )}
               {vistaHabitaciones === 'grilla' && (
-              <div role="group" aria-label="Filtrar por estado" className="flex flex-wrap items-center gap-1.5">
-                <button
-                  type="button"
-                  aria-pressed={filtro === 'Todas'}
-                  onClick={() => setFiltro('Todas')}
-                  className={`press hit rounded-md border px-3 py-1.5 text-sm ${
-                    filtro === 'Todas'
-                      ? 'border-accent bg-accent-soft font-medium text-accent'
-                      : 'border-line-strong bg-surface text-muted hover:text-ink'
-                  }`}
-                >
-                  Todas <span className="tabular-nums">{deCategoria.length}</span>
-                </button>
-                {ESTADOS_ORDEN.map((estado) => (
+                <div role="group" aria-label="Filtrar por estado" className="flex flex-wrap items-center gap-1.5">
                   <button
-                    key={estado}
                     type="button"
-                    aria-pressed={filtro === estado}
-                    onClick={() => setFiltro(estado)}
-                    className={`press hit flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm ${
-                      filtro === estado
+                    aria-pressed={filtro === 'Todas'}
+                    onClick={() => setFiltro('Todas')}
+                    className={`press hit rounded-md border px-2.5 py-1 text-sm ${
+                      filtro === 'Todas'
                         ? 'border-accent bg-accent-soft font-medium text-accent'
                         : 'border-line-strong bg-surface text-muted hover:text-ink'
                     }`}
                   >
-                    <span className={`h-2 w-2 rounded-full ${ESTADO_META[estado].dot}`} aria-hidden="true" />
-                    {ESTADO_META[estado].label} <span className="tabular-nums">{conteo(estado)}</span>
+                    Todas <span className="tabular-nums">{deCategoria.length}</span>
                   </button>
-                ))}
-                <label className="ml-1 flex items-center gap-1.5 text-xs text-muted">
-                  Ordenar
+                  {ESTADOS_ORDEN.map((estado) => (
+                    <button
+                      key={estado}
+                      type="button"
+                      aria-pressed={filtro === estado}
+                      onClick={() => setFiltro(estado)}
+                      className={`press hit flex items-center gap-2 rounded-md border px-2.5 py-1 text-sm ${
+                        filtro === estado
+                          ? 'border-accent bg-accent-soft font-medium text-accent'
+                          : 'border-line-strong bg-surface text-muted hover:text-ink'
+                      }`}
+                    >
+                      <span className={`h-2 w-2 rounded-full ${ESTADO_META[estado].dot}`} aria-hidden="true" />
+                      {ESTADO_META[estado].label} <span className="tabular-nums">{conteo(estado)}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div className="ml-auto flex items-center gap-2">
+                {vistaHabitaciones === 'grilla' && (
                   <select
+                    aria-label="Ordenar las habitaciones"
                     value={orden}
                     onChange={(e) => cambiarOrden(e.target.value as OrdenGrilla)}
                     className="h-8 rounded-md border border-line-strong bg-surface px-2 text-sm text-ink focus:border-accent focus-visible:outline-none"
                   >
-                    <option value="numero">por número</option>
-                    <option value="vencimiento">por vencimiento</option>
+                    <option value="numero">Por número</option>
+                    <option value="vencimiento">Por vencimiento</option>
                   </select>
-                </label>
-                {puedeRegistrar && !conPocoLugar && <BotonClientePerdido categorias={categoriasConHabitaciones} />}
-              </div>
-              )}
-              <SelectorVista vista={vistaHabitaciones} onCambiar={cambiarVistaHabitaciones} />
+                )}
+                <SelectorVista vista={vistaHabitaciones} onCambiar={cambiarVistaHabitaciones} />
               </div>
             </div>
 
-            {conPocoLugar && (
-              <AvisoProximaLibre
-                firma={firmaEstados}
-                categorias={categoriasConHabitaciones}
-                puedeRegistrar={puedeRegistrar}
-                onAbrir={(id) => {
-                  setSelectedId(id);
-                  setOpenAddProduct(false);
-                }}
-              />
+            {/* Categorías a la izquierda (solo si el motel usa más de una, cada una con su ocupación) y, a la derecha, la
+                próxima libre y el registro de un cliente que se fue. */}
+            {((vistaHabitaciones === 'grilla' && categoriasConHabitaciones.length > 1) || conPocoLugar || puedeRegistrar) && (
+              <div className="mb-2.5 flex flex-wrap items-center gap-x-3 gap-y-2">
+                {vistaHabitaciones === 'grilla' && categoriasConHabitaciones.length > 1 && (
+                  <div role="group" aria-label="Filtrar por categoría" className="flex flex-wrap items-center gap-1.5">
+                    <button
+                      type="button"
+                      aria-pressed={filtroCategoria === null}
+                      onClick={() => setFiltroCategoria(null)}
+                      className={`press hit rounded-full border px-2.5 py-0.5 text-sm ${
+                        filtroCategoria === null
+                          ? 'border-accent bg-accent-soft font-medium text-accent'
+                          : 'border-line-strong bg-surface text-muted hover:text-ink'
+                      }`}
+                    >
+                      Todas
+                    </button>
+                    {categoriasConHabitaciones.map((c) => {
+                      const propias = habitaciones.filter((h) => h.categoria_id === c.id);
+                      const ocupadas = propias.filter((h) => h.estado === 'Ocupada').length;
+                      const activa = filtroCategoria === c.id;
+                      return (
+                        <button
+                          key={c.id}
+                          type="button"
+                          aria-pressed={activa}
+                          onClick={() => setFiltroCategoria(activa ? null : c.id)}
+                          title={c.descripcion ?? undefined}
+                          className={`press hit flex items-center gap-2 rounded-full border px-2.5 py-0.5 text-sm ${
+                            activa ? 'font-medium' : 'border-line-strong bg-surface text-muted hover:text-ink'
+                          }`}
+                          style={activa ? { borderColor: c.color, color: c.color, backgroundColor: `${c.color}14` } : undefined}
+                        >
+                          <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: c.color }} aria-hidden="true" />
+                          {c.nombre}
+                          <span className="tabular-nums text-xs opacity-80">
+                            {ocupadas}/{propias.length}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                <div className="ml-auto flex min-w-0 items-center gap-2">
+                  {conPocoLugar && (
+                    <AvisoProximaLibre
+                      firma={firmaEstados}
+                      onAbrir={(id) => {
+                        setSelectedId(id);
+                        setOpenAddProduct(false);
+                      }}
+                    />
+                  )}
+                  {puedeRegistrar && <BotonClientePerdido categorias={categoriasConHabitaciones} destacado={disponibles === 0} />}
+                </div>
+              </div>
             )}
 
             {vistaHabitaciones === 'linea' && (
@@ -519,49 +567,6 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
 
             {vistaHabitaciones === 'grilla' && (
             <>
-            {/* Filtro por categoría: solo si el motel tiene más de una en uso. Cada una muestra su ocupación. */}
-            {categoriasConHabitaciones.length > 1 && (
-              <div role="group" aria-label="Filtrar por categoría" className="-mt-2 mb-5 flex flex-wrap items-center gap-1.5">
-                <span className="mr-1 text-xs font-medium uppercase tracking-wide text-subtle">Categoría</span>
-                <button
-                  type="button"
-                  aria-pressed={filtroCategoria === null}
-                  onClick={() => setFiltroCategoria(null)}
-                  className={`press hit rounded-full border px-3 py-1 text-sm ${
-                    filtroCategoria === null
-                      ? 'border-accent bg-accent-soft font-medium text-accent'
-                      : 'border-line-strong bg-surface text-muted hover:text-ink'
-                  }`}
-                >
-                  Todas
-                </button>
-                {categoriasConHabitaciones.map((c) => {
-                  const propias = habitaciones.filter((h) => h.categoria_id === c.id);
-                  const ocupadas = propias.filter((h) => h.estado === 'Ocupada').length;
-                  const activa = filtroCategoria === c.id;
-                  return (
-                    <button
-                      key={c.id}
-                      type="button"
-                      aria-pressed={activa}
-                      onClick={() => setFiltroCategoria(activa ? null : c.id)}
-                      title={c.descripcion ?? undefined}
-                      className={`press hit flex items-center gap-2 rounded-full border px-3 py-1 text-sm ${
-                        activa ? 'font-medium' : 'border-line-strong bg-surface text-muted hover:text-ink'
-                      }`}
-                      style={activa ? { borderColor: c.color, color: c.color, backgroundColor: `${c.color}14` } : undefined}
-                    >
-                      <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: c.color }} aria-hidden="true" />
-                      {c.nombre}
-                      <span className="tabular-nums text-xs opacity-80">
-                        {ocupadas}/{propias.length}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-
             <NovedadesCard novedades={novedades} onNueva={() => setNuevaNovedad(true)} />
 
             {carga === 'cargando' && <EsqueletoGrilla />}

@@ -121,14 +121,12 @@ const CADA_MS = 30000;
 interface AvisoProximaLibreProps {
   // Cambia con el estado de las habitaciones: la estimación se pide de nuevo al momento.
   firma: string;
-  categorias: Categoria[];
-  // Solo quien atiende registra clientes perdidos.
-  puedeRegistrar: boolean;
   onAbrir: (habitacionId: number) => void;
 }
 
-// Con dos disponibles o menos, cuándo se libera la próxima (lo que se le contesta a quien espera en la ventanilla).
-export const AvisoProximaLibre: React.FC<AvisoProximaLibreProps> = ({ firma, categorias, puedeRegistrar, onAbrir }) => {
+// Con dos disponibles o menos, cuándo se libera la próxima (lo que se le contesta a quien espera en la ventanilla). Es una
+// sola línea: no le quita lugar a las habitaciones; las que siguen, al pasar el mouse.
+export const AvisoProximaLibre: React.FC<AvisoProximaLibreProps> = ({ firma, onAbrir }) => {
   const [datos, setDatos] = useState<ProximaLibre | null>(null);
 
   useEffect(() => {
@@ -152,53 +150,38 @@ export const AvisoProximaLibre: React.FC<AvisoProximaLibreProps> = ({ firma, cat
   if (!datos) return null;
   const [primera, ...resto] = datos.proximas;
   const lleno = datos.disponibles === 0;
+  const siguientes = resto
+    .slice(0, 4)
+    .map((p) => `${formatRoomNumber(p.numero)} (${p.categoria}): ${p.minutos} min`)
+    .join(' · ');
   return (
     <section
       aria-label="Próxima habitación disponible"
-      className={`mb-4 flex animate-pop-in flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border px-4 py-3 ${
+      title={siguientes ? `Después: ${siguientes}` : undefined}
+      className={`flex h-8 min-w-0 animate-pop-in items-center gap-2 rounded-md border px-2.5 text-sm ${
         lleno ? 'border-warn/40 bg-warn-soft' : 'border-line bg-surface'
       }`}
     >
-      <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-full ${lleno ? 'bg-warn/15 text-warn' : 'bg-accent-soft text-accent'}`}>
-        <Hourglass className={`h-4 w-4 ${lleno ? 'animate-reloj' : ''}`} aria-hidden="true" />
+      <Hourglass className={`h-4 w-4 shrink-0 ${lleno ? 'animate-reloj text-warn' : 'text-accent'}`} aria-hidden="true" />
+      <span className="shrink-0 font-medium text-ink">
+        {lleno ? 'Sin lugar' : datos.disponibles === 1 ? 'Queda 1' : `Quedan ${datos.disponibles}`}
       </span>
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-semibold text-ink">
-          {lleno ? 'Sin habitaciones disponibles' : `${datos.disponibles === 1 ? 'Queda 1 disponible' : `Quedan ${datos.disponibles} disponibles`}`}
-        </p>
-        {primera ? (
-          <p className="text-sm text-muted">
-            La próxima sería la{' '}
-            <button type="button" onClick={() => onAbrir(primera.habitacion_id)} className="font-medium text-ink underline decoration-line-strong underline-offset-2 hover:decoration-accent">
-              {formatRoomNumber(primera.numero)}
-            </button>{' '}
-            ({primera.categoria}) en unos <span className="font-semibold tabular-nums text-ink">{primera.minutos} min</span>{' '}
-            <span className="tabular-nums text-subtle">
-              · entre {primera.minimo} y {primera.maximo}
-            </span>
-          </p>
-        ) : (
-          <p className="text-sm text-muted">No hay turnos en curso para estimar.</p>
-        )}
-      </div>
-      {resto.length > 0 && (
-        <ul className="hidden items-center gap-1.5 lg:flex" aria-label="Las que siguen">
-          {resto.slice(0, 3).map((p, i) => (
-            <li key={p.habitacion_id} className="animate-tarjeta-in" style={{ animationDelay: `${(i + 1) * 60}ms` }}>
-              <button
-                type="button"
-                onClick={() => onAbrir(p.habitacion_id)}
-                title={`${p.categoria}: entre ${p.minimo} y ${p.maximo} min`}
-                className="press flex items-center gap-1.5 rounded-full border border-line-strong bg-surface px-2.5 py-1 text-xs text-muted hover:text-ink"
-              >
-                <span className="h-2 w-2 rounded-full" style={{ backgroundColor: p.color }} aria-hidden="true" />
-                {p.numero} · <span className="tabular-nums">{p.minutos} min</span>
-              </button>
-            </li>
-          ))}
-        </ul>
+      {primera && (
+        <span className="min-w-0 truncate text-muted">
+          · Próxima:{' '}
+          <button
+            type="button"
+            onClick={() => onAbrir(primera.habitacion_id)}
+            className="font-medium text-ink underline decoration-line-strong underline-offset-2 hover:decoration-accent"
+          >
+            {formatRoomNumber(primera.numero)}
+          </button>{' '}
+          en <span className="font-semibold tabular-nums text-ink">{primera.minutos} min</span>{' '}
+          <span className="tabular-nums text-subtle">
+            ({primera.minimo}–{primera.maximo})
+          </span>
+        </span>
       )}
-      {puedeRegistrar && <BotonClientePerdido categorias={categorias} destacado={lleno} />}
     </section>
   );
 };
