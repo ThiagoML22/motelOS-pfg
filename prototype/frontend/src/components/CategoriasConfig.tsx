@@ -182,7 +182,7 @@ const SeccionCategorias: React.FC<SeccionCategoriasProps> = ({ categorias, habit
       {modo?.tipo === 'nueva' && <ModalNuevaCategoria ocupado={ocupado} ejecutar={ejecutar} onCerrar={() => setModo(null)} orden={categorias.length + 1} />}
       {modo?.tipo === 'editar' && <ModalEditarCategoria categoria={modo.categoria} ocupado={ocupado} ejecutar={ejecutar} onCerrar={() => setModo(null)} />}
       {modo?.tipo === 'tarifa' && <ModalTarifa categoria={modo.categoria} ocupado={ocupado} ejecutar={ejecutar} onCerrar={() => setModo(null)} />}
-      {franjasDe && <ModalFranjas categoria={franjasDe} ocupado={ocupado} ejecutar={ejecutar} onCerrar={() => setModo(null)} />}
+      {franjasDe && <ModalFranjas categoria={franjasDe} ocupado={ocupado} ejecutar={ejecutar} confirmar={confirmar} onCerrar={() => setModo(null)} />}
       {historial && <ModalHistorial categoria={historial} onCerrar={() => setHistorial(null)} />}
     </>
   );

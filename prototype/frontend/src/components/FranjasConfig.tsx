@@ -15,6 +15,7 @@ import {
   reglaTexto,
 } from '../utils/franjas';
 import { CamposTarifa, Ejecutar, TarifaForm, resumenTarifa, tarifaDatosDe, tarifaFormDe, tarifaValida } from './CamposTarifa';
+import type { Confirmacion } from './CategoriasConfig';
 import MapaSemana, { BloqueFranja } from './MapaSemana';
 import Button from './ui/Button';
 import Field, { inputClass } from './ui/Field';
@@ -22,8 +23,11 @@ import Modal from './ui/Modal';
 
 const campo = `${inputClass} h-11`;
 
-export const bloquesDe = (franjas: Franja[] = []): BloqueFranja[] =>
-  franjas.map((f, i) => ({ ...f, color: COLORES_FRANJA[i % COLORES_FRANJA.length] }));
+// El color sale del orden de creación: agregar otra tarifa especial no les cambia el color a las que ya estaban.
+export const bloquesDe = (franjas: Franja[] = []): BloqueFranja[] => {
+  const ids = franjas.map((f) => f.id).sort((a, b) => a - b);
+  return franjas.map((f) => ({ ...f, color: COLORES_FRANJA[ids.indexOf(f.id) % COLORES_FRANJA.length] }));
+};
 
 const diferencia = (precio: number, general?: number): string | null => {
   if (!general || precio === general) return null;
@@ -172,7 +176,12 @@ const FormularioFranja: React.FC<{
 
       <p className={`text-sm ${conflicto ? 'font-medium text-danger' : 'text-muted'}`} role={conflicto ? 'alert' : undefined}>
         {conflicto ?? (form.dias ? `Rige ${reglaTexto(form)}.` : 'Elegí al menos un día.')}
-        {!conflicto && form.dias > 0 && !todoElDia && horaCorta(form.hasta) < horaCorta(form.desde) && ' Sigue después de la medianoche, hasta la mañana del día siguiente.'}
+        {!conflicto &&
+          form.dias > 0 &&
+          !todoElDia &&
+          horaCorta(form.hasta) !== '00:00' &&
+          horaCorta(form.hasta) < horaCorta(form.desde) &&
+          ' Sigue después de la medianoche, hasta el día siguiente.'}
       </p>
 
       <CamposTarifa form={form.tarifa} onChange={(tarifa) => onChange({ ...form, tarifa })} prefijo="franja" />
@@ -192,12 +201,13 @@ const FormularioFranja: React.FC<{
 
 // --- Modal ---------------------------------------------------------------------------------------------------------
 
-export const ModalFranjas: React.FC<{ categoria: Categoria; ocupado: boolean; ejecutar: Ejecutar; onCerrar: () => void }> = ({
-  categoria,
-  ocupado,
-  ejecutar,
-  onCerrar,
-}) => {
+export const ModalFranjas: React.FC<{
+  categoria: Categoria;
+  ocupado: boolean;
+  ejecutar: Ejecutar;
+  confirmar: (c: Confirmacion) => void;
+  onCerrar: () => void;
+}> = ({ categoria, ocupado, ejecutar, confirmar, onCerrar }) => {
   const franjas = categoria.franjas ?? [];
   const bloques = bloquesDe(franjas);
   const [edicion, setEdicion] = useState<{ franja: Franja | null; form: FranjaForm } | null>(null);
@@ -232,9 +242,14 @@ export const ModalFranjas: React.FC<{ categoria: Categoria; ocupado: boolean; ej
     if (ok) setEdicion(null);
   };
 
-  const dejarDeUsar = async (f: Franja) => {
-    await ejecutar(() => api.bajaFranja(f.id), `${f.nombre} se dejó de usar. Lo cobrado con ella no cambia.`, 'No se pudo dar de baja la tarifa especial.');
-  };
+  const dejarDeUsar = (f: Franja) =>
+    confirmar({
+      titulo: `Dejar de usar ${f.nombre}`,
+      texto: 'Deja de regir para los turnos que se abran desde ahora. Los turnos abiertos y lo cobrado con ella no cambian.',
+      accion: async () => {
+        await ejecutar(() => api.bajaFranja(f.id), `${f.nombre} se dejó de usar.`, 'No se pudo dar de baja la tarifa especial.');
+      },
+    });
 
   return (
     <Modal
@@ -292,7 +307,7 @@ export const ModalFranjas: React.FC<{ categoria: Categoria; ocupado: boolean; ej
                         <Button variant="secondary" className="h-10" aria-label={`Editar ${f.nombre}`} onClick={() => editar(f)}>
                           <Pencil className="h-4 w-4" aria-hidden="true" />
                         </Button>
-                        <Button variant="ghost" className="h-10" disabled={ocupado} aria-label={`Dejar de usar ${f.nombre}`} onClick={() => void dejarDeUsar(f)}>
+                        <Button variant="ghost" className="h-10" disabled={ocupado} aria-label={`Dejar de usar ${f.nombre}`} onClick={() => dejarDeUsar(f)}>
                           <Trash2 className="h-4 w-4" aria-hidden="true" />
                         </Button>
                       </div>

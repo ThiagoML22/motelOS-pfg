@@ -1086,7 +1086,8 @@ class Ventanilla:
             if vigente is not None and vigente.cambia_en and vigente.siguiente:
                 proxima = vigente.siguiente_franja.nombre if vigente.siguiente_franja else "tarifa general"
                 cuando = franjas.cuando_texto(franjas.local(vigente.cambia_en), ahora)
-                partes.append(f"{c.nombre}: {cuando} pasa a {ia.pesos(float(vigente.siguiente.tarifa_base))} ({proxima})")
+                precio = ia.pesos(float(vigente.siguiente.tarifa_base))
+                partes.append(f"{c.nombre}: {cuando} pasa a {precio} ({proxima})")
         if not partes:
             return Respuesta("No hay cambios por delante: rige la tarifa general toda la semana.", "tarifas")
         return Respuesta(". ".join(partes) + ".", "tarifas", detalle="Los turnos abiertos conservan su tarifa.")
