@@ -3,7 +3,7 @@
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import operador_actual, requiere_rol
@@ -22,12 +22,19 @@ solo_conserje = requiere_rol(ROL_OPERADOR)
 
 
 class ConteoPrenda(BaseModel):
-    """Toda la ropa del motel: limpia, sucia y puesta en las habitaciones."""
+    """Toda la ropa del motel: separada en limpia, sucia y en uso, o todo junto, según cuente el establecimiento."""
 
     prenda: Literal["TOALLAS", "SABANAS"]
-    limpias: int = Field(ge=0, le=100000)
-    sucias: int = Field(ge=0, le=100000)
-    en_habitaciones: int = Field(ge=0, le=100000)
+    limpias: int | None = Field(default=None, ge=0, le=100000)
+    sucias: int | None = Field(default=None, ge=0, le=100000)
+    en_habitaciones: int | None = Field(default=None, ge=0, le=100000)
+    total: int | None = Field(default=None, ge=0, le=300000)
+
+    @model_validator(mode="after")
+    def _con_cantidad(self):
+        if self.total is None and None in (self.limpias, self.sucias, self.en_habitaciones):
+            raise ValueError("Falta la cantidad: el total, o limpias, sucias y en uso.")
+        return self
 
 
 class RecuentoRopa(BaseModel):

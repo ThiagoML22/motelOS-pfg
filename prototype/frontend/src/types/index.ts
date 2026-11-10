@@ -898,14 +898,21 @@ export interface ResumenMes {
 
 export type Prenda = 'TOALLAS' | 'SABANAS';
 
+// Lo que manda quien cuenta: las tres partes donde se cuenta por estado, o solo el total donde se cuenta todo junto.
 export interface ConteoPrenda {
   prenda: Prenda;
-  limpias: number;
-  sucias: number;
-  en_habitaciones: number;
+  limpias?: number;
+  sucias?: number;
+  en_habitaciones?: number;
+  total?: number;
 }
 
-export interface RopaDejada extends ConteoPrenda {
+export interface RopaDejada {
+  prenda: Prenda;
+  // Nulas si ese recuento se hizo todo junto.
+  limpias: number | null;
+  sucias: number | null;
+  en_habitaciones: number | null;
   etiqueta: string;
   total: number;
   esperado: number | null;
@@ -935,6 +942,8 @@ export interface FotoVentanilla {
 export interface PantallaTraspaso extends FotoVentanilla {
   // Nulo mientras haya una guardia abierta: el recuento de cierre es a ciegas.
   ropa: RopaDejada[] | null;
+  // Cómo cuenta este motel: limpias, sucias y en uso por separado, o todo junto.
+  ropa_por_estado: boolean;
   ropa_contada: boolean;
   exige_recuento: boolean;
   saliente: { operador: string; franja: string; cerrada_en: string; sin_conteo: boolean } | null;
@@ -964,6 +973,34 @@ export interface Arreglo {
   costo: number | null;
 }
 
+export interface MovimientoRopaHecho {
+  id: number;
+  prenda: string;
+  tipo: string;
+  signo: number;
+  cantidad: number;
+  operador: string;
+  creado_en: string;
+}
+
+// Un recuento: una guardia, al abrir o al cerrar, con sus dos prendas.
+export interface RecuentoAgrupado {
+  clave: string;
+  creado_en: string;
+  momento: 'APERTURA' | 'CIERRE';
+  operador: string;
+  prendas: {
+    prenda: Prenda;
+    etiqueta: string;
+    limpias: number | null;
+    sucias: number | null;
+    en_habitaciones: number | null;
+    total: number;
+    esperado: number | null;
+    diferencia: number | null;
+  }[];
+}
+
 export interface ConteoHistorial {
   id: number;
   prenda: Prenda;
@@ -971,9 +1008,9 @@ export interface ConteoHistorial {
   momento: 'APERTURA' | 'CIERRE';
   creado_en: string;
   operador: string;
-  limpias: number;
-  sucias: number;
-  en_habitaciones: number;
+  limpias: number | null;
+  sucias: number | null;
+  en_habitaciones: number | null;
   total: number;
   esperado: number | null;
   diferencia: number | null;
@@ -1002,6 +1039,7 @@ export interface TableroOperacion {
     por_habitacion: { habitacion_id: number; numero: number | null; cantidad: number; costo: number }[];
   };
   ropa: {
+    por_estado: boolean;
     resumen: {
       prenda: Prenda;
       etiqueta: string;
@@ -1009,20 +1047,22 @@ export interface TableroOperacion {
       limpias: number | null;
       sucias: number | null;
       en_habitaciones: number | null;
+      contado_en: string | null;
+      contado_por: string | null;
       en_lavanderia: number;
       faltantes: number;
+      faltantes_del_mes: number;
     }[];
     conteos: ConteoHistorial[];
+    recuentos: RecuentoAgrupado[];
     diferencias: ConteoHistorial[];
-    movimientos: {
-      id: number;
-      prenda: string;
-      tipo: string;
-      signo: number;
-      cantidad: number;
-      operador: string;
-      creado_en: string;
-    }[];
+    // Los faltantes del último mes: durante la guardia de alguien, o en el cambio entre dos.
+    por_persona: {
+      dias: number;
+      en_guardia: { operador: string; unidades: number; recuentos: number }[];
+      en_cambio: { dejo: string; recibio: string; unidades: number; recuentos: number }[];
+    };
+    movimientos: MovimientoRopaHecho[];
   };
   traspasos: TraspasoHistorial[];
   traslados: {

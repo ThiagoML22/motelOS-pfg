@@ -51,6 +51,12 @@ class CostoArreglo(BaseModel):
     costo: float | None = Field(default=None, ge=0, le=TOPE_IMPORTE)
 
 
+class FormaDeContar(BaseModel):
+    """True: limpias, sucias y en uso por separado. False: todo junto."""
+
+    por_estado: bool
+
+
 class MovimientoRopa(BaseModel):
     prenda: Prenda
     tipo: Literal["LAVANDERIA_SALE", "LAVANDERIA_VUELVE", "COMPRA", "BAJA"]
@@ -102,6 +108,14 @@ async def movimiento_de_ropa(
     return await ropa.registrar_movimiento(db, operador, datos.prenda, datos.tipo, datos.cantidad)
 
 
+@router.get("/ropa/movimientos")
+async def movimientos_de_mi_guardia(
+    db: AsyncSession = Depends(get_db), operador: Operador = Depends(operador_actual)
+) -> list[dict]:
+    """Lo que el conserje anotó en su guardia abierta. No dice cuánta ropa hay."""
+    return await ropa.movimientos_de_la_guardia(db, operador)
+
+
 # --- Solo la gerencia ------------------------------------------------------------------------------------------------
 @gerencia.get("/tablero")
 async def tablero(db: AsyncSession = Depends(get_db)) -> dict:
@@ -111,6 +125,14 @@ async def tablero(db: AsyncSession = Depends(get_db)) -> dict:
         "traspasos": await traspasos.historial(db),
         "traslados": await arreglos.traslados(db),
     }
+
+
+@gerencia.patch("/ropa/forma")
+async def forma_de_contar(
+    datos: FormaDeContar, db: AsyncSession = Depends(get_db), operador: Operador = Depends(operador_actual)
+) -> dict:
+    """Cómo cuenta la ropa este establecimiento. Rige desde el próximo recuento."""
+    return await ropa.cambiar_forma(db, operador, datos.por_estado)
 
 
 @gerencia.patch("/arreglos/{arreglo_id}/costo")

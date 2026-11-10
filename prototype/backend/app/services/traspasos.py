@@ -105,6 +105,7 @@ async def para_la_pantalla(db: AsyncSession, operador: Operador) -> dict:
         return {
             **foto,
             "ropa": None,
+            "ropa_por_estado": await ropa.cuenta_por_estado(db),
             "ropa_contada": await ropa.hizo_el_recuento(db, abierta.id),
             "exige_recuento": settings.EXIGIR_RECUENTO_ROPA,
             "saliente": None,
@@ -122,6 +123,7 @@ async def para_la_pantalla(db: AsyncSession, operador: Operador) -> dict:
     return {
         **foto,
         "ropa": await ropa.para_recibir(db),
+        "ropa_por_estado": await ropa.cuenta_por_estado(db),
         "ropa_contada": False,
         "exige_recuento": settings.EXIGIR_RECUENTO_ROPA,
         "saliente": saliente,

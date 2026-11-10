@@ -54,6 +54,7 @@ import {
   Arreglo,
   ConteoPrenda,
   MotivoTraslado,
+  MovimientoRopaHecho,
   PantallaTraspaso,
   Prenda,
   RopaContada,
@@ -263,6 +264,13 @@ export const api = {
 
   movimientoRopa: async (datos: { prenda: Prenda; tipo: TipoMovimientoRopa; cantidad: number }) =>
     (await http.post('/operacion/ropa/movimientos', datos)).data,
+
+  // Lo que el conserje anotó en su guardia abierta.
+  getMovimientosRopa: async (): Promise<MovimientoRopaHecho[]> => (await http.get('/operacion/ropa/movimientos')).data,
+
+  // La gerencia elige si la ropa se cuenta por estado o todo junto.
+  formaDeContarRopa: async (porEstado: boolean): Promise<{ por_estado: boolean }> =>
+    (await http.patch('/operacion/ropa/forma', { por_estado: porEstado })).data,
 
   getArreglos: async (filtro: { habitacionId?: number; sinResolver?: boolean } = {}): Promise<Arreglo[]> =>
     (

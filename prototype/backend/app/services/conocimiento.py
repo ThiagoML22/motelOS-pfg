@@ -82,9 +82,10 @@ DEFINICIONES: tuple[Definicion, ...] = (
         "recuento_ropa",
         "Recuento de ropa",
         (r"recuento de (la )?ropa", r"conteo de (la )?ropa", r"recuento de toallas"),
-        "Es contar todas las toallas y sábanas del motel en cada cambio de guardia: limpias, sucias y puestas en las "
-        "habitaciones. Quien cierra cuenta a ciegas y quien entra confirma o corrige. Lo que salió a la lavandería, "
-        "se compró o se dio de baja se anota aparte, y una diferencia sin explicar la ve la gerencia.",
+        "Es contar todas las toallas y sábanas del motel en cada cambio de guardia. Cada motel elige cómo: separadas "
+        "en limpias, sucias y en uso (las puestas en las habitaciones), o todo junto. Quien cierra cuenta a ciegas y "
+        "quien entra confirma o corrige. Lo que salió a la lavandería, se compró o se dio de baja se anota aparte, y "
+        "una diferencia sin explicar la ve la gerencia.",
         "caja",
         extra="toallas sabanas contar lavanderia faltante",
     ),
@@ -600,7 +601,7 @@ VOCABULARIO_BASE = set(
     "cargale cargame agregale agregame sumale sumame anotame anotale poneme pasame dejame liberame abrime ocupame "
     "cobrale cerrale cliente perdido mot "
     "toalla toallas sabana sabanas ropa lavanderia arreglo arreglos falla fallas traslado trasladar traslada "
-    "trasladame "
+    "trasladame junto juntas juntos separado separadas separados estado contar cuenta cuentan "
     "traspaso recuento conteo mudar muda mudame "
     "especial especiales franja franjas noche noches tarde madrugada mediodia siesta sabado domingo miercoles rige "
     "gracias hola buenas buenos genial perfecto listo barbaro necesito quiero podes puedes sabes ayuda ayudame favor "

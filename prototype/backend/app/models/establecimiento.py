@@ -33,3 +33,5 @@ class Establecimiento(Base):
     wifi_nombre = Column(String(60), nullable=True)
     wifi_clave = Column(String(60), nullable=True)
     bienvenida = Column(String(200), nullable=True)
+    # Cómo se cuenta la ropa (migración 017): separada en limpias, sucias y en uso, o todo junto.
+    ropa_por_estado = Column(Boolean, nullable=False, default=True, server_default=true())

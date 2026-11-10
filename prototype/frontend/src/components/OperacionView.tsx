@@ -1,12 +1,13 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { AlertTriangle, ArrowRight, ArrowRightLeft, ChevronDown, Pencil, Repeat2, Shirt, Wrench } from 'lucide-react';
-import { Arreglo, ConteoHistorial, TableroOperacion, TraspasoHistorial } from '../types';
+import { ArrowRight, ArrowRightLeft, ChevronDown, Pencil, Repeat2, Shirt, Wrench } from 'lucide-react';
+import { Arreglo, TableroOperacion, TraspasoHistorial } from '../types';
 import { api, EVENTO_RECONECTADO, getErrorMessage } from '../services/api';
 import { aImporte, NOMBRE_FRANJA } from '../utils/caja';
 import { formatDateTime, formatMoney, formatRoomNumber } from '../utils/format';
 import { FilaArreglo, FormResolverArreglo } from './ArreglosHabitacion';
 import { textoDiferencia } from './RecuentoRopa';
 import ResumenTraspaso from './ResumenTraspaso';
+import RopaGerencia from './RopaGerencia';
 import Button from './ui/Button';
 import { EsqueletoTabla } from './ui/Carga';
 import Field, { inputClass } from './ui/Field';
@@ -237,133 +238,6 @@ const SeccionArreglos: React.FC<{ tablero: TableroOperacion; onCambio: () => Pro
   );
 };
 
-// --- Ropa ------------------------------------------------------------------------------------------------------------
-
-const MOMENTO: Record<ConteoHistorial['momento'], string> = { APERTURA: 'Apertura', CIERRE: 'Cierre' };
-
-const CeldaDiferencia: React.FC<{ valor: number | null }> = ({ valor }) =>
-  valor === null ? (
-    <span className="text-subtle">Primer recuento</span>
-  ) : valor === 0 ? (
-    <span className="text-muted">Coincide</span>
-  ) : (
-    <span className="font-medium text-danger">{textoDiferencia(valor)}</span>
-  );
-
-const SeccionRopa: React.FC<{ tablero: TableroOperacion }> = ({ tablero }) => {
-  const { ropa } = tablero;
-  return (
-    <div className="space-y-5">
-      <div className="grid gap-5 lg:grid-cols-2">
-        {ropa.resumen.map((r) => (
-          <Tarjeta key={r.prenda} titulo={r.etiqueta} detalle={r.total === null ? 'Sin recuentos todavía.' : 'Según el último recuento.'}>
-            <div className="grid grid-cols-3 gap-y-3 sm:grid-cols-5">
-              {[
-                ['Total', r.total],
-                ['Limpias', r.limpias],
-                ['Sucias', r.sucias],
-                ['En habitaciones', r.en_habitaciones],
-                ['En lavandería', r.en_lavanderia],
-              ].map(([nombre, valor]) => (
-                <div key={nombre as string}>
-                  <p className="text-xs leading-tight text-muted">{nombre}</p>
-                  <p className="mt-0.5 text-lg font-semibold tabular-nums text-ink">{valor ?? '—'}</p>
-                </div>
-              ))}
-            </div>
-            {r.faltantes > 0 && (
-              <p className="mt-3 flex items-center gap-1.5 text-sm font-medium text-danger">
-                <AlertTriangle className="h-4 w-4" aria-hidden="true" />
-                {r.faltantes} sin explicar en todo el historial
-              </p>
-            )}
-          </Tarjeta>
-        ))}
-      </div>
-
-      <Tarjeta titulo="Diferencias" detalle="Entre un recuento y el siguiente, descontando lo que entró o salió del motel.">
-        {ropa.diferencias.length === 0 ? (
-          <Vacio>Los recuentos coinciden.</Vacio>
-        ) : (
-          <ul className="divide-y divide-line">
-            {ropa.diferencias.map((d) => (
-              <li key={d.id} className="flex flex-wrap items-baseline justify-between gap-x-4 py-2 text-sm">
-                <span className="text-ink">
-                  <span className="font-medium">{d.etiqueta}:</span> <CeldaDiferencia valor={d.diferencia} />
-                  <span className="text-muted">
-                    {' '}
-                    · {d.anterior_por === d.operador ? `en la guardia de ${d.operador}` : `entre ${d.anterior_por} y ${d.operador}`}
-                  </span>
-                </span>
-                <span className="text-xs text-muted">{formatDateTime(d.creado_en)}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Tarjeta>
-
-      <Tarjeta titulo="Recuentos">
-        {ropa.conteos.length === 0 ? (
-          <Vacio>Todavía no se hizo ningún recuento.</Vacio>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[40rem] text-sm">
-              <thead>
-                <tr className="border-b border-line text-left text-xs text-muted">
-                  <th scope="col" className="py-2 font-medium">Cuándo</th>
-                  <th scope="col" className="py-2 font-medium">Quién</th>
-                  <th scope="col" className="py-2 font-medium">Qué</th>
-                  <th scope="col" className="py-2 text-right font-medium">Limpias</th>
-                  <th scope="col" className="py-2 text-right font-medium">Sucias</th>
-                  <th scope="col" className="py-2 text-right font-medium">En hab.</th>
-                  <th scope="col" className="py-2 text-right font-medium">Total</th>
-                  <th scope="col" className="py-2 text-right font-medium">Control</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-line">
-                {ropa.conteos.map((c) => (
-                  <tr key={c.id}>
-                    <td className="py-2 text-muted">
-                      {formatDateTime(c.creado_en)} · {MOMENTO[c.momento]}
-                    </td>
-                    <td className="py-2 text-ink">{c.operador}</td>
-                    <td className="py-2 text-ink">{c.etiqueta}</td>
-                    <td className="py-2 text-right tabular-nums">{c.limpias}</td>
-                    <td className="py-2 text-right tabular-nums">{c.sucias}</td>
-                    <td className="py-2 text-right tabular-nums">{c.en_habitaciones}</td>
-                    <td className="py-2 text-right font-medium tabular-nums">{c.total}</td>
-                    <td className="py-2 text-right">
-                      <CeldaDiferencia valor={c.diferencia} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Tarjeta>
-
-      <Tarjeta titulo="Movimientos" detalle="Lo que el personal anotó que entró o salió del motel.">
-        {ropa.movimientos.length === 0 ? (
-          <Vacio>No hay movimientos registrados.</Vacio>
-        ) : (
-          <ul className="divide-y divide-line">
-            {ropa.movimientos.map((m) => (
-              <li key={m.id} className="flex flex-wrap items-baseline justify-between gap-x-4 py-2 text-sm">
-                <span className="text-ink">
-                  {m.tipo}: <span className="tabular-nums">{m.signo > 0 ? '+' : '−'}{m.cantidad}</span> {m.prenda.toLowerCase()}
-                  <span className="text-muted"> · {m.operador}</span>
-                </span>
-                <span className="text-xs text-muted">{formatDateTime(m.creado_en)}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Tarjeta>
-    </div>
-  );
-};
-
 // --- Traspasos -------------------------------------------------------------------------------------------------------
 
 const FilaTraspaso: React.FC<{ traspaso: TraspasoHistorial }> = ({ traspaso: t }) => {
@@ -521,7 +395,7 @@ const OperacionView: React.FC = () => {
         </div>
       )}
       {tablero && seccion === 'arreglos' && <SeccionArreglos tablero={tablero} onCambio={cargar} />}
-      {tablero && seccion === 'ropa' && <SeccionRopa tablero={tablero} />}
+      {tablero && seccion === 'ropa' && <RopaGerencia ropa={tablero.ropa} onCambio={cargar} />}
       {tablero && seccion === 'traspasos' && <SeccionTraspasos tablero={tablero} />}
       {tablero && seccion === 'traslados' && <SeccionTraslados tablero={tablero} />}
     </div>

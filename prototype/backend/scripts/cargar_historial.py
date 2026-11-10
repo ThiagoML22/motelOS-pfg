@@ -64,6 +64,7 @@ from app.services import franjas, sellos
 from app.services.billing_service import calcular_sobreturno
 from app.services.caja import clasificar_diferencia
 from app.services.liquidacion import con_zona
+from app.services.ropa import cuenta_por_estado
 
 FRANJAS = (6, 14, 22)
 # Llegadas por hora (hora local) en un día promedio: la noche concentra la demanda y la tarde tiene su pico.
@@ -572,8 +573,8 @@ async def agregar_operacion(db: AsyncSession, semilla: int, habitacion_poco_usad
         ).scalars()
     )
     nombres = {o.id: o.nombre_visible for o in operadores}
-    # El mismo conserje que tiene más faltantes en la caja.
-    desprolijo = operadores[min(1, len(operadores) - 1)].id if operadores else None
+    # El mismo conserje que tiene más faltantes en la caja. Con uno solo no hay con quién comparar: no pierde nada.
+    desprolijo = operadores[1].id if len(operadores) > 1 else None
     desde = ahora - timedelta(days=DIAS_DE_RECUENTOS)
     guardias = list(
         (
@@ -595,6 +596,8 @@ async def agregar_operacion(db: AsyncSession, semilla: int, habitacion_poco_usad
 
     hay = {prenda: cantidad * len(habitaciones) for prenda, cantidad in ROPA_POR_HABITACION.items()}
     lavando = dict.fromkeys(hay, 0)
+    # Cada motel cuenta a su manera (migración 017): separado por estado o todo junto.
+    por_estado = await cuenta_por_estado(db)
     cantidades = {"recuentos": 0, "movimientos": 0, "traspasos": 0, "arreglos": 0, "traslados": 0}
     anterior: Guardia | None = None
     ultimo: dict[str, int] = {}
@@ -609,9 +612,10 @@ async def agregar_operacion(db: AsyncSession, semilla: int, habitacion_poco_usad
                 operador_id=guardia.operador_id,
                 momento=momento_conteo,
                 prenda=prenda,
-                limpias=total - en_habitaciones - sucias,
-                sucias=sucias,
-                en_habitaciones=en_habitaciones,
+                limpias=total - en_habitaciones - sucias if por_estado else None,
+                sucias=sucias if por_estado else None,
+                en_habitaciones=en_habitaciones if por_estado else None,
+                total=total,
                 creado_en=cuando,
             )
             db.add(fila)

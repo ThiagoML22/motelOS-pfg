@@ -87,7 +87,10 @@ class Arreglo(DeEstablecimiento, Base):
 
 
 class RopaConteo(DeEstablecimiento, Base):
-    """Cuánta ropa hay en el motel al abrir o cerrar una guardia (migración 016). Es de solo agregado."""
+    """Cuánta ropa hay en el motel al abrir o cerrar una guardia (migración 016). Es de solo agregado.
+
+    Donde se cuenta todo junto solo va el total (migración 017); donde se cuenta por separado, el total es la suma.
+    """
 
     __tablename__ = "ropa_conteos"
     __table_args__ = (
@@ -99,14 +102,11 @@ class RopaConteo(DeEstablecimiento, Base):
     operador_id = Column(Integer, ForeignKey("operadores.id"), nullable=False)
     momento = Column(String(10), nullable=False)
     prenda = Column(String(10), nullable=False)
-    limpias = Column(Integer, nullable=False)
-    sucias = Column(Integer, nullable=False)
-    en_habitaciones = Column(Integer, nullable=False)
+    limpias = Column(Integer, nullable=True)
+    sucias = Column(Integer, nullable=True)
+    en_habitaciones = Column(Integer, nullable=True)
+    total = Column(Integer, nullable=False)
     creado_en = Column(DateTime(timezone=True), nullable=False, default=_ahora)
-
-    @property
-    def total(self) -> int:
-        return self.limpias + self.sucias + self.en_habitaciones
 
 
 class RopaMovimiento(DeEstablecimiento, Base):

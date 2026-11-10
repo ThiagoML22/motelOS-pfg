@@ -25,7 +25,8 @@ const GuardiaView: React.FC<GuardiaViewProps> = ({ sesion, onGuardiaAbierta, onS
   const [traspaso, setTraspaso] = useState<PantallaTraspaso | null>(null);
   const [ropa, setRopa] = useState(ropaVacia);
   const ajena = sesion.guardia && !sesion.guardia.es_propia ? sesion.guardia : null;
-  const conteos = aConteos(ropa);
+  const porEstado = traspaso?.ropa_por_estado ?? true;
+  const conteos = aConteos(ropa, porEstado);
 
   // Antes de abrir, el conserje lee lo que dejaron las guardias anteriores (migración 009) y ve lo que recibe.
   useEffect(() => {
@@ -37,7 +38,7 @@ const GuardiaView: React.FC<GuardiaViewProps> = ({ sesion, onGuardiaAbierta, onS
       .getTraspaso()
       .then((pantalla) => {
         setTraspaso(pantalla);
-        setRopa(ropaDesde(pantalla.ropa));
+        setRopa(ropaDesde(pantalla.ropa, pantalla.ropa_por_estado));
       })
       .catch(() => setTraspaso(null));
   }, []);
@@ -125,8 +126,9 @@ const GuardiaView: React.FC<GuardiaViewProps> = ({ sesion, onGuardiaAbierta, onS
                 {traspaso?.ropa?.length
                   ? `Le dejaron esta cantidad, contada por ${traspaso.ropa[0].contado_por}. Cuente toda la ropa del motel y corrija lo que no coincida.`
                   : 'Es el primer recuento: cuente toda la ropa del motel.'}
+                {porEstado && ' «En uso» son las que están puestas en las habitaciones.'}
               </p>
-              <RecuentoRopa valores={ropa} onCambiar={setRopa} dejada={traspaso?.ropa} idBase="apertura" />
+              <RecuentoRopa valores={ropa} onCambiar={setRopa} porEstado={porEstado} dejada={traspaso?.ropa} idBase="apertura" />
             </section>
 
             <div className="mt-6 flex justify-end gap-3">

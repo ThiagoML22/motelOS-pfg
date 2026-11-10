@@ -4,7 +4,7 @@ import { Arqueo, PantallaTraspaso, RopaContada, Sesion } from '../types';
 import { api, getErrorMessage } from '../services/api';
 import { formatDateTime, formatMoney } from '../utils/format';
 import { CATEGORIA_META, NOMBRE_FRANJA, aImporte, redondear } from '../utils/caja';
-import RecuentoRopa, { aConteos, ropaVacia, textoDiferencia } from './RecuentoRopa';
+import RecuentoRopa, { aConteos, ropaVacia, textoDiferencia, totalDe } from './RecuentoRopa';
 import ResumenTraspaso from './ResumenTraspaso';
 import Button from './ui/Button';
 import Field, { inputClass } from './ui/Field';
@@ -42,7 +42,9 @@ const CierreCajaView: React.FC<CierreCajaViewProps> = ({ sesion, resultado, onCo
       .catch(() => setTraspaso(null));
   }, []);
 
-  const conteos = aConteos(ropa);
+  // Si no se pudo saber cómo cuenta el motel, se pide por estado y el servidor avisa si no era así.
+  const porEstado = traspaso?.ropa_por_estado ?? true;
+  const conteos = aConteos(ropa, porEstado);
   // Sin el recuento no se cierra: si no se pudo saber, lo decide el servidor al confirmar.
   const falta = Boolean(traspaso?.exige_recuento) && !traspaso?.ropa_contada && !contada;
 
@@ -128,28 +130,41 @@ const CierreCajaView: React.FC<CierreCajaViewProps> = ({ sesion, resultado, onCo
             Toallas y sábanas
           </h2>
           {contada || traspaso?.ropa_contada ? (
-            <div className="mt-3 space-y-1 text-sm">
+            <div className="mt-3 text-sm">
               <p className="flex items-center gap-2 text-ink">
                 <CheckCircle2 className="h-4 w-4 text-libre" aria-hidden="true" />
-                Recuento hecho.
+                Recuento hecho. Quien entra recibe estos números.
               </p>
-              {contada?.map((p) => (
-                <p key={p.prenda} className="text-muted">
-                  {p.etiqueta}: {p.total}
-                  {p.diferencia === null && ' (primer recuento)'}
-                  {p.diferencia === 0 && ', coincide con lo que debería haber'}
-                  {!!p.diferencia && (
-                    <span className="font-medium text-danger">, {textoDiferencia(p.diferencia)}: lo verá la gerencia</span>
-                  )}
-                </p>
-              ))}
+              {contada && (
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  {contada.map((p) => (
+                    <div
+                      key={p.prenda}
+                      className={`rounded-lg border p-3 ${p.diferencia ? 'border-danger/40 bg-danger-soft/40' : 'border-line bg-surface-2/60'}`}
+                    >
+                      <p className="text-xs text-muted">{p.etiqueta}</p>
+                      <p className="mt-0.5 text-2xl font-semibold tabular-nums text-ink">{p.total}</p>
+                      <p className={`mt-1 text-xs ${p.diferencia ? 'font-medium text-danger' : 'text-muted'}`}>
+                        {p.diferencia === null && 'Primer recuento.'}
+                        {p.diferencia === 0 && 'Coincide con lo que debería haber.'}
+                        {!!p.diferencia && `Debería haber ${p.esperado}: ${textoDiferencia(p.diferencia)}. Lo verá la gerencia.`}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           ) : (
             <>
               <p className="mt-0.5 mb-3 text-xs text-muted">
-                Cuente toda la ropa del motel, sin ver cuánta debería haber. Quien entra recibe este número.
+                Cuente toda la ropa del motel{porEstado ? ', separada en limpias, sucias y en uso (las puestas en las habitaciones)' : ''},
+                sin ver cuánta debería haber. Quien entra recibe este número.
               </p>
-              <RecuentoRopa valores={ropa} onCambiar={setRopa} idBase="cierre" />
+              {traspaso ? (
+                <RecuentoRopa valores={ropa} onCambiar={setRopa} porEstado={porEstado} idBase="cierre" />
+              ) : (
+                <p className="text-sm text-muted">Cargando…</p>
+              )}
               <Button className="mt-4 w-full sm:w-auto" disabled={!conteos} onClick={() => setConfirmandoRopa(true)}>
                 Guardar recuento
               </Button>
@@ -268,9 +283,16 @@ const CierreCajaView: React.FC<CierreCajaViewProps> = ({ sesion, resultado, onCo
         >
           <dl className="space-y-2 text-sm">
             {conteos.map((c) => (
-              <div key={c.prenda} className="flex justify-between">
-                <dt className="text-muted">{c.prenda === 'TOALLAS' ? 'Toallas' : 'Sábanas'}</dt>
-                <dd className="tabular-nums text-ink">{c.limpias + c.sucias + c.en_habitaciones}</dd>
+              <div key={c.prenda} className="flex items-baseline justify-between gap-3">
+                <dt className="text-muted">
+                  {c.prenda === 'TOALLAS' ? 'Toallas' : 'Sábanas'}
+                  {c.total === undefined && (
+                    <span className="block text-xs">
+                      {c.limpias} limpias · {c.sucias} sucias · {c.en_habitaciones} en uso
+                    </span>
+                  )}
+                </dt>
+                <dd className="text-lg font-semibold tabular-nums text-ink">{totalDe(ropa[c.prenda], porEstado)}</dd>
               </div>
             ))}
           </dl>

@@ -373,6 +373,24 @@ TEMAS: tuple[Tema, ...] = (
         "dashboard",
     ),
     Tema(
+        "forma_recuento",
+        "Elegir cómo se cuenta la ropa",
+        (
+            r"\b(junt[oa]s?|separad[oa]s?|por estado)\b.*\b(ropa|toallas?|sabanas?)\b",
+            r"\b(ropa|toallas?|sabanas?)\b.*\b(junt[oa]s?|separad[oa]s?|por estado)\b",
+            r"como se cuentan? (la |las )?(ropa|toallas|sabanas)",
+            r"(forma|manera) de contar",
+        ),
+        (
+            "En «Operación», solapa «Ropa», está «Cómo cuentan los conserjes».",
+            "«Por estado» pide limpias, sucias y en uso por separado; «Todo junto», un solo número por prenda.",
+            "Rige desde el próximo recuento. Lo ya contado no cambia.",
+            "El control de faltantes sigue igual: se compara siempre el total.",
+        ),
+        "operacion",
+        GERENCIA,
+    ),
+    Tema(
         "recuento_ropa",
         "Contar las toallas y las sábanas",
         (
@@ -382,8 +400,8 @@ TEMAS: tuple[Tema, ...] = (
             r"ropa de cama",
         ),
         (
-            "Al terminar la guardia, en «Cierre de caja» contá toda la ropa del motel: limpias, sucias y las que están "
-            "en las habitaciones.",
+            "Al terminar la guardia, en «Cierre de caja» contá toda la ropa del motel. Según lo que eligió la "
+            "gerencia, va separada en limpias, sucias y en uso (las puestas en las habitaciones) o todo junto.",
             "Es a ciegas, como la caja: recién después de guardarlo ves si coincide. Sin el recuento no se cierra.",
             "Quien entra ve lo que dejaste y lo confirma o lo corrige antes de abrir su guardia.",
             "Si no coincide, la gerencia lo ve con los dos nombres.",
@@ -400,8 +418,9 @@ TEMAS: tuple[Tema, ...] = (
         ),
         (
             "En Inventario tocá «Movimiento de ropa».",
-            "Elegí toallas o sábanas, qué pasó (sale a la lavandería, vuelve, compra o baja por rotura) y la cantidad.",
-            "Así, en el próximo recuento no aparece como faltante.",
+            "Elegí qué pasó (sale a la lavandería, vuelve, compra o baja por rotura), toallas o sábanas y la cantidad.",
+            "Lo anota el conserje con su guardia abierta, también cuando la ropa la compró la gerencia.",
+            "Así, en el próximo recuento no aparece como faltante. Abajo ves lo que ya anotaste en tu guardia.",
         ),
         "inventario",
     ),
@@ -886,7 +905,8 @@ PANTALLAS = {
         (
             "En «Arreglos» ves lo pendiente, lo gastado y el historial de cada habitación, y cargás un costo que llegó "
             "después.",
-            "En «Ropa» ves el último recuento, las diferencias con los nombres y lo que entró o salió del motel.",
+            "En «Ropa» ves cuánta hay, dónde faltó (en una guardia o en el cambio), cada recuento y lo que entró o "
+            "salió. Ahí también elegís si se cuenta por estado o todo junto.",
             "En «Traspasos» ves qué recibió cada conserje al abrir, y las guardias cerradas sin conteo.",
             "En «Traslados» ves cada turno que cambió de habitación y por qué.",
         ),
@@ -895,7 +915,7 @@ PANTALLAS = {
             "¿Faltan toallas?",
             "¿Cuánto gastamos en arreglos?",
             "¿Qué habitación se rompe más?",
-            "¿Qué arreglos hay abiertos?",
+            "¿Cómo elijo cómo se cuenta la ropa?",
         ),
         GERENCIA,
     ),
@@ -1446,6 +1466,8 @@ DINERO = {
     "arreglos",
 }
 INTENCIONES_ANALISIS = {nombre for nombre, _ in INTENCIONES}
+# Temas que no son una pregunta de datos aunque nombren uno: «que las toallas se cuenten juntas» es un ajuste.
+SIN_DATOS = {"forma_recuento"}
 
 
 def _respuesta_de(entrada, es_gerencia: bool, otras: list | None = None) -> dict:
@@ -1593,7 +1615,7 @@ async def responder(
     tema = _tema(texto, es_gerencia)
 
     # 2. Instrucciones pedidas con «cómo», «dónde», «qué hago»...
-    if tema and pide_instrucciones:
+    if tema and (pide_instrucciones or tema.id in SIN_DATOS):
         return _respuesta_de(tema, es_gerencia), texto
 
     # 3. La ventanilla ahora (lo que el conserje ya ve en su pantalla).

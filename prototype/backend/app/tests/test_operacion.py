@@ -528,3 +528,138 @@ async def test_la_alerta_de_ropa_no_acusa_por_una_toalla(client, otro_conserje, 
     await otro_conserje.post(f"{GUARDIAS}/", json=_ropa(toallas=(39, 10, 16)))
     alertas = (await gerencia.get("/api/v1/inteligencia/tablero")).json()["alertas"]
     assert not [a for a in alertas if "toallas" in a["titulo"]]
+
+
+# --- Cómo se cuenta la ropa (migración 017) --------------------------------------------------------------------------
+
+JUNTO = {"conteos": [{"prenda": "TOALLAS", "total": 66}, {"prenda": "SABANAS", "total": 52}]}
+
+
+async def _todo_junto(gerencia) -> None:
+    resp = await gerencia.patch(f"{OPERACION}/ropa/forma", json={"por_estado": False})
+    assert resp.status_code == 200, resp.text
+
+
+async def test_por_defecto_se_cuenta_por_estado(client):
+    assert (await client.get(f"{GUARDIAS}/traspaso")).json()["ropa_por_estado"] is True
+    resp = await client.post(f"{GUARDIAS}/actual/ropa", json=JUNTO)
+    assert resp.status_code == 422 and "por separado" in resp.json()["detail"]
+
+
+async def test_la_gerencia_elige_contar_todo_junto(client, gerencia, db):
+    assert (await client.patch(f"{OPERACION}/ropa/forma", json={"por_estado": False})).status_code == 403
+    await _todo_junto(gerencia)
+    assert (await client.get(f"{GUARDIAS}/traspaso")).json()["ropa_por_estado"] is False
+
+    resp = await client.post(f"{GUARDIAS}/actual/ropa", json=JUNTO)
+    assert resp.status_code == 201, resp.text
+    filas = list((await db.execute(select(RopaConteo).where(RopaConteo.momento == "CIERRE"))).scalars())
+    assert {f.prenda: f.total for f in filas} == {"TOALLAS": 66, "SABANAS": 52}
+    assert all(f.limpias is None and f.sucias is None and f.en_habitaciones is None for f in filas)
+
+    cambios = await db.execute(select(RegistroActividad).where(RegistroActividad.accion == "ROPA_FORMA"))
+    cambio = cambios.scalars().one()
+    assert "todo junto" in cambio.descripcion and cambio.categoria == "OPERACION"
+
+
+async def test_todo_junto_sigue_siendo_obligatorio_y_a_ciegas(client, gerencia, exige_recuento):
+    await _todo_junto(gerencia)
+    assert (await client.post(f"{GUARDIAS}/actual/arqueo", json=ARQUEO)).status_code == 409
+    assert (await client.post(f"{GUARDIAS}/actual/ropa", json={"conteos": [JUNTO["conteos"][0]]})).status_code == 422
+    assert (await client.post(f"{GUARDIAS}/actual/ropa", json={"conteos": [{"prenda": "TOALLAS"}]})).status_code == 422
+    assert (await client.post(f"{GUARDIAS}/actual/ropa", json=JUNTO)).status_code == 201
+    assert (await client.get(f"{GUARDIAS}/traspaso")).json()["ropa"] is None
+    assert (await client.post(f"{GUARDIAS}/actual/arqueo", json=ARQUEO)).status_code == 201
+
+
+async def test_cambiar_la_forma_no_corta_el_control(client, gerencia, otro_conserje, db):
+    """Se cerró contando por estado y se abre contando todo junto: se compara el total."""
+    await _cerrar_con_conteo(client, _ropa())
+    await _todo_junto(gerencia)
+    pantalla = (await otro_conserje.get(f"{GUARDIAS}/traspaso")).json()
+    toallas = next(p for p in pantalla["ropa"] if p["prenda"] == "TOALLAS")
+    assert pantalla["ropa_por_estado"] is False and toallas["total"] == 66 and toallas["limpias"] == 40
+
+    recibe = {"conteos": [{"prenda": "TOALLAS", "total": 64}, {"prenda": "SABANAS", "total": 52}]}
+    assert (await otro_conserje.post(f"{GUARDIAS}/", json=recibe)).status_code == 201
+    aviso = (
+        (await db.execute(select(RegistroActividad).where(RegistroActividad.accion == "ROPA_DIFERENCIA")))
+        .scalars()
+        .one()
+    )
+    assert "Toallas: faltan 2" in aviso.descripcion
+
+    tablero = (await gerencia.get(f"{OPERACION}/tablero")).json()["ropa"]
+    assert tablero["por_estado"] is False
+    toallas = next(r for r in tablero["resumen"] if r["prenda"] == "TOALLAS")
+    assert toallas["total"] == 64 and toallas["limpias"] is None and toallas["faltantes_del_mes"] == 2
+
+
+async def test_todo_junto_acepta_las_partes_y_guarda_el_total(client, gerencia, db):
+    await _todo_junto(gerencia)
+    assert (await client.post(f"{GUARDIAS}/actual/ropa", json=_ropa())).status_code == 201
+    fila = (await db.execute(select(RopaConteo).where(RopaConteo.prenda == "TOALLAS"))).scalars().one()
+    assert fila.total == 66 and fila.limpias is None
+
+
+async def test_el_conserje_ve_lo_que_anoto_en_su_guardia(client, otro_conserje):
+    assert (await client.get(f"{OPERACION}/ropa/movimientos")).json() == []
+    for tipo, cantidad in (("LAVANDERIA_SALE", 12), ("BAJA", 1)):
+        movimiento = {"prenda": "SABANAS", "tipo": tipo, "cantidad": cantidad}
+        assert (await client.post(f"{OPERACION}/ropa/movimientos", json=movimiento)).status_code == 201
+    propios = (await client.get(f"{OPERACION}/ropa/movimientos")).json()
+    assert [(m["tipo"], m["signo"], m["cantidad"]) for m in propios] == [
+        ("Baja por rotura", -1, 1),
+        ("Salió a la lavandería", -1, 12),
+    ]
+    # Quien no tiene la guardia no ve los de otro.
+    assert (await otro_conserje.get(f"{OPERACION}/ropa/movimientos")).json() == []
+
+
+async def test_la_gerencia_ve_un_renglon_por_recuento_y_donde_falto(client, gerencia, otro_conserje):
+    await _cerrar_con_conteo(client, _ropa())
+    await otro_conserje.post(f"{GUARDIAS}/", json=_ropa(toallas=(38, 10, 16)))
+    await _cerrar_con_conteo(otro_conserje, _ropa(toallas=(37, 10, 16)))
+    ropa = (await gerencia.get(f"{OPERACION}/tablero")).json()["ropa"]
+
+    ultimo = ropa["recuentos"][0]
+    assert ultimo["momento"] == "CIERRE" and ultimo["operador"] == "Conserje Dos"
+    assert [(p["prenda"], p["total"], p["diferencia"]) for p in ultimo["prendas"]] == [
+        ("TOALLAS", 63, -1),
+        ("SABANAS", 52, 0),
+    ]
+    assert len(ropa["recuentos"]) == 3
+
+    personas = ropa["por_persona"]
+    assert personas["en_guardia"] == [{"operador": "Conserje Dos", "unidades": 1, "recuentos": 1}]
+    assert personas["en_cambio"] == [
+        {"dejo": "Conserje Uno", "recibio": "Conserje Dos", "unidades": 2, "recuentos": 1}
+    ]
+
+
+@pytest.mark.parametrize(
+    "pregunta",
+    [
+        "¿cómo elijo cómo se cuenta la ropa?",
+        "quiero que las toallas se cuenten todas juntas",
+        "¿se pueden contar las sábanas por separado?",
+    ],
+)
+async def test_mot_explica_como_elegir_la_forma(gerencia, client, pregunta):
+    datos = await _preguntar(gerencia, pregunta)
+    assert "Elegir cómo se cuenta la ropa" in datos["respuesta"] and datos["pasos"], datos
+    # Al conserje le explica cómo contar: elegir la forma es de la gerencia.
+    conserje = await _preguntar(client, pregunta)
+    assert "Elegir cómo se cuenta" not in conserje["respuesta"]
+
+
+async def test_el_historial_de_ejemplo_respeta_la_forma_del_motel(db, gerencia):
+    await generar_historial(db, dias=14, semilla=5, intensidad=1.5)
+    await _todo_junto(gerencia)
+    cantidades = await agregar_operacion(db, 5)
+    await db.commit()
+    filas = list((await db.execute(select(RopaConteo))).scalars())
+    assert len(filas) == cantidades["recuentos"] > 0
+    assert all(f.limpias is None and f.total > 0 for f in filas)
+    resumen = (await gerencia.get(f"{OPERACION}/tablero")).json()["ropa"]["resumen"]
+    assert all(r["limpias"] is None and r["total"] > 0 for r in resumen)
