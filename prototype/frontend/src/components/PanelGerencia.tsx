@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { BarChart3, DoorOpen, RefreshCw } from 'lucide-react';
-import { Arqueo, ArqueoDetalle, Guardia, MetricasCaja } from '../types';
+import { BarChart3, DoorOpen, FileDown, RefreshCw, ShieldCheck, Tags } from 'lucide-react';
+import { ArqueoDetalle, Guardia, MetricasCaja, ResumenCategoria } from '../types';
 import { api, getErrorMessage } from '../services/api';
 import { formatDateTime, formatMoney, formatRoomNumber } from '../utils/format';
 import { CATEGORIA_META, NOMBRE_FRANJA, formatPorcentaje } from '../utils/caja';
@@ -9,6 +9,9 @@ import Field, { inputClass } from './ui/Field';
 import Modal from './ui/Modal';
 import { useToast } from './ui/Toast';
 import CierreSupervisadoModal from './CierreSupervisadoModal';
+import HistorialArqueos from './HistorialArqueos';
+import IntegridadCaja from './IntegridadCaja';
+import { EsqueletoTabla } from './ui/Carga';
 
 // Línea de base de la AE1: 1 de cada 10 recambios con faltante o sobrante.
 const TDC_LINEA_DE_BASE = 0.1;
@@ -31,14 +34,18 @@ const MEDIO: Record<string, string> = { EFECTIVO: 'Efectivo', POSNET: 'POSNET', 
 // por el sistema. Solo muestra arqueos confirmados: el total de una guardia abierta no se ve (RN-RES-03).
 interface PanelGerenciaProps {
   onCambioGuardia: () => Promise<void>;
+  // El código de un comprobante que llegó por su QR.
+  codigoInicial?: string | null;
 }
 
-const PanelGerencia: React.FC<PanelGerenciaProps> = ({ onCambioGuardia }) => {
+const PanelGerencia: React.FC<PanelGerenciaProps> = ({ onCambioGuardia, codigoInicial }) => {
   const { toast } = useToast();
   const [rango, setRango] = useState<Rango>('30');
   const [operadorId, setOperadorId] = useState<number | ''>('');
   const [metricas, setMetricas] = useState<MetricasCaja | null>(null);
-  const [arqueos, setArqueos] = useState<Arqueo[]>([]);
+  const [porCategoria, setPorCategoria] = useState<ResumenCategoria[]>([]);
+  // Cambia en cada recarga del panel: el historial de arqueos vuelve a pedir sus meses.
+  const [version, setVersion] = useState(0);
   const [estado, setEstado] = useState<'cargando' | 'ok' | 'error'>('cargando');
   const [detalle, setDetalle] = useState<ArqueoDetalle | null>(null);
   const [guardiaAbierta, setGuardiaAbierta] = useState<Guardia | null>(null);
@@ -47,20 +54,17 @@ const PanelGerencia: React.FC<PanelGerenciaProps> = ({ onCambioGuardia }) => {
   const cargar = useCallback(async () => {
     const desde = desdeRango(rango);
     try {
-      const [m, a, g] = await Promise.all([
-        api.getMetricas({ desde }),
-        api.getArqueos({ desde, operador_id: operadorId === '' ? undefined : operadorId }),
-        api.getGuardiaActual(),
-      ]);
+      const [m, g, c] = await Promise.all([api.getMetricas({ desde }), api.getGuardiaActual(), api.getPorCategoria({ desde })]);
+      setPorCategoria(c);
       setMetricas(m);
-      setArqueos(a);
+      setVersion((v) => v + 1);
       setGuardiaAbierta(g);
       setEstado('ok');
     } catch (err) {
       setEstado('error');
       toast(getErrorMessage(err, 'No se pudo cargar el panel de caja.'), 'error');
     }
-  }, [rango, operadorId, toast]);
+  }, [rango, toast]);
 
   useEffect(() => {
     void cargar();
@@ -131,7 +135,7 @@ const PanelGerencia: React.FC<PanelGerenciaProps> = ({ onCambioGuardia }) => {
         </div>
       </div>
 
-      {estado === 'cargando' && <p className="py-16 text-center text-sm text-muted">Cargando arqueos…</p>}
+      {estado === 'cargando' && <EsqueletoTabla etiqueta="Cargando arqueos…" />}
       {estado === 'error' && (
         <div className="flex flex-col items-center gap-3 rounded-lg border border-line bg-surface py-16">
           <p className="text-sm text-muted">No se pudo obtener la información de caja.</p>
@@ -230,63 +234,57 @@ const PanelGerencia: React.FC<PanelGerenciaProps> = ({ onCambioGuardia }) => {
             </section>
           )}
 
-          <section aria-labelledby="titulo-arqueos">
-            <h2 id="titulo-arqueos" className="mb-2 text-sm font-semibold text-ink">
-              Arqueos
-            </h2>
-            <div className="overflow-x-auto rounded-lg border border-line bg-surface">
-              <table className="w-full min-w-[48rem] text-left text-sm">
-                <thead>
-                  <tr className="border-b border-line bg-surface-2 text-xs font-medium uppercase tracking-wide text-subtle">
-                    <th scope="col" className="px-4 py-2.5">Confirmado</th>
-                    <th scope="col" className="px-4 py-2.5">Guardia</th>
-                    <th scope="col" className="px-4 py-2.5">Conserje</th>
-                    <th scope="col" className="px-4 py-2.5 text-right">Declarado</th>
-                    <th scope="col" className="px-4 py-2.5 text-right">Sistema</th>
-                    <th scope="col" className="px-4 py-2.5 text-right">Diferencia</th>
-                    <th scope="col" className="px-4 py-2.5">Resultado</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-line">
-                  {arqueos.map((a) => (
-                    <tr
-                      key={a.id}
-                      tabIndex={0}
-                      onClick={() => void abrirDetalle(a.id)}
-                      onKeyDown={(e) => e.key === 'Enter' && void abrirDetalle(a.id)}
-                      className="cursor-pointer transition-colors hover:bg-surface-2 focus-visible:bg-surface-2"
-                    >
-                      <td className="px-4 py-2.5 tabular-nums text-muted">{formatDateTime(a.confirmado_en)}</td>
-                      <td className="px-4 py-2.5">{a.franja}</td>
-                      <td className="px-4 py-2.5 font-medium text-ink">{a.operador_nombre}</td>
-                      <td className="px-4 py-2.5 text-right tabular-nums">{formatMoney(a.total_declarado)}</td>
-                      <td className="px-4 py-2.5 text-right tabular-nums">{formatMoney(a.total_sistema)}</td>
-                      <td className={`px-4 py-2.5 text-right tabular-nums ${a.diferencia < 0 ? 'text-danger' : ''}`}>
-                        {formatMoney(a.diferencia)}
-                      </td>
-                      <td className="px-4 py-2.5">
-                        <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${CATEGORIA_META[a.categoria].clase}`}>
-                          {a.categoria}
+          {porCategoria.length > 0 && (
+            <section aria-labelledby="titulo-por-categoria" className="mb-6">
+              <h2 id="titulo-por-categoria" className="mb-2 flex items-center gap-2 text-sm font-semibold text-ink">
+                <Tags className="h-4 w-4 text-muted" aria-hidden="true" />
+                Por categoría de habitación
+                <span className="font-normal text-subtle">· turnos cobrados en guardias ya arqueadas</span>
+              </h2>
+              <div className="grid grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-3">
+                {porCategoria.map((c) => {
+                  const total = porCategoria.reduce((s, x) => s + x.ingresos, 0) || 1;
+                  const parte = c.ingresos / total;
+                  return (
+                    <article key={c.categoria_id} className="rounded-lg border border-line bg-surface p-4">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="flex items-center gap-2 font-semibold text-ink">
+                          <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: c.color }} aria-hidden="true" />
+                          {c.nombre}
                         </span>
-                        {a.supervisado && (
-                          <span className="ml-2 text-xs text-muted" title={a.observacion ?? undefined}>
-                            supervisado
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                  {arqueos.length === 0 && (
-                    <tr>
-                      <td colSpan={7} className="px-4 py-12 text-center text-muted">
-                        No hay arqueos confirmados en este período.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </section>
+                        <span className="text-xs text-muted">
+                          Ocupadas {c.ocupadas}/{c.habitaciones}
+                        </span>
+                      </div>
+                      <p className="mt-2 text-xl font-semibold tabular-nums text-ink">{formatMoney(c.ingresos)}</p>
+                      <div className="mt-1 h-1.5 rounded-full bg-line" aria-hidden="true">
+                        <div className="h-1.5 rounded-full" style={{ width: `${parte * 100}%`, backgroundColor: c.color }} />
+                      </div>
+                      <dl className="mt-3 grid grid-cols-3 gap-2 text-xs">
+                        <div>
+                          <dt className="text-muted">Turnos</dt>
+                          <dd className="font-medium tabular-nums text-ink">{c.turnos}</dd>
+                        </div>
+                        <div>
+                          <dt className="text-muted">Ticket</dt>
+                          <dd className="font-medium tabular-nums text-ink">{formatMoney(c.ticket_promedio)}</dd>
+                        </div>
+                        <div>
+                          <dt className="text-muted">Estadía</dt>
+                          <dd className="font-medium tabular-nums text-ink">{c.minutos_promedio} min</dd>
+                        </div>
+                      </dl>
+                    </article>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+
+          <IntegridadCaja codigoInicial={codigoInicial} version={version} onAbrir={(id) => void abrirDetalle(id)} />
+
+          {/* Historial segmentado por mes y por día (independiente del período de arriba; respeta el conserje). */}
+          <HistorialArqueos operadorId={operadorId} version={version} onAbrir={(id) => void abrirDetalle(id)} />
         </>
       )}
 
@@ -351,6 +349,27 @@ const PanelGerencia: React.FC<PanelGerenciaProps> = ({ onCambioGuardia }) => {
               El efectivo del sistema incluye el fondo de cambio de {formatMoney(detalle.fondo_inicial)}.
             </p>
           )}
+          {detalle.codigo && (
+            <p className="mt-3 flex flex-wrap items-center gap-x-2 text-xs text-muted">
+              <ShieldCheck className="h-3.5 w-3.5 text-libre" aria-hidden="true" />
+              Comprobante verificable
+              <span className="font-mono font-medium text-ink">{detalle.codigo}</span>· eslabón {detalle.secuencia}
+            </p>
+          )}
+          <div className="mt-4 flex justify-end">
+            <Button
+              variant="secondary"
+              className="h-11"
+              onClick={() =>
+                void api
+                  .descargarComprobante(detalle.id, true)
+                  .catch((err) => toast(getErrorMessage(err, 'No se pudo generar el comprobante en PDF.'), 'error'))
+              }
+            >
+              <FileDown className="h-4 w-4" aria-hidden="true" />
+              Comprobante en PDF
+            </Button>
+          </div>
         </Modal>
       )}
 

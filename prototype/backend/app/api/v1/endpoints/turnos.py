@@ -2,6 +2,7 @@ import uuid
 from datetime import UTC, datetime
 from decimal import Decimal
 
+import segno
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,9 +10,11 @@ from sqlalchemy.future import select
 
 from app.api.deps import operador_actual
 from app.core.database import get_db
-from app.models.articulo import Articulo
+from app.models.categoria import CategoriaHabitacion
 from app.models.consumo import Consumo
 from app.models.estadia_activa import EstadiaActiva
+from app.models.evento_habitacion import COBRO, TURNO
+from app.models.franja_tarifa import FranjaTarifa
 from app.models.habitacion import Habitacion
 from app.models.operador import Operador
 from app.models.pago import Pago
@@ -22,12 +25,16 @@ from app.schemas.turno import (
     CierreTurnoCreate,
     ConstanciaCobro,
     PagoConstancia,
+    TrasladoCreate,
     TurnoCreate,
     TurnoResponse,
     TurnoResumen,
 )
+from app.services import acceso_cliente, arreglos, franjas, rotacion
+from app.services.actividad import pesos
 from app.services.caja import guardia_del_operador
-from app.services.estadia import cargar_nombres_de_apertura, cargar_patentes
+from app.services.consumos import cargar_consumo
+from app.services.estadia import cargar_estadia_base, cargar_nombres_de_apertura, cargar_patentes
 from app.services.liquidacion import liquidar_turno
 
 router = APIRouter()
@@ -54,16 +61,25 @@ async def create_turno(
 
     guardia = await guardia_del_operador(db, operador)
 
-    tarifa_res = await db.execute(select(Tarifa).where(Tarifa.vigente.is_(True)).order_by(Tarifa.id.desc()))
-    tarifa = tarifa_res.scalars().first()
-    if not tarifa:
-        raise HTTPException(status_code=409, detail="No hay una tarifa vigente para liquidar el turno")
+    # La tarifa que rige ahora para la categoría de la habitación: la especial de esta franja o la general. El turno la
+    # conserva aunque después cambie la franja, la tarifa o la categoría (RN-DER-06).
+    ahora = datetime.now(UTC)
+    vigente = await franjas.tarifa_en(db, habitacion.categoria_id, ahora)
+    if vigente is None:
+        raise HTTPException(status_code=409, detail="No hay una tarifa vigente para la categoría de la habitación")
+    tarifa = vigente.tarifa
+    if turno_in.tarifa_id is not None and turno_in.tarifa_id != tarifa.id:
+        nombre = f" ({vigente.franja.nombre})" if vigente.franja else ""
+        raise HTTPException(
+            status_code=409,
+            detail=f"La tarifa acaba de cambiar: ahora rige {pesos(tarifa.tarifa_base)}{nombre}. Revísela.",
+        )
 
     nuevo_turno = Turno(
         habitacion_id=turno_in.habitacion_id,
         tarifa_id=tarifa.id,
         tipo_cliente=turno_in.tipo_cliente,
-        hora_inicio=datetime.now(UTC),
+        hora_inicio=ahora,
         estado="En Curso",
         tarifa_base=tarifa.tarifa_base,
         total_general=tarifa.tarifa_base,
@@ -74,11 +90,11 @@ async def create_turno(
     db.add(nuevo_turno)
     patente = (turno_in.identificador_vehicular or "").strip() or None
     try:
+        await db.flush()
         if patente:
             # RNF-08: la patente vive en la estadía activa, no en el turno inmutable.
-            await db.flush()
             db.add(EstadiaActiva(turno_id=nuevo_turno.id, identificador_vehicular=patente))
-        habitacion.estado = "Ocupada"
+        await rotacion.cambiar_estado(db, habitacion, "Ocupada", operador, TURNO, nuevo_turno.id)
         await db.commit()
     except IntegrityError:
         # RN-EXI-01: el índice turnos_uno_en_curso_por_habitacion deja pasar un solo turno en curso.
@@ -87,7 +103,21 @@ async def create_turno(
     await db.refresh(nuevo_turno)
     nuevo_turno.identificador_vehicular = patente
     nuevo_turno.abierto_por = operador.nombre_visible
+    nuevo_turno.estadia_base_min = tarifa.estadia_base_min
     return nuevo_turno
+
+
+@router.post("/{turno_id}/trasladar")
+async def trasladar(
+    turno_id: uuid.UUID,
+    datos: TrasladoCreate,
+    db: AsyncSession = Depends(get_db),
+    operador: Operador = Depends(operador_actual),
+) -> dict:
+    """El turno pasa a otra habitación libre y conserva su hora, su tarifa, su cuenta y el enlace del cliente."""
+    return await arreglos.trasladar(
+        db, operador, turno_id, datos.habitacion_id, datos.motivo, datos.rubro, datos.descripcion
+    )
 
 
 @router.post("/{turno_id}/consumos", status_code=status.HTTP_201_CREATED)
@@ -97,49 +127,27 @@ async def add_consumo(
     db: AsyncSession = Depends(get_db),
     operador: Operador = Depends(operador_actual),
 ):
-    # RN-EXI-02: Check stock and atomically add consumption
-    # El turno se bloquea igual que en el cobro: un consumo y un cobro simultáneos no se intercalan.
-    turno_res = await db.execute(select(Turno).where(Turno.id == turno_id).with_for_update())
-    turno = turno_res.scalars().first()
-    if not turno or turno.estado != "En Curso":
-        raise HTTPException(status_code=400, detail="Turno no válido o no está en curso")
-
-    await guardia_del_operador(db, operador)
-
-    art_res = await db.execute(select(Articulo).where(Articulo.id == consumo_in.articulo_id).with_for_update())
-    articulo = art_res.scalars().first()
-    if not articulo:
-        raise HTTPException(status_code=404, detail="Artículo no encontrado")
-
-    if not articulo.activo:
-        raise HTTPException(status_code=409, detail="El artículo está dado de baja.")
-
-    if articulo.stock_actual < consumo_in.cantidad:
-        raise HTTPException(
-            status_code=400, detail=f"RN-EXI-02: Stock insuficiente. Stock actual: {articulo.stock_actual}"
-        )
-
-    # Descontar stock
-    articulo.stock_actual -= consumo_in.cantidad
-
-    subtotal = articulo.precio_unitario * consumo_in.cantidad
-
-    nuevo_consumo = Consumo(
-        turno_id=turno_id,
-        articulo_id=articulo.id,
-        cantidad=consumo_in.cantidad,
-        precio_unitario=articulo.precio_unitario,
-        subtotal=subtotal,
-        operador_id=operador.id,
-    )
-    db.add(nuevo_consumo)
-
-    # Actualizar totales en turno
-    turno.total_consumos += subtotal
-    turno.total_general += subtotal
-
+    subtotal = await cargar_consumo(db, turno_id, consumo_in.articulo_id, consumo_in.cantidad, operador)
     await db.commit()
     return {"status": "ok", "subtotal": float(subtotal)}
+
+
+@router.get("/{turno_id}/ticket")
+async def ticket(
+    turno_id: uuid.UUID, db: AsyncSession = Depends(get_db), operador: Operador = Depends(operador_actual)
+) -> dict:
+    """El ticket del cliente: un enlace firmado a su estadía, que vale mientras el turno esté en curso."""
+    turno = (await db.execute(select(Turno).where(Turno.id == turno_id))).scalars().first()
+    if not turno or turno.estado != "En Curso":
+        raise HTTPException(status_code=400, detail="Turno no válido o no está en curso")
+    direccion = acceso_cliente.direccion_de(acceso_cliente.token_de(operador.establecimiento_id, turno.id))
+    habitacion = await db.get(Habitacion, turno.habitacion_id)
+    return {
+        "direccion": direccion,
+        "qr": segno.make(direccion, error="m", boost_error=False).svg_data_uri(scale=4, border=2),
+        "numero": habitacion.numero,
+        "hora_inicio": turno.hora_inicio,
+    }
 
 
 @router.get("/{turno_id}/resumen", response_model=TurnoResumen)
@@ -159,10 +167,26 @@ async def get_resumen(turno_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
 
     await cargar_patentes(db, [turno])
     await cargar_nombres_de_apertura(db, [turno])
+    await cargar_estadia_base(db, [turno])
     resumen_dict = turno.__dict__.copy()
     resumen_dict["minutos_transcurridos"] = liquidacion.minutos_transcurridos
     resumen_dict["total_pagado"] = liquidacion.total_pagado
     resumen_dict["saldo_pendiente"] = liquidacion.saldo_pendiente
+    tarifa = await db.get(Tarifa, turno.tarifa_id)
+    if tarifa is not None:
+        categoria = await db.get(CategoriaHabitacion, tarifa.categoria_id)
+        franja = await db.get(FranjaTarifa, tarifa.franja_id) if tarifa.franja_id else None
+        resumen_dict["tarifa"] = {
+            "categoria": categoria.nombre if categoria else None,
+            "color": categoria.color if categoria else None,
+            "franja": franja.nombre if franja else None,
+            "tarifa_base": tarifa.tarifa_base,
+            "estadia_base_min": tarifa.estadia_base_min,
+            "fraccion_min": tarifa.fraccion_min,
+            "tarifa_fraccion": tarifa.tarifa_fraccion,
+            "tolerancia_min": tarifa.tolerancia_min,
+            "tope": tarifa.tope,
+        }
     resumen_dict["consumos"] = [
         {
             "id": str(c.id),
@@ -234,7 +258,7 @@ async def cerrar_turno(
     hab_res = await db.execute(select(Habitacion).where(Habitacion.id == turno.habitacion_id))
     habitacion = hab_res.scalars().first()
     if habitacion:
-        habitacion.estado = "En Limpieza"
+        await rotacion.cambiar_estado(db, habitacion, "En Limpieza", operador, COBRO, turno.id)
 
     await db.commit()
     await db.refresh(turno)

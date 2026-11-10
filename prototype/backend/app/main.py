@@ -5,8 +5,28 @@ from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api.deps import operador_actual, solo_administrador
-from app.api.v1.endpoints import arqueos, articulos, auth, configuracion, guardias, habitaciones, operadores, turnos
+from app.api.deps import operador_actual, operador_de_establecimiento, solo_administrador, solo_plataforma
+from app.api.v1.endpoints import (
+    arqueos,
+    articulos,
+    asistente,
+    auth,
+    categorias,
+    cliente,
+    clientes_perdidos,
+    configuracion,
+    guardias,
+    habitaciones,
+    inteligencia,
+    novedades,
+    operacion,
+    operadores,
+    pedidos,
+    pedidos_cliente,
+    perfil,
+    plataforma,
+    turnos,
+)
 from app.core.config import settings
 from app.services.estadia import ciclo_depuracion
 
@@ -62,19 +82,47 @@ app.add_middleware(
     allow_headers=["Content-Type", ENCABEZADO_APP[0]],
 )
 
-# Todas las rutas de la API exigen sesión, salvo el inicio y el cierre de sesión.
-con_sesion = [Depends(operador_actual)]
+# Todas las rutas de la API exigen sesión, salvo el inicio y el cierre de sesión. Las de la ventanilla y la
+# gerencia, además, una sesión de un establecimiento (la plataforma no opera ningún motel).
+con_sesion = [Depends(operador_de_establecimiento)]
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["sesión"])
 app.include_router(habitaciones.router, prefix="/api/v1/habitaciones", tags=["habitaciones"], dependencies=con_sesion)
 app.include_router(turnos.router, prefix="/api/v1/turnos", tags=["turnos"], dependencies=con_sesion)
 app.include_router(articulos.router, prefix="/api/v1/articulos", tags=["articulos"], dependencies=con_sesion)
 app.include_router(guardias.router, prefix="/api/v1/guardias", tags=["caja"], dependencies=con_sesion)
+app.include_router(categorias.router, prefix="/api/v1/categorias", tags=["habitaciones"], dependencies=con_sesion)
+app.include_router(novedades.router, prefix="/api/v1/novedades", tags=["novedades"], dependencies=con_sesion)
+# Pedidos de reposición (migración 010): los arma la gerencia; los recibe el conserje o la gerencia.
+app.include_router(pedidos.router, prefix="/api/v1/pedidos", tags=["inventario"], dependencies=con_sesion)
+# Clientes perdidos (migración 011): los registra el conserje en su guardia; los analiza la inteligencia.
+app.include_router(
+    clientes_perdidos.router, prefix="/api/v1/clientes-perdidos", tags=["habitaciones"], dependencies=con_sesion
+)
+# El cliente en su habitación (migración 013): sin sesión, con el enlace firmado de su ticket; solo abre su turno.
+app.include_router(cliente.router, prefix="/api/v1/cliente", tags=["cliente"])
+app.include_router(
+    pedidos_cliente.router, prefix="/api/v1/pedidos-cliente", tags=["habitaciones"], dependencies=con_sesion
+)
+# Operación diaria (migración 016): arreglos y ropa. Lo que ve la gerencia se monta más abajo.
+app.include_router(operacion.router, prefix="/api/v1/operacion", tags=["operación"], dependencies=con_sesion)
+# Asistente para todo el personal (ayuda y ventanilla); a la gerencia además le responde el análisis de datos.
+app.include_router(asistente.router, prefix="/api/v1/asistente", tags=["asistente"], dependencies=con_sesion)
+# Mi perfil: cualquier sesión, también la plataforma.
+app.include_router(perfil.router, prefix="/api/v1/perfil", tags=["perfil"], dependencies=[Depends(operador_actual)])
 # Panel de la gerencia: solo el rol ADMINISTRADOR.
 solo_gerencia = [Depends(solo_administrador)]
 app.include_router(arqueos.router, prefix="/api/v1/arqueos", tags=["gerencia"], dependencies=solo_gerencia)
 app.include_router(operadores.router, prefix="/api/v1/operadores", tags=["gerencia"], dependencies=solo_gerencia)
 app.include_router(
     configuracion.router, prefix="/api/v1/configuracion", tags=["gerencia"], dependencies=solo_gerencia
+)
+app.include_router(
+    inteligencia.router, prefix="/api/v1/inteligencia", tags=["gerencia"], dependencies=solo_gerencia
+)
+app.include_router(operacion.gerencia, prefix="/api/v1/operacion", tags=["gerencia"], dependencies=solo_gerencia)
+# Plataforma (multiinquilino): alta, suspensión y resumen de establecimientos. Solo el rol PLATAFORMA.
+app.include_router(
+    plataforma.router, prefix="/api/v1/plataforma", tags=["plataforma"], dependencies=[Depends(solo_plataforma)]
 )
 
 

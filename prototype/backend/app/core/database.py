@@ -8,6 +8,9 @@ AsyncSessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_co
 
 Base = declarative_base()
 
+# Registra los eventos que aíslan cada establecimiento (filtro, alta y Row Level Security).
+import app.core.inquilino  # noqa: E402, F401
+
 
 async def get_db():
     async with AsyncSessionLocal() as session:

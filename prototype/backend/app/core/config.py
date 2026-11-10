@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/motel_db"
     SQL_ECHO: bool = False
     CORS_ORIGINS: str = "http://localhost:5173"
+    # Dirección de la aplicación en la red del motel, para el QR de los comprobantes. Vacía: la primera de CORS_ORIGINS.
+    URL_PUBLICA: str = ""
     # RNF-08: la patente se elimina dentro de las N horas posteriores al cierre del turno (24 h, aprobado por
     # la gerencia el 06/10/2026) y la tarea de depuración corre cada DEPURACION_INTERVALO_MIN minutos.
     RETENCION_PATENTE_HORAS: int = 24
@@ -36,10 +38,20 @@ class Settings(BaseSettings):
     # Guardias (RF-08): franjas de 06:00, 14:00 y 22:00 en la hora local del motel. Una guardia abierta hasta
     # GUARDIA_ANTICIPACION_MIN minutos antes de su hora de inicio corresponde a esa franja.
     ZONA_HORARIA: str = "America/Argentina/Buenos_Aires"
+    # Sin el recuento de toallas y sábanas no se abre ni se cierra una guardia (migración 016).
+    EXIGIR_RECUENTO_ROPA: bool = True
     GUARDIA_ANTICIPACION_MIN: int = 120
     # Fondo de cambio que recibe cada guardia en la gaveta: $25.000, aprobado por la gerencia en el acta de
     # validación del 19/10/2026 (punto 5). Se suma al efectivo que el sistema espera en el arqueo.
     FONDO_INICIAL_CAJA: Decimal = Decimal("25000")
+    # Multiinquilino (migración 006): código del establecimiento cuando el inicio de sesión no indica uno. Así
+    # una instalación de un solo motel se usa igual que antes.
+    ESTABLECIMIENTO_PREDETERMINADO: str = "motelcc"
+
+    @property
+    def url_aplicacion(self) -> str:
+        """La dirección de la aplicación: la configurada o la primera de CORS_ORIGINS."""
+        return (self.URL_PUBLICA or self.CORS_ORIGINS.split(",")[0].strip()).rstrip("/")
 
     @model_validator(mode="after")
     def exigir_configuracion_segura(self) -> "Settings":

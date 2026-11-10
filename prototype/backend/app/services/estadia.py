@@ -7,8 +7,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.database import AsyncSessionLocal
+from app.core.inquilino import fijar_establecimiento
+from app.models.establecimiento import Establecimiento
 from app.models.estadia_activa import EstadiaActiva
 from app.models.operador import Operador
+from app.models.tarifa import Tarifa
 from app.models.turno import Turno
 
 logger = logging.getLogger(__name__)
@@ -35,6 +38,17 @@ async def cargar_nombres_de_apertura(db: AsyncSession, turnos: list[Turno]) -> N
         turno.abierto_por = nombres.get(turno.operador_apertura_id)
 
 
+async def cargar_estadia_base(db: AsyncSession, turnos: list[Turno]) -> None:
+    """Completa los minutos de estadía base de la tarifa de cada turno (migración 008: dependen de la categoría)."""
+    ids = {t.tarifa_id for t in turnos}
+    if not ids:
+        return
+    res = await db.execute(select(Tarifa.id, Tarifa.estadia_base_min).where(Tarifa.id.in_(ids)))
+    minutos = dict(res.all())
+    for turno in turnos:
+        turno.estadia_base_min = minutos.get(turno.tarifa_id)
+
+
 async def depurar_patentes(
     db: AsyncSession, horas: int | None = None, ahora: datetime | None = None
 ) -> int:
@@ -54,12 +68,22 @@ async def depurar_patentes(
     return res.rowcount or 0
 
 
+async def depurar_todos(db: AsyncSession) -> int:
+    """Depura las patentes de cada establecimiento, uno por vez: con RLS, motel_app solo ve las filas del
+    establecimiento que fija la transacción (multiinquilino, migración 006)."""
+    eliminadas = 0
+    for (establecimiento_id,) in (await db.execute(select(Establecimiento.id))).all():
+        await fijar_establecimiento(db, establecimiento_id)
+        eliminadas += await depurar_patentes(db)
+    return eliminadas
+
+
 async def ciclo_depuracion() -> None:
     """Tarea de fondo: depura las patentes vencidas cada DEPURACION_INTERVALO_MIN minutos."""
     while True:
         try:
             async with AsyncSessionLocal() as db:
-                eliminadas = await depurar_patentes(db)
+                eliminadas = await depurar_todos(db)
             if eliminadas:
                 logger.info("RNF-08: %s patente(s) eliminada(s) por vencimiento del plazo de retención", eliminadas)
         except Exception:  # la depuración se reintenta en el ciclo siguiente

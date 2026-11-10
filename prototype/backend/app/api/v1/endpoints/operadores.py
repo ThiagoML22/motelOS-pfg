@@ -12,12 +12,17 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import operador_actual
 from app.core.database import get_db
 from app.core.seguridad import hashear_clave
+from app.models.actividad import PERSONAL
 from app.models.guardia import Guardia
 from app.models.operador import ROL_ADMINISTRADOR, Operador
 from app.schemas.auth import OperadorPublico
 from app.schemas.configuracion import ConserjeAlta, OperadorActivo
+from app.schemas.perfil import ClaveRestablecida
+from app.services import perfil
+from app.services.actividad import registrar
 
 router = APIRouter()
 
@@ -34,7 +39,9 @@ async def listar(db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/", response_model=OperadorEstado, status_code=status.HTTP_201_CREATED)
-async def alta_conserje(datos: ConserjeAlta, db: AsyncSession = Depends(get_db)):
+async def alta_conserje(
+    datos: ConserjeAlta, db: AsyncSession = Depends(get_db), gerencia: Operador = Depends(operador_actual)
+):
     existente = (await db.execute(select(Operador).where(Operador.usuario == datos.usuario))).scalars().first()
     if existente is not None:
         raise HTTPException(status_code=409, detail=f"El usuario {datos.usuario} ya existe.")
@@ -43,6 +50,9 @@ async def alta_conserje(datos: ConserjeAlta, db: AsyncSession = Depends(get_db))
         usuario=datos.usuario, nombre_visible=datos.nombre_visible.strip(), hash_clave=hashear_clave(datos.clave)
     )
     db.add(conserje)
+    await registrar(
+        db, gerencia, PERSONAL, "CONSERJE_ALTA", f"Alta del conserje {conserje.nombre_visible} ({datos.usuario})"
+    )
     try:
         await db.commit()
     except IntegrityError:
@@ -52,8 +62,24 @@ async def alta_conserje(datos: ConserjeAlta, db: AsyncSession = Depends(get_db))
     return conserje
 
 
+@router.post("/{operador_id}/clave", response_model=OperadorEstado)
+async def restablecer_clave(
+    operador_id: int,
+    datos: ClaveRestablecida,
+    db: AsyncSession = Depends(get_db),
+    gerencia: Operador = Depends(operador_actual),
+):
+    """La gerencia pone una clave nueva a un conserje (migración 008) y le quita el bloqueo por intentos."""
+    return await perfil.restablecer_clave(db, gerencia, operador_id, datos.nueva)
+
+
 @router.patch("/{operador_id}", response_model=OperadorEstado)
-async def cambiar_activo(operador_id: int, datos: OperadorActivo, db: AsyncSession = Depends(get_db)):
+async def cambiar_activo(
+    operador_id: int,
+    datos: OperadorActivo,
+    db: AsyncSession = Depends(get_db),
+    gerencia: Operador = Depends(operador_actual),
+):
     operador = await db.get(Operador, operador_id)
     if operador is None:
         raise HTTPException(status_code=404, detail="Operador no encontrado")
@@ -70,6 +96,11 @@ async def cambiar_activo(operador_id: int, datos: OperadorActivo, db: AsyncSessi
                 detail="El conserje tiene su guardia abierta: se cierra (o se usa el cierre supervisado) antes de "
                 "darlo de baja.",
             )
+    if operador.activo != datos.activo:
+        await registrar(
+            db, gerencia, PERSONAL, "CONSERJE_ESTADO",
+            f"{'Reactivación' if datos.activo else 'Baja'} del conserje {operador.nombre_visible} ({operador.usuario})",
+        )
     operador.activo = datos.activo
     await db.commit()
     await db.refresh(operador)

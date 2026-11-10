@@ -73,6 +73,10 @@ class PagoDetalle(BaseModel):
 
 class ArqueoDetalle(ArqueoResultado):
     pagos: list[PagoDetalle]
+    # Comprobante verificable (migración 012): nulos en los arqueos anteriores a la cadena.
+    huella: str | None = None
+    codigo: str | None = None
+    secuencia: int | None = None
 
 
 class MetricaCaja(BaseModel):
@@ -88,6 +92,29 @@ class MetricaCaja(BaseModel):
     total_sobrante: float
     # Tasa de Discrepancia de Caja: arqueos con diferencia distinta de 0 sobre el total (línea de base: 10 %).
     tdc: float
+
+
+class ResumenMes(MetricaCaja):
+    """Los arqueos de un mes (por el día en que se abrió cada guardia), para el historial desplegable."""
+
+    mes: str  # «2026-11»
+    desde: date
+    hasta: date
+
+
+class ResumenCategoria(BaseModel):
+    """Turnos cobrados e ingresos de una categoría de habitación en el período, y su ocupación ahora (migración 008)."""
+
+    categoria_id: int
+    nombre: str
+    color: str
+    turnos: int
+    ingresos: float
+    consumos: float
+    minutos_promedio: int
+    ticket_promedio: float
+    habitaciones: int
+    ocupadas: int
 
 
 class MetricasCaja(BaseModel):

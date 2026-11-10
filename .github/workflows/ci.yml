@@ -6,10 +6,13 @@ on:
       - main
       # Rama de integración del prototipo v2 (AE3): cada etapa entra por una solicitud de cambios.
       - ae3/v2
+      # Rama de integración del prototipo v3 (AE4): cada etapa de la demo del Sprint 4 entra por una solicitud de cambios.
+      - ae4/v3
   pull_request:
     branches:
       - main
       - ae3/v2
+      - ae4/v3
 
 jobs:
   backend:
@@ -93,6 +96,23 @@ jobs:
         run: |
           psql -h localhost -U postgres -d motel_schema -v ON_ERROR_STOP=1 -f db/verify_configuracion.sql
 
+      - name: Verificar el aislamiento entre establecimientos y el registro de actividad (multiinquilino)
+        working-directory: ./prototype
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h localhost -U postgres -d motel_schema -v ON_ERROR_STOP=1 -f db/verify_multiinquilino.sql
+          psql -h localhost -U postgres -d motel_schema -v ON_ERROR_STOP=1 -f db/verify_categorias_perfil.sql
+          psql -h localhost -U postgres -d motel_schema -v ON_ERROR_STOP=1 -f db/verify_personalizacion_novedades.sql
+          psql -h localhost -U postgres -d motel_schema -v ON_ERROR_STOP=1 -f db/verify_pedidos.sql
+          psql -h localhost -U postgres -d motel_schema -v ON_ERROR_STOP=1 -f db/verify_historial_clientes.sql
+          psql -h localhost -U postgres -d motel_schema -v ON_ERROR_STOP=1 -f db/verify_sellos.sql
+          psql -h localhost -U postgres -d motel_schema -v ON_ERROR_STOP=1 -f db/verify_pedidos_cliente.sql
+          psql -h localhost -U postgres -d motel_schema -v ON_ERROR_STOP=1 -f db/verify_franjas.sql
+          psql -h localhost -U postgres -d motel_schema -v ON_ERROR_STOP=1 -f db/verify_cliente_ampliado.sql
+          psql -h localhost -U postgres -d motel_schema -v ON_ERROR_STOP=1 -f db/verify_operacion.sql
+          psql -h localhost -U postgres -d motel_schema -v ON_ERROR_STOP=1 -f db/verify_recuento_ropa.sql
+
       - name: Verificar la migración desde una base v1.2 con datos
         working-directory: ./prototype
         env:
@@ -115,13 +135,18 @@ jobs:
         run: |
           export DEMO_CLAVE_GERENCIA="g-$(openssl rand -hex 12)"
           export DEMO_CLAVE_CONSERJES="c-$(openssl rand -hex 12)"
+          export DEMO_CLAVE_PLATAFORMA="p-$(openssl rand -hex 12)"
           DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/motel_schema python -m scripts.cargar_demo
-          DATABASE_URL=postgresql+asyncpg://motel_app:motel_app@localhost:5432/motel_schema \
+          # Los recorridos abren y cierran guardias sin ropa; el recuento obligatorio se prueba en test_operacion.
+          EXIGIR_RECUENTO_ROPA=false DATABASE_URL=postgresql+asyncpg://motel_app:motel_app@localhost:5432/motel_schema \
             uvicorn app.main:app --port 8000 > uvicorn.log 2>&1 &
           for i in $(seq 1 30); do curl -sf http://localhost:8000/health && break; sleep 1; done
           python -m scripts.recorrido_v2 --api http://localhost:8000
           python -m scripts.medir_latencia --api http://localhost:8000 --salida medicion_latencia_RNF-02.csv
           python -m scripts.recorrido_panel --api http://localhost:8000
+          python -m scripts.recorrido_multiinquilino --api http://localhost:8000
+          python -m scripts.recorrido_categorias_perfil --api http://localhost:8000
+          python -m scripts.recorrido_inteligencia_novedades --api http://localhost:8000
 
       - name: Guardar la medición de latencia
         if: always()

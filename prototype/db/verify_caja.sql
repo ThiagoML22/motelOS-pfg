@@ -2,6 +2,9 @@
 -- una habitacion tenga a lo sumo un turno en curso (RN-EXI-01).
 -- Falla con error si alguna regla no se cumple. Corre dentro de una transaccion que se revierte.
 -- Uso: psql -v ON_ERROR_STOP=1 -d <base con las migraciones aplicadas> -f db/verify_caja.sql
+-- Multiinquilino (migracion 006): las filas de esta verificacion son del establecimiento 1. Lo usan los
+-- valores por defecto de establecimiento_id y las politicas de RLS de motel_app.
+SET app.establecimiento_id = '1';
 BEGIN;
 DO $$
 DECLARE

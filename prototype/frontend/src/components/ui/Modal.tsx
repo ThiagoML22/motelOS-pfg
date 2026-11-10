@@ -19,7 +19,7 @@ const Modal: React.FC<ModalProps> = ({ title, subtitle, onClose, children, foote
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 animate-fade-in bg-ink/40" onClick={onClose} aria-hidden="true" />
+      <div className="absolute inset-0 animate-fade-in bg-ink/40 backdrop-blur-[2px]" onClick={onClose} aria-hidden="true" />
       <div
         ref={ref}
         role="dialog"

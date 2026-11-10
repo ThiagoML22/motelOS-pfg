@@ -17,7 +17,18 @@ class TurnoBase(BaseModel):
 
 
 class TurnoCreate(TurnoBase):
-    pass
+    # La tarifa que le mostró la pantalla a quien atiende. Si justo cambió (una franja que empieza, la gerencia), la
+    # apertura se rechaza: lo que se le dijo al cliente es lo que se cobra.
+    tarifa_id: int | None = None
+
+
+class TrasladoCreate(BaseModel):
+    """A qué habitación libre pasa el turno y por qué. Si es por una falla, qué falló."""
+
+    habitacion_id: int
+    motivo: Literal["FALLA", "CLIENTE", "OTRO"]
+    rubro: Literal["AIRE", "PLOMERIA", "ELECTRICIDAD", "TV", "MUEBLES", "OTRO"] | None = None
+    descripcion: str | None = Field(default=None, max_length=200)
 
 
 class TurnoResponse(TurnoBase):
@@ -33,6 +44,23 @@ class TurnoResponse(TurnoBase):
     total_general: float
     # RNF-04: quién abrió el turno (útil en el recambio, cuando lo cobra la guardia siguiente).
     abierto_por: str | None = None
+    # Estadía base de la tarifa del turno (migración 008: depende de la categoría): marca el exceso en la grilla.
+    estadia_base_min: int | None = None
+
+
+class TarifaDelTurno(BaseModel):
+    """La tarifa con la que se liquida el turno (la de su categoría cuando se abrió; migración 008)."""
+
+    categoria: str | None = None
+    color: str | None = None
+    # Si el turno se abrió en una tarifa especial (migración 014), su nombre.
+    franja: str | None = None
+    tarifa_base: float
+    estadia_base_min: int
+    fraccion_min: int
+    tarifa_fraccion: float
+    tolerancia_min: int = 0
+    tope: float | None = None
 
 
 class TurnoResumen(TurnoResponse):
@@ -40,6 +68,7 @@ class TurnoResumen(TurnoResponse):
     total_pagado: float = 0
     saldo_pendiente: float = 0
     consumos: list[ConsumoResponse] = []
+    tarifa: TarifaDelTurno | None = None
 
 
 class PagoCreate(BaseModel):

@@ -82,7 +82,7 @@ async def test_rf_11_el_precio_nuevo_no_cambia_los_consumos_registrados(client: 
 
 
 async def test_rf_11_el_fondo_nuevo_rige_desde_la_guardia_siguiente(cliente_como, db):
-    db.add(ConfiguracionCaja(id=1, fondo_cambio=25000))
+    db.add(ConfiguracionCaja(establecimiento_id=1, fondo_cambio=25000))
     await db.commit()
     conserje = await cliente_como("conserje1")
     abierta = await abrir_guardia(conserje)

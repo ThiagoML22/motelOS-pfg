@@ -4,6 +4,15 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>MotelOS — Recepción</title>
+    <script>
+      // Tema guardado (o el del sistema) antes de pintar: evita el destello claro al cargar en modo oscuro.
+      (function () {
+        var pref = null;
+        try { pref = localStorage.getItem('motelos.tema'); } catch (e) {}
+        var oscuro = pref === 'oscuro' || (pref !== 'claro' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        document.documentElement.dataset.theme = oscuro ? 'dark' : 'light';
+      })();
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">

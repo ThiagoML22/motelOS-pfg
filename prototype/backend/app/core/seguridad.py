@@ -39,11 +39,13 @@ def verificar_clave(hash_clave: str, clave: str) -> bool:
         return False
 
 
-def crear_token(operador_id: int, rol: str, ahora: datetime | None = None) -> str:
+def crear_token(operador_id: int, rol: str, establecimiento_id: int, ahora: datetime | None = None) -> str:
+    """El establecimiento viaja firmado en el token ("est"; 0 es la plataforma): el cliente no puede elegirlo."""
     emitido = ahora or datetime.now(UTC)
     datos = {
         "sub": str(operador_id),
         "rol": rol,
+        "est": establecimiento_id,
         "iat": emitido,
         "exp": emitido + timedelta(hours=settings.SESION_HORAS),
     }
@@ -57,7 +59,7 @@ def leer_token(token: str) -> dict[str, Any] | None:
             token,
             settings.JWT_SECRET,
             algorithms=[settings.JWT_ALGORITMO],
-            options={"require": ["exp", "iat", "sub"]},
+            options={"require": ["exp", "iat", "sub", "est"]},
         )
     except jwt.PyJWTError:
         return None

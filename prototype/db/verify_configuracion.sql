@@ -4,6 +4,9 @@
 -- cambia el fondo de cambio sin tocar la guardia abierta.
 -- Falla con error si alguna restriccion no se cumple. Corre dentro de una transaccion que se revierte.
 -- Uso: psql -v ON_ERROR_STOP=1 -d <base con las migraciones aplicadas> -f db/verify_configuracion.sql  (como dueno)
+-- Multiinquilino (migracion 006): las filas de esta verificacion son del establecimiento 1. Lo usan los
+-- valores por defecto de establecimiento_id y las politicas de RLS de motel_app.
+SET app.establecimiento_id = '1';
 BEGIN;
 DO $$
 DECLARE
@@ -52,9 +55,11 @@ BEGIN
     IF NOT bloqueado THEN RAISE EXCEPTION 'motel_app dio de baja a un conserje con su guardia abierta'; END IF;
 
     -- Tarifas: una nueva reemplaza a la vigente; la anterior no se edita ni se borra.
+    -- (migracion 008: la tarifa es de una categoria; la nueva reemplaza a la de la misma categoria)
     SELECT id INTO tarifa_vieja FROM tarifas WHERE vigente;
     UPDATE tarifas SET vigente = false WHERE id = tarifa_vieja;
-    INSERT INTO tarifas (nombre, tarifa_base, tarifa_fraccion, creada_por_id) VALUES ('Verificacion', 9000, 2500, gerencia_id);
+    INSERT INTO tarifas (nombre, tarifa_base, tarifa_fraccion, creada_por_id, categoria_id)
+    SELECT 'Verificacion', 9000, 2500, gerencia_id, categoria_id FROM tarifas WHERE id = tarifa_vieja;
 
     bloqueado := false;
     BEGIN UPDATE tarifas SET tarifa_base = 1 WHERE id = tarifa_vieja;
@@ -72,7 +77,8 @@ BEGIN
     IF NOT bloqueado THEN RAISE EXCEPTION 'Quedaron dos tarifas vigentes'; END IF;
 
     -- Habitaciones: alta, baja logica; la ocupada no se da de baja ni cambia de numero; no se borran.
-    INSERT INTO habitaciones (numero, estado) VALUES (999, 'Libre') RETURNING id INTO hab_nueva;
+    INSERT INTO habitaciones (numero, estado, categoria_id)
+    SELECT 999, 'Libre', categoria_id FROM habitaciones WHERE id = 1 RETURNING id INTO hab_nueva;
     UPDATE habitaciones SET activa = false WHERE id = hab_nueva;
 
     bloqueado := false;
@@ -95,10 +101,16 @@ BEGIN
     SELECT fondo_inicial INTO fondo_guardia FROM guardias WHERE id = gid;
     IF fondo_guardia <> 25000 THEN RAISE EXCEPTION 'El cambio de fondo altero la guardia abierta'; END IF;
 
+    -- Multiinquilino (migracion 006): una fila por establecimiento. motel_app no agrega una segunda para el suyo
+    -- (clave primaria) ni una para otro establecimiento (RLS).
     bloqueado := false;
-    BEGIN INSERT INTO configuracion_caja (id, fondo_cambio) VALUES (2, 1);
-    EXCEPTION WHEN insufficient_privilege THEN bloqueado := true; END;
+    BEGIN INSERT INTO configuracion_caja (fondo_cambio) VALUES (1);
+    EXCEPTION WHEN unique_violation THEN bloqueado := true; END;
     IF NOT bloqueado THEN RAISE EXCEPTION 'motel_app pudo agregar otra fila de configuracion'; END IF;
+    bloqueado := false;
+    BEGIN INSERT INTO configuracion_caja (establecimiento_id, fondo_cambio) VALUES (2, 1);
+    EXCEPTION WHEN insufficient_privilege THEN bloqueado := true; END;
+    IF NOT bloqueado THEN RAISE EXCEPTION 'motel_app agrego la configuracion de otro establecimiento'; END IF;
 
     RESET ROLE;
     RAISE NOTICE 'Panel verificado: motel_app crea solo conserjes, protege a la gerencia, no edita tarifas usadas ni borra historia';

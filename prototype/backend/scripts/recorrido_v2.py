@@ -57,6 +57,10 @@ def main() -> None:
     malo = anonimo.post("/auth/login", json={"usuario": "conserje1", "clave": "incorrecta"})
     paso("Clave incorrecta: 401 con mensaje genérico", malo.status_code == 401, malo.text)
 
+    # Las métricas se comparan con las de antes del recorrido: la demo puede traer historial (scripts.cargar_historial).
+    gerencia = sesion(args.api, "gerencia", clave_gerencia)
+    antes = gerencia.get("/arqueos/metricas").json()["general"]
+
     c1 = sesion(args.api, "conserje1", clave_conserjes)
     sin_encabezado = httpx.post(f"{args.api}/api/v1/guardias/", cookies=c1.cookies, timeout=10)
     paso("POST sin el encabezado de la aplicación: 403 (CSRF)", sin_encabezado.status_code == 403)
@@ -100,10 +104,10 @@ def main() -> None:
     paso("Arqueo de Conserje 2: el cobro cruzado entra a su caja y da Correcto",
          a22["total_sistema"] == fondo_22 + 8000 and a22["categoria"] == "Correcto", a22)
 
-    gerencia = sesion(args.api, "gerencia", clave_gerencia)
-    metricas = gerencia.get("/arqueos/metricas").json()
-    paso("Panel de gerencia: 2 arqueos, TDC del 50 %",
-         metricas["general"]["arqueos"] == 2 and metricas["general"]["tdc"] == 0.5, metricas)
+    despues = gerencia.get("/arqueos/metricas").json()["general"]
+    paso("Panel de gerencia: 2 arqueos más, uno con faltante y uno correcto (TDC del recorrido: 50 %)",
+         despues["arqueos"] - antes["arqueos"] == 2 and despues["faltantes"] - antes["faltantes"] == 1
+         and despues["correctos"] - antes["correctos"] == 1, (antes, despues))
     print("Recorrido del prototipo v2 completo.")
 
 

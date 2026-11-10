@@ -26,8 +26,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.models.arqueo import ArqueoCaja
 from app.models.guardia import Guardia
+from app.models.operacion import CIERRE, RopaConteo
 from app.models.operador import Operador
 from app.models.pago import Pago
+from app.services import sellos
 from app.services.configuracion import fondo_de_cambio
 from app.services.liquidacion import con_zona
 
@@ -105,7 +107,10 @@ async def guardia_del_operador(db: AsyncSession, operador: Operador) -> Guardia:
     return guardia
 
 
-async def abrir_guardia(db: AsyncSession, operador: Operador, ahora: datetime | None = None) -> Guardia:
+async def abrir_guardia(
+    db: AsyncSession, operador: Operador, ahora: datetime | None = None, al_abrir=None
+) -> Guardia:
+    """`al_abrir` recibe la guardia antes del commit: lo que confirma quien entra queda en la misma transacción."""
     abierta = await guardia_abierta(db)
     if abierta is not None:
         quien = "usted" if abierta.operador_id == operador.id else await nombre_de(db, abierta.operador_id)
@@ -125,6 +130,9 @@ async def abrir_guardia(db: AsyncSession, operador: Operador, ahora: datetime | 
     )
     db.add(guardia)
     try:
+        await db.flush()
+        if al_abrir is not None:
+            await al_abrir(guardia)
         await db.commit()
     except IntegrityError:
         # Dos aperturas simultáneas: el índice único de la base deja pasar solo una.
@@ -161,6 +169,14 @@ async def confirmar_arqueo(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail="No tiene una guardia abierta para arquear."
         )
+    if settings.EXIGIR_RECUENTO_ROPA:
+        contada = select(RopaConteo.id).where(RopaConteo.guardia_id == guardia.id, RopaConteo.momento == CIERRE)
+        if (await db.execute(contada.limit(1))).first() is None:
+            await db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Antes de cerrar la caja hay que hacer el recuento de toallas y sábanas.",
+            )
     return await _registrar_arqueo(db, guardia, operador, efectivo, posnet, mercado_pago, None)
 
 
@@ -221,6 +237,9 @@ async def _registrar_arqueo(
     db.add(arqueo)
     # El arqueo se inserta antes de cerrar la guardia: en la base, una guardia no se cierra sin su arqueo.
     await db.flush()
+    # La huella se calcula con lo que quedó guardado (la base recalcula los totales y pone la hora).
+    await db.refresh(arqueo)
+    await sellos.sellar(db, arqueo)
     guardia.estado = "Cerrada"
     guardia.cerrada_en = datetime.now(UTC)
     await db.commit()
