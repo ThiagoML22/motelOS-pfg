@@ -1,13 +1,16 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Bike, Car, CheckCircle2, Footprints, MoreVertical, Sparkles, Wrench } from 'lucide-react';
-import { HabitacionConDetalles, RoomStatus } from '../types';
+import { Categoria, HabitacionConDetalles, RoomStatus } from '../types';
 import { formatDuration, formatMoney, formatRoomNumber } from '../utils/format';
-import { elapsedMs, faseEstadia, minutosExcedidos } from '../utils/turno';
+import { elapsedMs, faseEstadia, formatMinutos, minutosExcedidos, minutosRestantes } from '../utils/turno';
+import { ChipCategoria } from './CategoriasConfig';
 import Button from './ui/Button';
 import { ESTADO_META, FASE_META } from './ui/status';
 
 interface RoomCardProps {
   room: HabitacionConDetalles;
+  // Categoría de la habitación (Simple, Especial, VIP...): chip con su color y la tarifa en la tarjeta libre.
+  categoria?: Categoria;
   now: number;
   onClick: (room: HabitacionConDetalles) => void;
   onAddConsumo: (room: HabitacionConDetalles) => void;
@@ -23,7 +26,7 @@ const CAMBIOS_ESTADO: { estado: RoomStatus; label: string; icon: React.ElementTy
 const TIPO_ICON: Record<string, React.ElementType> = { Auto: Car, Moto: Bike, Peaton: Footprints };
 const TIPO_LABEL: Record<string, string> = { Auto: 'Auto', Moto: 'Moto', Peaton: 'Peatón' };
 
-const RoomCard: React.FC<RoomCardProps> = ({ room, now, onClick, onAddConsumo, onChangeEstado }) => {
+const RoomCard: React.FC<RoomCardProps> = ({ room, categoria, now, onClick, onAddConsumo, onChangeEstado }) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const meta = ESTADO_META[room.estado];
@@ -39,7 +42,9 @@ const RoomCard: React.FC<RoomCardProps> = ({ room, now, onClick, onAddConsumo, o
   }, [menuOpen]);
 
   const transcurrido = turno ? elapsedMs(turno, now) : 0;
-  const fase = faseEstadia(transcurrido);
+  // El exceso se mide con la estadía base de la tarifa del turno (cada categoría tiene la suya).
+  const baseMin = turno?.estadia_base_min ?? categoria?.tarifa?.estadia_base_min ?? undefined;
+  const fase = faseEstadia(transcurrido, baseMin);
   const faseMeta = FASE_META[fase];
   const barClass = turno && faseMeta.bar ? faseMeta.bar : meta.bar;
   const TipoIcon = turno ? (TIPO_ICON[turno.tipo_cliente] ?? Car) : Car;
@@ -70,6 +75,7 @@ const RoomCard: React.FC<RoomCardProps> = ({ room, now, onClick, onAddConsumo, o
           {meta.label}
         </span>
       </div>
+      {categoria && <ChipCategoria categoria={categoria} className="mt-1.5 self-start" />}
 
       <div className="mt-2 flex-1">
         {turno ? (
@@ -83,7 +89,10 @@ const RoomCard: React.FC<RoomCardProps> = ({ room, now, onClick, onAddConsumo, o
             </p>
             <p className="mt-0.5 min-h-[1rem] text-xs text-muted">
               {fase === 'excedido' && (
-                <span className="font-medium text-danger">Excedido +{minutosExcedidos(transcurrido)} min</span>
+                <span className="font-medium text-danger">Excedido +{minutosExcedidos(transcurrido, baseMin)} min</span>
+              )}
+              {fase === 'por_vencer' && (
+                <span className="font-medium text-warn">Vence en {minutosRestantes(transcurrido, baseMin)} min</span>
               )}
               {turno.total_consumos > 0 && (
                 <span className={fase !== 'normal' ? 'ml-2' : ''}>Consumos {formatMoney(turno.total_consumos)}</span>
@@ -91,7 +100,14 @@ const RoomCard: React.FC<RoomCardProps> = ({ room, now, onClick, onAddConsumo, o
             </p>
           </>
         ) : (
-          <p className="text-sm text-muted">{meta.hint}</p>
+          <>
+            <p className="text-sm text-muted">{meta.hint}</p>
+            {room.estado === 'Libre' && categoria?.tarifa && (
+              <p className="mt-1 text-xs tabular-nums text-subtle">
+                {formatMinutos(categoria.tarifa.estadia_base_min)} · {formatMoney(categoria.tarifa.tarifa_base)}
+              </p>
+            )}
+          </>
         )}
       </div>
 

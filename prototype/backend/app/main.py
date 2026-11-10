@@ -5,15 +5,17 @@ from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api.deps import operador_de_establecimiento, solo_administrador, solo_plataforma
+from app.api.deps import operador_actual, operador_de_establecimiento, solo_administrador, solo_plataforma
 from app.api.v1.endpoints import (
     arqueos,
     articulos,
     auth,
+    categorias,
     configuracion,
     guardias,
     habitaciones,
     operadores,
+    perfil,
     plataforma,
     turnos,
 )
@@ -80,6 +82,9 @@ app.include_router(habitaciones.router, prefix="/api/v1/habitaciones", tags=["ha
 app.include_router(turnos.router, prefix="/api/v1/turnos", tags=["turnos"], dependencies=con_sesion)
 app.include_router(articulos.router, prefix="/api/v1/articulos", tags=["articulos"], dependencies=con_sesion)
 app.include_router(guardias.router, prefix="/api/v1/guardias", tags=["caja"], dependencies=con_sesion)
+app.include_router(categorias.router, prefix="/api/v1/categorias", tags=["habitaciones"], dependencies=con_sesion)
+# Mi perfil: cualquier sesión, también la plataforma.
+app.include_router(perfil.router, prefix="/api/v1/perfil", tags=["perfil"], dependencies=[Depends(operador_actual)])
 # Panel de la gerencia: solo el rol ADMINISTRADOR.
 solo_gerencia = [Depends(solo_administrador)]
 app.include_router(arqueos.router, prefix="/api/v1/arqueos", tags=["gerencia"], dependencies=solo_gerencia)

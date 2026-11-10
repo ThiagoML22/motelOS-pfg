@@ -20,6 +20,8 @@ from app.models.guardia import Guardia
 from app.models.operador import ROL_ADMINISTRADOR, Operador
 from app.schemas.auth import OperadorPublico
 from app.schemas.configuracion import ConserjeAlta, OperadorActivo
+from app.schemas.perfil import ClaveRestablecida
+from app.services import perfil
 from app.services.actividad import registrar
 
 router = APIRouter()
@@ -58,6 +60,17 @@ async def alta_conserje(
         raise HTTPException(status_code=409, detail=f"El usuario {datos.usuario} ya existe.") from None
     await db.refresh(conserje)
     return conserje
+
+
+@router.post("/{operador_id}/clave", response_model=OperadorEstado)
+async def restablecer_clave(
+    operador_id: int,
+    datos: ClaveRestablecida,
+    db: AsyncSession = Depends(get_db),
+    gerencia: Operador = Depends(operador_actual),
+):
+    """La gerencia pone una clave nueva a un conserje (migración 008) y le quita el bloqueo por intentos."""
+    return await perfil.restablecer_clave(db, gerencia, operador_id, datos.nueva)
 
 
 @router.patch("/{operador_id}", response_model=OperadorEstado)

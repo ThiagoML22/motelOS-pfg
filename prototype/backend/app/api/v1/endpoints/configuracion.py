@@ -13,6 +13,7 @@ from app.api.deps import operador_actual
 from app.core.database import get_db
 from app.models.actividad import ESTABLECIMIENTO, HABITACION, INVENTARIO
 from app.models.articulo import Articulo
+from app.models.categoria import CategoriaHabitacion
 from app.models.establecimiento import Establecimiento
 from app.models.habitacion import Habitacion
 from app.models.operador import Operador
@@ -23,6 +24,9 @@ from app.schemas.configuracion import (
     ActividadResponse,
     ActividadRevision,
     ArticuloConfiguracion,
+    CategoriaAlta,
+    CategoriaCambio,
+    CategoriaResponse,
     EstablecimientoDatos,
     EstablecimientoResponse,
     FondoCambio,
@@ -33,9 +37,15 @@ from app.schemas.configuracion import (
     TarifaCreate,
     TarifaResponse,
 )
-from app.services import actividad
+from app.services import actividad, categorias
 from app.services.actividad import pesos, registrar
-from app.services.configuracion import cambiar_fondo, cambiar_tarifa, configuracion_caja, fondo_de_cambio
+from app.services.configuracion import (
+    cambiar_fondo,
+    cambiar_tarifa,
+    categoria_activa,
+    configuracion_caja,
+    fondo_de_cambio,
+)
 
 router = APIRouter()
 
@@ -113,9 +123,12 @@ async def revisar_actividad(
 
 # --- Tarifa y fracción -----------------------------------------------------------------------------------------
 @router.get("/tarifas", response_model=list[TarifaResponse])
-async def listar_tarifas(db: AsyncSession = Depends(get_db)):
-    """La vigente primero y después las anteriores, de la más nueva a la más vieja."""
-    return (await db.execute(select(Tarifa).order_by(Tarifa.vigente.desc(), Tarifa.id.desc()))).scalars().all()
+async def listar_tarifas(categoria_id: int | None = None, db: AsyncSession = Depends(get_db)):
+    """Las vigentes primero y después las anteriores, de la más nueva a la más vieja; opcionalmente de una categoría."""
+    consulta = select(Tarifa).order_by(Tarifa.vigente.desc(), Tarifa.id.desc())
+    if categoria_id is not None:
+        consulta = consulta.where(Tarifa.categoria_id == categoria_id)
+    return (await db.execute(consulta)).scalars().all()
 
 
 @router.post("/tarifas", response_model=TarifaResponse, status_code=status.HTTP_201_CREATED)
@@ -123,6 +136,32 @@ async def nueva_tarifa(
     datos: TarifaCreate, db: AsyncSession = Depends(get_db), operador: Operador = Depends(operador_actual)
 ):
     return await cambiar_tarifa(db, datos, operador)
+
+
+# --- Categorías de habitación (migración 008) -----------------------------------------------------------------------
+@router.get("/categorias", response_model=list[CategoriaResponse])
+async def listar_categorias(db: AsyncSession = Depends(get_db)):
+    """Todas, también las dadas de baja, con su tarifa vigente y cuántas habitaciones activas tienen."""
+    return await categorias.listar(db, solo_activas=False)
+
+
+@router.post("/categorias", response_model=CategoriaResponse, status_code=status.HTTP_201_CREATED)
+async def alta_categoria(
+    datos: CategoriaAlta, db: AsyncSession = Depends(get_db), operador: Operador = Depends(operador_actual)
+):
+    nueva = await categorias.crear(db, datos, operador)
+    return next(c for c in await categorias.listar(db, solo_activas=False) if c.id == nueva.id)
+
+
+@router.patch("/categorias/{categoria_id}", response_model=CategoriaResponse)
+async def cambiar_categoria(
+    categoria_id: int,
+    datos: CategoriaCambio,
+    db: AsyncSession = Depends(get_db),
+    operador: Operador = Depends(operador_actual),
+):
+    await categorias.cambiar(db, categoria_id, datos, operador)
+    return next(c for c in await categorias.listar(db, solo_activas=False) if c.id == categoria_id)
 
 
 # --- Fondo de cambio ---------------------------------------------------------------------------------------------
@@ -203,9 +242,12 @@ async def alta_habitacion(
     datos: HabitacionAlta, db: AsyncSession = Depends(get_db), operador: Operador = Depends(operador_actual)
 ):
     await _numero_libre(db, datos.numero)
-    habitacion = Habitacion(numero=datos.numero, estado="Libre", activa=True)
+    categoria = await categoria_activa(db, datos.categoria_id)
+    habitacion = Habitacion(numero=datos.numero, estado="Libre", activa=True, categoria_id=categoria.id)
     db.add(habitacion)
-    await registrar(db, operador, HABITACION, "HABITACION_ALTA", f"Alta de la habitación {datos.numero}")
+    await registrar(
+        db, operador, HABITACION, "HABITACION_ALTA", f"Alta de la habitación {datos.numero} ({categoria.nombre})"
+    )
     try:
         await db.commit()
     except IntegrityError:
@@ -245,6 +287,15 @@ async def configurar_habitacion(
         await registrar(
             db, operador, HABITACION, "HABITACION_ESTADO",
             f"{'Reactivación' if datos.activa else 'Baja'} de la habitación {habitacion.numero}",
+        )
+    if datos.categoria_id is not None and datos.categoria_id != habitacion.categoria_id:
+        # El turno en curso, si lo hay, conserva su tarifa: la categoría nueva rige desde el turno siguiente.
+        nueva = await categoria_activa(db, datos.categoria_id)
+        anterior = await db.get(CategoriaHabitacion, habitacion.categoria_id)
+        habitacion.categoria_id = nueva.id
+        await registrar(
+            db, operador, HABITACION, "HABITACION_CATEGORIA", f"Categoría de la habitación {habitacion.numero}",
+            valor_anterior=anterior.nombre if anterior else None, valor_nuevo=nueva.nombre,
         )
     try:
         await db.commit()

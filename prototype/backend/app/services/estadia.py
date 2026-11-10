@@ -11,6 +11,7 @@ from app.core.inquilino import fijar_establecimiento
 from app.models.establecimiento import Establecimiento
 from app.models.estadia_activa import EstadiaActiva
 from app.models.operador import Operador
+from app.models.tarifa import Tarifa
 from app.models.turno import Turno
 
 logger = logging.getLogger(__name__)
@@ -35,6 +36,17 @@ async def cargar_nombres_de_apertura(db: AsyncSession, turnos: list[Turno]) -> N
     nombres = dict(res.all())
     for turno in turnos:
         turno.abierto_por = nombres.get(turno.operador_apertura_id)
+
+
+async def cargar_estadia_base(db: AsyncSession, turnos: list[Turno]) -> None:
+    """Completa los minutos de estadía base de la tarifa de cada turno (migración 008: dependen de la categoría)."""
+    ids = {t.tarifa_id for t in turnos}
+    if not ids:
+        return
+    res = await db.execute(select(Tarifa.id, Tarifa.estadia_base_min).where(Tarifa.id.in_(ids)))
+    minutos = dict(res.all())
+    for turno in turnos:
+        turno.estadia_base_min = minutos.get(turno.tarifa_id)
 
 
 async def depurar_patentes(

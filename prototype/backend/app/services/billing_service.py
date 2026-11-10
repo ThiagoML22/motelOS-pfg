@@ -19,6 +19,8 @@ class ParametrosTarifa:
     tolerancia_min: int
     fraccion_min: int
     tarifa_fraccion: Decimal
+    # Precio máximo de la estadía (base + sobreturno), por ejemplo un pernocte. None: sin tope (migración 008).
+    tope: Decimal | None = None
 
 
 # Tarifa estándar del establecimiento: estadía base de 120 minutos por $8.000 y, superada,
@@ -37,11 +39,14 @@ def calcular_sobreturno(duracion: timedelta, tarifa: ParametrosTarifa = TARIFA_E
 
     Hasta estadia_base_min + tolerancia_min minutos no se cobra sobreturno. Superado ese límite,
     el excedente se mide desde el fin de la estadía base y cada fracción de fraccion_min minutos
-    (o porción) suma tarifa_fraccion.
+    (o porción) suma tarifa_fraccion. Si la tarifa tiene tope, la estadía (base + sobreturno) no lo supera.
     """
     segundos = duracion.total_seconds()
     if segundos <= (tarifa.estadia_base_min + tarifa.tolerancia_min) * 60:
         return Decimal("0")
     excedente_seg = segundos - tarifa.estadia_base_min * 60
     fracciones = math.ceil(excedente_seg / (tarifa.fraccion_min * 60))
-    return tarifa.tarifa_fraccion * fracciones
+    sobreturno = Decimal(tarifa.tarifa_fraccion) * fracciones
+    if tarifa.tope is not None:
+        sobreturno = min(sobreturno, max(Decimal(tarifa.tope) - Decimal(tarifa.tarifa_base), Decimal("0")))
+    return sobreturno

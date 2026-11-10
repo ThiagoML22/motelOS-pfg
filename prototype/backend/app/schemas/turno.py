@@ -33,6 +33,21 @@ class TurnoResponse(TurnoBase):
     total_general: float
     # RNF-04: quién abrió el turno (útil en el recambio, cuando lo cobra la guardia siguiente).
     abierto_por: str | None = None
+    # Estadía base de la tarifa del turno (migración 008: depende de la categoría): marca el exceso en la grilla.
+    estadia_base_min: int | None = None
+
+
+class TarifaDelTurno(BaseModel):
+    """La tarifa con la que se liquida el turno (la de su categoría cuando se abrió; migración 008)."""
+
+    categoria: str | None = None
+    color: str | None = None
+    tarifa_base: float
+    estadia_base_min: int
+    fraccion_min: int
+    tarifa_fraccion: float
+    tolerancia_min: int = 0
+    tope: float | None = None
 
 
 class TurnoResumen(TurnoResponse):
@@ -40,6 +55,7 @@ class TurnoResumen(TurnoResponse):
     total_pagado: float = 0
     saldo_pendiente: float = 0
     consumos: list[ConsumoResponse] = []
+    tarifa: TarifaDelTurno | None = None
 
 
 class PagoCreate(BaseModel):

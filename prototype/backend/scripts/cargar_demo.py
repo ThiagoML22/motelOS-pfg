@@ -25,11 +25,14 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from app.core.config import settings
 from app.core.inquilino import CLAVE, PLATAFORMA
 from app.models.articulo import Articulo
+from app.models.categoria import CategoriaHabitacion
 from app.models.configuracion import ConfiguracionCaja
 from app.models.establecimiento import Establecimiento
 from app.models.habitacion import Habitacion
 from app.models.operador import ROL_ADMINISTRADOR, ROL_OPERADOR, ROL_PLATAFORMA, Operador
 from app.models.tarifa import Tarifa
+from app.schemas.configuracion import ParametrosTarifa
+from app.services.configuracion import nueva_tarifa_de
 from scripts.crear_operador import alta_operador
 
 USUARIOS = [
@@ -82,12 +85,15 @@ async def _luna(db: AsyncSession) -> int:
     await db.flush()
     db.info[CLAVE] = establecimiento.id
     ahora = datetime.now(UTC)
+    simple = CategoriaHabitacion(nombre="Simple", descripcion="Habitación estándar", color="#244473", orden=1)
+    db.add(simple)
+    await db.flush()
     db.add_all(
-        [Habitacion(numero=n, estado="Libre", activa=True) for n in range(101, 109)]
+        [Habitacion(numero=n, estado="Libre", activa=True, categoria_id=simple.id) for n in range(101, 109)]
         + [
-            Tarifa(nombre=f"Vigente desde {ahora:%Y-%m-%d %H:%M:%S.%f}", tarifa_base=Decimal("10000"),
-                   estadia_base_min=120, tolerancia_min=0, fraccion_min=30, tarifa_fraccion=Decimal("3000"),
-                   vigente=True, vigente_desde=ahora),
+            Tarifa(nombre=f"Simple desde {ahora:%Y-%m-%d %H:%M:%S.%f}", categoria_id=simple.id,
+                   tarifa_base=Decimal("10000"), estadia_base_min=120, tolerancia_min=0, fraccion_min=30,
+                   tarifa_fraccion=Decimal("3000"), vigente=True, vigente_desde=ahora),
             ConfiguracionCaja(
                 establecimiento_id=establecimiento.id, fondo_cambio=Decimal("20000"), actualizado_en=ahora
             ),
@@ -102,6 +108,38 @@ async def _luna(db: AsyncSession) -> int:
     return establecimiento.id
 
 
+# Categorías de demostración (migración 008): nombre, descripción, color, orden, tarifa y números de habitación.
+# Las habitaciones 1 a 8 de Motel C.C. quedan en Simple: los recorridos del canal usan la 1 y la 2 con $8.000.
+CATEGORIAS_DEMO = {
+    "motelcc": [
+        ("Especial", "Hidromasaje y cama king", "#0f766e", 2,
+         ParametrosTarifa(tarifa_base=11000, estadia_base_min=120, fraccion_min=30, tarifa_fraccion=3500), [9, 10, 11]),
+        ("VIP", "Suite con jacuzzi, sauna y garage privado", "#7c3aed", 3,
+         ParametrosTarifa(tarifa_base=16000, estadia_base_min=180, fraccion_min=60, tarifa_fraccion=6000,
+                          tolerancia_min=10, tope=40000), [12, 13]),
+    ],
+    "luna": [
+        ("Suite", "Suite con hidromasaje", "#b45309", 2,
+         ParametrosTarifa(tarifa_base=14000, estadia_base_min=150, fraccion_min=30, tarifa_fraccion=4000), [107, 108]),
+    ],
+}
+
+
+async def _categorias(db: AsyncSession, codigo: str) -> None:
+    for nombre, descripcion, color, orden, tarifa, numeros in CATEGORIAS_DEMO.get(codigo, []):
+        if (await db.execute(select(CategoriaHabitacion).where(CategoriaHabitacion.nombre == nombre))).first():
+            continue
+        categoria = CategoriaHabitacion(nombre=nombre, descripcion=descripcion, color=color, orden=orden)
+        db.add(categoria)
+        await db.flush()
+        db.add(nueva_tarifa_de(categoria, tarifa, None))
+        habitaciones = (await db.execute(select(Habitacion).where(Habitacion.numero.in_(numeros)))).scalars().all()
+        for habitacion in habitaciones:
+            habitacion.categoria_id = categoria.id
+        await db.commit()
+        print(f"{codigo} · categoría {nombre}: creada con las habitaciones {', '.join(map(str, numeros))}.")
+
+
 async def cargar() -> None:
     engine = create_async_engine(settings.DATABASE_URL)
     claves = Claves()
@@ -113,8 +151,10 @@ async def cargar() -> None:
             luna_id = await _luna(db)
         async with sesiones(info={CLAVE: principal.id}) as db:
             await _usuarios(db, USUARIOS, claves, principal.nombre)
+            await _categorias(db, principal.codigo)
         async with sesiones(info={CLAVE: luna_id}) as db:
             await _usuarios(db, LUNA_USUARIOS, claves, "Motel Luna")
+            await _categorias(db, "luna")
         async with sesiones(info={CLAVE: PLATAFORMA}) as db:
             await _usuarios(
                 db, [("plataforma", "Equipo de la plataforma", ROL_PLATAFORMA, "DEMO_CLAVE_PLATAFORMA")], claves,

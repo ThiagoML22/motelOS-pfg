@@ -13,9 +13,9 @@ class Tarifa(DeEstablecimiento, Base):
     """Tarifa de la estadía. Una tarifa ya usada no se edita: el cambio crea otra (RF-11, RN-DER-06)."""
 
     __tablename__ = "tarifas"
-    # A lo sumo una tarifa vigente por establecimiento (migraciones 005 y 006).
+    # A lo sumo una tarifa vigente por categoría de habitación (migraciones 005, 006 y 008).
     __table_args__ = (
-        Index("tarifas_una_vigente", "establecimiento_id", unique=True, postgresql_where=VIGENTE,
+        Index("tarifas_una_vigente", "establecimiento_id", "categoria_id", unique=True, postgresql_where=VIGENTE,
               sqlite_where=VIGENTE),
         UniqueConstraint("establecimiento_id", "nombre", name="tarifas_nombre_por_establecimiento"),
     )
@@ -30,6 +30,9 @@ class Tarifa(DeEstablecimiento, Base):
     vigente = Column(Boolean, nullable=False, default=True)
     vigente_desde = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC))
     creada_por_id = Column(Integer, ForeignKey("operadores.id"), nullable=True)
+    categoria_id = Column(Integer, ForeignKey("categorias_habitacion.id"), nullable=False)
+    # Precio máximo de la estadía (por ejemplo, un pernocte): el sobreturno no lo supera. Opcional.
+    tope = Column(Numeric(10, 2), nullable=True)
 
     def parametros(self) -> ParametrosTarifa:
         return ParametrosTarifa(
@@ -38,4 +41,5 @@ class Tarifa(DeEstablecimiento, Base):
             tolerancia_min=self.tolerancia_min,
             fraccion_min=self.fraccion_min,
             tarifa_fraccion=self.tarifa_fraccion,
+            tope=self.tope,
         )

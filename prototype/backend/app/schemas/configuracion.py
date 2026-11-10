@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.core.seguridad import LARGO_MINIMO_CLAVE, PATRON_USUARIO
 
@@ -10,22 +10,76 @@ MINUTOS_DE_UN_DIA = 1440
 TOPE_IMPORTE = 10_000_000
 
 
-class TarifaCreate(BaseModel):
-    """La tarifa nueva: estadía base (precio y minutos) y fracción adicional (minutos y precio)."""
+class ParametrosTarifa(BaseModel):
+    """Cómo se cobra una estadía: base (precio y minutos), fracción adicional (minutos y precio), tolerancia antes de
+    la primera fracción y tope opcional de la estadía completa (por ejemplo, un pernocte)."""
 
     tarifa_base: float = Field(gt=0, le=TOPE_IMPORTE)
     estadia_base_min: int = Field(gt=0, le=MINUTOS_DE_UN_DIA)
     fraccion_min: int = Field(gt=0, le=MINUTOS_DE_UN_DIA)
     tarifa_fraccion: float = Field(ge=0, le=TOPE_IMPORTE)
+    tolerancia_min: int = Field(default=0, ge=0, le=240)
+    tope: float | None = Field(default=None, gt=0, le=TOPE_IMPORTE)
+
+    @model_validator(mode="after")
+    def tope_no_menor_que_la_base(self) -> "ParametrosTarifa":
+        if self.tope is not None and self.tope < self.tarifa_base:
+            raise ValueError("El tope de la estadía no puede ser menor que el precio de la estadía base.")
+        return self
 
 
-class TarifaResponse(TarifaCreate):
+class TarifaCreate(ParametrosTarifa):
+    """La tarifa nueva de una categoría. Sin categoría, la primera del establecimiento (compatibilidad con el v3)."""
+
+    categoria_id: int | None = None
+
+
+class TarifaResponse(ParametrosTarifa):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
     nombre: str
+    categoria_id: int
     vigente: bool
     vigente_desde: datetime
+
+
+# --- Categorías de habitación (migración 008) -------------------------------------------------------------------------
+COLOR_HEX = r"^#[0-9a-fA-F]{6}$"
+
+
+class CategoriaDatos(BaseModel):
+    nombre: str | None = Field(default=None, min_length=2, max_length=40)
+    descripcion: str | None = Field(default=None, max_length=160)
+    color: str | None = Field(default=None, pattern=COLOR_HEX)
+    orden: int | None = Field(default=None, ge=0, le=999)
+
+
+class CategoriaAlta(BaseModel):
+    """Una categoría nueva con su tarifa inicial."""
+
+    nombre: str = Field(min_length=2, max_length=40)
+    descripcion: str | None = Field(default=None, max_length=160)
+    color: str = Field(default="#244473", pattern=COLOR_HEX)
+    orden: int = Field(default=0, ge=0, le=999)
+    tarifa: ParametrosTarifa
+
+
+class CategoriaCambio(CategoriaDatos):
+    activa: bool | None = None
+
+
+class CategoriaResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    nombre: str
+    descripcion: str | None = None
+    color: str
+    orden: int
+    activa: bool
+    habitaciones: int = 0
+    tarifa: TarifaResponse | None = None
 
 
 class FondoCambio(BaseModel):
@@ -50,11 +104,14 @@ class ArticuloConfiguracion(BaseModel):
 
 class HabitacionAlta(BaseModel):
     numero: int = Field(gt=0, le=9999)
+    # Sin categoría, la primera del establecimiento.
+    categoria_id: int | None = None
 
 
 class HabitacionConfiguracion(BaseModel):
     numero: int | None = Field(default=None, gt=0, le=9999)
     activa: bool | None = None
+    categoria_id: int | None = None
 
 
 class HabitacionConfiguracionResponse(BaseModel):
@@ -64,6 +121,7 @@ class HabitacionConfiguracionResponse(BaseModel):
     numero: int
     estado: str
     activa: bool
+    categoria_id: int
 
 
 class ConserjeAlta(BaseModel):
@@ -160,3 +218,4 @@ class EstablecimientoResumen(EstablecimientoResponse):
     turnos_ultimas_24h: int = 0
     cobrado_ultimas_24h: float = 0
     guardia_abierta: bool = False
+    categorias: int = 0

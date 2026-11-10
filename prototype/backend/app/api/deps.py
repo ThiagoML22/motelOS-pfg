@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.database import get_db
-from app.core.inquilino import PLATAFORMA, fijar_establecimiento
+from app.core.inquilino import PLATAFORMA, fijar_establecimiento, fijar_operador
 from app.core.seguridad import leer_token
 from app.models.establecimiento import Establecimiento
 from app.models.operador import ROL_ADMINISTRADOR, ROL_PLATAFORMA, Operador
@@ -45,6 +45,7 @@ async def operador_actual(request: Request, db: AsyncSession = Depends(get_db)) 
         or (operador.establecimiento_id or PLATAFORMA) != establecimiento_id
     ):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=SIN_SESION)
+    await fijar_operador(db, operador.id)
     return operador
 
 

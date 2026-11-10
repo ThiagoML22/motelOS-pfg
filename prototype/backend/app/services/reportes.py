@@ -12,13 +12,23 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.models.arqueo import ArqueoCaja
+from app.models.categoria import CategoriaHabitacion
 from app.models.guardia import Guardia
 from app.models.habitacion import Habitacion
 from app.models.operador import Operador
 from app.models.pago import Pago
+from app.models.tarifa import Tarifa
 from app.models.turno import Turno
-from app.schemas.caja import ArqueoDetalle, ArqueoResultado, MetricaCaja, MetricasCaja, PagoDetalle
+from app.schemas.caja import (
+    ArqueoDetalle,
+    ArqueoResultado,
+    MetricaCaja,
+    MetricasCaja,
+    PagoDetalle,
+    ResumenCategoria,
+)
 from app.services.caja import FALTANTE, SOBRANTE
+from app.services.liquidacion import con_zona
 
 
 def limites_del_dia(desde: date | None, hasta: date | None) -> tuple[datetime | None, datetime | None]:
@@ -96,6 +106,69 @@ async def detalle_de_arqueo(db: AsyncSession, arqueo: ArqueoCaja) -> ArqueoDetal
     ]
     resumen = await resultado_de_arqueo(db, arqueo)
     return ArqueoDetalle(**resumen.model_dump(), pagos=pagos)
+
+
+async def por_categoria(db: AsyncSession, desde: date | None, hasta: date | None) -> list[ResumenCategoria]:
+    """Turnos finalizados en el período agrupados por la categoría de su tarifa (la que tenía al abrirse), con sus
+    ingresos, y la ocupación actual de cada categoría.
+
+    RN-RES-03: solo cuenta los turnos cobrados en guardias ya arqueadas. Un turno cobrado en la guardia abierta queda
+    afuera hasta el cierre ciego: si no, la suma de ingresos revelaría el total de esa caja antes del recuento.
+    """
+    inicio, fin = limites_del_dia(desde, hasta)
+    cobrado_en_guardia_abierta = (
+        select(Pago.id)
+        .join(Guardia, Guardia.id == Pago.guardia_id)
+        .where(Pago.turno_id == Turno.id, Guardia.estado == "Abierta")
+        .exists()
+    )
+    consulta = (
+        select(Tarifa.categoria_id, Turno.hora_inicio, Turno.hora_fin, Turno.total_general, Turno.total_consumos)
+        .join(Tarifa, Tarifa.id == Turno.tarifa_id)
+        .where(Turno.estado == "FINALIZADO", ~cobrado_en_guardia_abierta)
+    )
+    if inicio:
+        consulta = consulta.where(Turno.hora_fin >= inicio)
+    if fin:
+        consulta = consulta.where(Turno.hora_fin < fin)
+    acumulado: dict[int, dict] = {}
+    for categoria_id, hora_inicio, hora_fin, total, consumos in (await db.execute(consulta)).all():
+        datos = acumulado.setdefault(categoria_id, {"turnos": 0, "ingresos": 0.0, "consumos": 0.0, "minutos": 0.0})
+        datos["turnos"] += 1
+        datos["ingresos"] += float(total)
+        datos["consumos"] += float(consumos)
+        if hora_fin:
+            datos["minutos"] += (con_zona(hora_fin) - con_zona(hora_inicio)).total_seconds() / 60
+    habitaciones = (
+        await db.execute(
+            select(Habitacion.categoria_id, Habitacion.estado).where(Habitacion.activa.is_(True))
+        )
+    ).all()
+    categorias = (
+        await db.execute(select(CategoriaHabitacion).order_by(CategoriaHabitacion.orden, CategoriaHabitacion.id))
+    ).scalars().all()
+    resumen = []
+    for c in categorias:
+        datos = acumulado.get(c.id, {"turnos": 0, "ingresos": 0.0, "consumos": 0.0, "minutos": 0.0})
+        propias = [estado for categoria_id, estado in habitaciones if categoria_id == c.id]
+        if not c.activa and not datos["turnos"] and not propias:
+            continue
+        turnos = datos["turnos"]
+        resumen.append(
+            ResumenCategoria(
+                categoria_id=c.id,
+                nombre=c.nombre,
+                color=c.color,
+                turnos=turnos,
+                ingresos=round(datos["ingresos"], 2),
+                consumos=round(datos["consumos"], 2),
+                minutos_promedio=round(datos["minutos"] / turnos) if turnos else 0,
+                ticket_promedio=round(datos["ingresos"] / turnos, 2) if turnos else 0.0,
+                habitaciones=len(propias),
+                ocupadas=sum(1 for estado in propias if estado == "Ocupada"),
+            )
+        )
+    return resumen
 
 
 def _metrica(arqueos: list[ArqueoCaja], operador_id: int | None = None, nombre: str | None = None) -> MetricaCaja:

@@ -10,6 +10,7 @@ from sqlalchemy.future import select
 from app.api.deps import operador_actual
 from app.core.database import get_db
 from app.models.articulo import Articulo
+from app.models.categoria import CategoriaHabitacion
 from app.models.consumo import Consumo
 from app.models.estadia_activa import EstadiaActiva
 from app.models.habitacion import Habitacion
@@ -27,7 +28,8 @@ from app.schemas.turno import (
     TurnoResumen,
 )
 from app.services.caja import guardia_del_operador
-from app.services.estadia import cargar_nombres_de_apertura, cargar_patentes
+from app.services.configuracion import tarifa_vigente
+from app.services.estadia import cargar_estadia_base, cargar_nombres_de_apertura, cargar_patentes
 from app.services.liquidacion import liquidar_turno
 
 router = APIRouter()
@@ -54,10 +56,11 @@ async def create_turno(
 
     guardia = await guardia_del_operador(db, operador)
 
-    tarifa_res = await db.execute(select(Tarifa).where(Tarifa.vigente.is_(True)).order_by(Tarifa.id.desc()))
-    tarifa = tarifa_res.scalars().first()
+    # La tarifa vigente de la categoría de la habitación (migración 008). El turno la conserva aunque después cambie
+    # la tarifa o la categoría (RN-DER-06).
+    tarifa = await tarifa_vigente(db, habitacion.categoria_id)
     if not tarifa:
-        raise HTTPException(status_code=409, detail="No hay una tarifa vigente para liquidar el turno")
+        raise HTTPException(status_code=409, detail="No hay una tarifa vigente para la categoría de la habitación")
 
     nuevo_turno = Turno(
         habitacion_id=turno_in.habitacion_id,
@@ -87,6 +90,7 @@ async def create_turno(
     await db.refresh(nuevo_turno)
     nuevo_turno.identificador_vehicular = patente
     nuevo_turno.abierto_por = operador.nombre_visible
+    nuevo_turno.estadia_base_min = tarifa.estadia_base_min
     return nuevo_turno
 
 
@@ -159,10 +163,24 @@ async def get_resumen(turno_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
 
     await cargar_patentes(db, [turno])
     await cargar_nombres_de_apertura(db, [turno])
+    await cargar_estadia_base(db, [turno])
     resumen_dict = turno.__dict__.copy()
     resumen_dict["minutos_transcurridos"] = liquidacion.minutos_transcurridos
     resumen_dict["total_pagado"] = liquidacion.total_pagado
     resumen_dict["saldo_pendiente"] = liquidacion.saldo_pendiente
+    tarifa = await db.get(Tarifa, turno.tarifa_id)
+    if tarifa is not None:
+        categoria = await db.get(CategoriaHabitacion, tarifa.categoria_id)
+        resumen_dict["tarifa"] = {
+            "categoria": categoria.nombre if categoria else None,
+            "color": categoria.color if categoria else None,
+            "tarifa_base": tarifa.tarifa_base,
+            "estadia_base_min": tarifa.estadia_base_min,
+            "fraccion_min": tarifa.fraccion_min,
+            "tarifa_fraccion": tarifa.tarifa_fraccion,
+            "tolerancia_min": tarifa.tolerancia_min,
+            "tope": tarifa.tope,
+        }
     resumen_dict["consumos"] = [
         {
             "id": str(c.id),

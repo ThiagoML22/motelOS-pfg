@@ -102,6 +102,7 @@ jobs:
           PGPASSWORD: postgres
         run: |
           psql -h localhost -U postgres -d motel_schema -v ON_ERROR_STOP=1 -f db/verify_multiinquilino.sql
+          psql -h localhost -U postgres -d motel_schema -v ON_ERROR_STOP=1 -f db/verify_categorias_perfil.sql
 
       - name: Verificar la migración desde una base v1.2 con datos
         working-directory: ./prototype
@@ -134,6 +135,7 @@ jobs:
           python -m scripts.medir_latencia --api http://localhost:8000 --salida medicion_latencia_RNF-02.csv
           python -m scripts.recorrido_panel --api http://localhost:8000
           python -m scripts.recorrido_multiinquilino --api http://localhost:8000
+          python -m scripts.recorrido_categorias_perfil --api http://localhost:8000
 
       - name: Guardar la medición de latencia
         if: always()

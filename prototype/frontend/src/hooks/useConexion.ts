@@ -2,8 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import { EVENTO_RECONECTADO, marcarSinConexion, onCambioConexion, sondearServidor, estaConectado } from '../services/api';
 
 // RNF-09: mientras no hay conexión se sondea el servidor cada 2 s, de modo que la vuelta se detecta y la ventanilla
-// recupera su estado dentro de los 5 s del criterio.
+// recupera su estado dentro de los 5 s del criterio. Con conexión se sondea cada 5 s: así el corte se detecta aunque
+// la vista abierta no haga peticiones (por ejemplo, la configuración).
 const SONDEO_MS = 2000;
+const SONDEO_CONECTADO_MS = 5000;
 
 export interface EstadoConexion {
   conectado: boolean;
@@ -40,8 +42,7 @@ export function useConexion(alReconectar: () => Promise<void>): EstadoConexion {
   }, []);
 
   useEffect(() => {
-    if (conectado) return;
-    const intervalo = setInterval(() => void sondearServidor(), SONDEO_MS);
+    const intervalo = setInterval(() => void sondearServidor(), conectado ? SONDEO_CONECTADO_MS : SONDEO_MS);
     return () => clearInterval(intervalo);
   }, [conectado]);
 

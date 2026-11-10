@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { WifiOff } from 'lucide-react';
-import { Arqueo, HabitacionConDetalles, RoomStatus, Sesion, TipoCliente } from './types';
-import { api, getErrorMessage, onSesionVencida } from './services/api';
+import { Arqueo, Categoria, HabitacionConDetalles, RoomStatus, Sesion, TipoCliente } from './types';
+import { api, esSinRespuesta, getErrorMessage, onSesionVencida } from './services/api';
 import { useConexion } from './hooks/useConexion';
 import { useNow } from './hooks/useNow';
 import { formatClock, formatRoomNumber } from './utils/format';
 import ActividadView from './components/ActividadView';
+import PerfilView from './components/PerfilView';
 import PlataformaView from './components/PlataformaView';
 import TopNav, { View } from './components/TopNav';
 import RoomsGrid from './components/RoomsGrid';
@@ -36,8 +37,9 @@ function App() {
   const refrescarSesion = useCallback(async () => {
     try {
       setSesion(await api.getSesion());
-    } catch {
-      setSesion(null);
+    } catch (err) {
+      // RNF-09: sin conexión la sesión sigue (el servidor no la rechazó); solo un 401 la cierra.
+      if (!esSinRespuesta(err)) setSesion(null);
     }
   }, []);
 
@@ -74,7 +76,7 @@ function App() {
   }
   // Multiinquilino: la plataforma no opera ningún motel; solo da de alta y suspende establecimientos.
   if (sesion.operador.rol === 'PLATAFORMA') {
-    return <PlataformaView sesion={sesion} onSalir={() => void salir()} />;
+    return <PlataformaView sesion={sesion} onRefrescarSesion={refrescarSesion} onSalir={() => void salir()} />;
   }
   return (
     <Ventanilla key={sesion.operador.id} sesion={sesion} onRefrescarSesion={refrescarSesion} onSalir={() => void salir()} />
@@ -97,6 +99,9 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
   const [habitaciones, setHabitaciones] = useState<HabitacionConDetalles[]>([]);
   const [carga, setCarga] = useState<Carga>('cargando');
   const [filtro, setFiltro] = useState<Filtro>('Todas');
+  // Categorías de habitación (Simple, Especial, VIP...) con su tarifa vigente, y el filtro de la grilla por categoría.
+  const [categorias, setCategorias] = useState<Categoria[]>([]);
+  const [filtroCategoria, setFiltroCategoria] = useState<number | null>(null);
   // Registro de actividad: entradas de los conserjes que la gerencia todavía no vio.
   const [pendientes, setPendientes] = useState(0);
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -115,7 +120,9 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
 
   const fetchHabitaciones = useCallback(async () => {
     try {
-      setHabitaciones(await api.getHabitaciones());
+      const [lista, cats] = await Promise.all([api.getHabitaciones(), api.getCategorias()]);
+      setHabitaciones(lista);
+      setCategorias(cats);
       setCarga('ok');
     } catch {
       setCarga((prev) => (prev === 'ok' ? 'ok' : 'error'));
@@ -201,8 +208,10 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
     }
   };
 
-  const conteo = (estado: RoomStatus) => habitaciones.filter((h) => h.estado === estado).length;
-  const visibles = filtro === 'Todas' ? habitaciones : habitaciones.filter((h) => h.estado === filtro);
+  const deCategoria = filtroCategoria === null ? habitaciones : habitaciones.filter((h) => h.categoria_id === filtroCategoria);
+  const conteo = (estado: RoomStatus) => deCategoria.filter((h) => h.estado === estado).length;
+  const visibles = filtro === 'Todas' ? deCategoria : deCategoria.filter((h) => h.estado === filtro);
+  const categoriasConHabitaciones = categorias.filter((c) => habitaciones.some((h) => h.categoria_id === c.id));
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -219,7 +228,7 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
       {!conexion.conectado && <AvisoSinConexion desde={conexion.sinConexionDesde} onReintentar={conexion.reintentar} />}
 
       <main className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col px-4 py-6 sm:px-6">
-        {!conGuardiaPropia && !mostrandoComprobante && activeView !== 'inventario' && (
+        {!conGuardiaPropia && !mostrandoComprobante && activeView !== 'inventario' && activeView !== 'perfil' && (
           <GuardiaView sesion={sesion} onGuardiaAbierta={onRefrescarSesion} onSalir={onSalir} />
         )}
 
@@ -245,7 +254,7 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
                       : 'border-line-strong bg-surface text-muted hover:text-ink'
                   }`}
                 >
-                  Todas <span className="tabular-nums">{habitaciones.length}</span>
+                  Todas <span className="tabular-nums">{deCategoria.length}</span>
                 </button>
                 {ESTADOS_ORDEN.map((estado) => (
                   <button
@@ -266,6 +275,49 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
               </div>
             </div>
 
+            {/* Filtro por categoría: solo si el motel tiene más de una en uso. Cada una muestra su ocupación. */}
+            {categoriasConHabitaciones.length > 1 && (
+              <div role="group" aria-label="Filtrar por categoría" className="-mt-2 mb-5 flex flex-wrap items-center gap-1.5">
+                <span className="mr-1 text-xs font-medium uppercase tracking-wide text-subtle">Categoría</span>
+                <button
+                  type="button"
+                  aria-pressed={filtroCategoria === null}
+                  onClick={() => setFiltroCategoria(null)}
+                  className={`press hit rounded-full border px-3 py-1 text-sm ${
+                    filtroCategoria === null
+                      ? 'border-accent bg-accent-soft font-medium text-accent'
+                      : 'border-line-strong bg-surface text-muted hover:text-ink'
+                  }`}
+                >
+                  Todas
+                </button>
+                {categoriasConHabitaciones.map((c) => {
+                  const propias = habitaciones.filter((h) => h.categoria_id === c.id);
+                  const ocupadas = propias.filter((h) => h.estado === 'Ocupada').length;
+                  const activa = filtroCategoria === c.id;
+                  return (
+                    <button
+                      key={c.id}
+                      type="button"
+                      aria-pressed={activa}
+                      onClick={() => setFiltroCategoria(activa ? null : c.id)}
+                      title={c.descripcion ?? undefined}
+                      className={`press hit flex items-center gap-2 rounded-full border px-3 py-1 text-sm ${
+                        activa ? 'font-medium' : 'border-line-strong bg-surface text-muted hover:text-ink'
+                      }`}
+                      style={activa ? { borderColor: c.color, color: c.color, backgroundColor: `${c.color}14` } : undefined}
+                    >
+                      <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: c.color }} aria-hidden="true" />
+                      {c.nombre}
+                      <span className="tabular-nums text-xs opacity-80">
+                        {ocupadas}/{propias.length}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
             {carga === 'cargando' && <p className="py-16 text-center text-sm text-muted">Cargando habitaciones…</p>}
 
             {carga === 'error' && (
@@ -284,6 +336,7 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
             {carga === 'ok' && visibles.length > 0 && (
               <RoomsGrid
                 habitaciones={visibles}
+                categorias={categorias}
                 now={now}
                 onRoomClick={(h) => openRoom(h, false)}
                 onAddConsumo={(h) => openRoom(h, true)}
@@ -304,12 +357,15 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
         {esGerencia && activeView === 'configuracion' && <ConfiguracionView onCambioHabitaciones={fetchHabitaciones} />}
 
         {esGerencia && activeView === 'actividad' && <ActividadView onCambioPendientes={setPendientes} />}
+
+        {activeView === 'perfil' && <PerfilView onPerfilActualizado={onRefrescarSesion} onSalir={onSalir} />}
       </main>
 
       {selectedRoom && (
         <RoomDialog
           key={selectedRoom.id}
           room={selectedRoom}
+          categoria={categorias.find((c) => c.id === selectedRoom.categoria_id)}
           now={now}
           onClose={closePanel}
           onAperturaTurno={handleTurnoSubmit}

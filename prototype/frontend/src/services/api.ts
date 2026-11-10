@@ -5,7 +5,10 @@ import {
   ArqueoDetalle,
   Articulo,
   ArticuloCambios,
+  Categoria,
   CategoriaActividad,
+  CategoriaAlta,
+  CategoriaDatos,
   ConserjeAlta,
   ConstanciaCobro,
   DeclaracionCaja,
@@ -20,6 +23,8 @@ import {
   MedioPago,
   MetricasCaja,
   OperadorEstado,
+  Perfil,
+  ResumenCategoria,
   Sesion,
   Tarifa,
   TarifaDatos,
@@ -37,6 +42,8 @@ const http = axios.create({
   baseURL: API_URL,
   withCredentials: true,
   headers: { 'X-Requested-With': 'motelos' },
+  // RNF-09: una petición colgada (el servidor aceptó la conexión y no responde) también cuenta como corte.
+  timeout: 15000,
 });
 
 let alVencerSesion: (() => void) | null = null;
@@ -73,13 +80,15 @@ export const estaConectado = (): boolean => conectado;
 
 export const marcarSinConexion = () => marcarConexion(false);
 
-// Sondeo liviano del servidor (sin sesión ni interceptores) para detectar la vuelta de la conexión.
+// Sondeo liviano del servidor (sin sesión ni interceptores). Detecta el corte aunque la vista abierta no haga
+// peticiones, y la vuelta de la conexión.
 export const sondearServidor = async (): Promise<boolean> => {
   try {
-    await axios.get(URL_SALUD, { timeout: 2000 });
+    await axios.get(URL_SALUD, { timeout: 2500 });
     marcarConexion(true);
     return true;
   } catch {
+    marcarConexion(false);
     return false;
   }
 };
@@ -126,6 +135,9 @@ export const getErrorMessage = (error: unknown, fallback: string): string => {
 
 export const esConflicto = (error: unknown): boolean => axios.isAxiosError(error) && error.response?.status === 409;
 
+// La petición no llegó a tener respuesta (corte, servidor caído o tiempo agotado): no dice nada de la sesión.
+export const esSinRespuesta = (error: unknown): boolean => axios.isAxiosError(error) && !error.response;
+
 export const api = {
   // --- Sesión ---
   // El establecimiento es el código del motel (multiinquilino); vacío, el predeterminado de la instalación.
@@ -153,6 +165,9 @@ export const api = {
   getMetricas: async (filtro: { desde?: string; hasta?: string }): Promise<MetricasCaja> =>
     (await http.get('/arqueos/metricas', { params: filtro })).data,
 
+  getPorCategoria: async (filtro: { desde?: string; hasta?: string }): Promise<ResumenCategoria[]> =>
+    (await http.get('/arqueos/por-categoria', { params: filtro })).data,
+
   getOperadores: async (): Promise<OperadorEstado[]> => (await http.get('/operadores/')).data,
 
   getGuardiaActual: async (): Promise<Guardia | null> => (await http.get('/guardias/actual')).data,
@@ -178,18 +193,44 @@ export const api = {
   getHabitacionesConfiguracion: async (): Promise<HabitacionConfiguracion[]> =>
     (await http.get('/configuracion/habitaciones')).data,
 
-  altaHabitacion: async (numero: number): Promise<HabitacionConfiguracion> =>
-    (await http.post('/configuracion/habitaciones', { numero })).data,
+  altaHabitacion: async (numero: number, categoria_id?: number): Promise<HabitacionConfiguracion> =>
+    (await http.post('/configuracion/habitaciones', { numero, categoria_id })).data,
 
   configurarHabitacion: async (
     id: number,
-    cambios: { numero?: number; activa?: boolean },
+    cambios: { numero?: number; activa?: boolean; categoria_id?: number },
   ): Promise<HabitacionConfiguracion> => (await http.patch(`/configuracion/habitaciones/${id}`, cambios)).data,
 
   altaConserje: async (conserje: ConserjeAlta): Promise<OperadorEstado> => (await http.post('/operadores/', conserje)).data,
 
   setOperadorActivo: async (id: number, activo: boolean): Promise<OperadorEstado> =>
     (await http.patch(`/operadores/${id}`, { activo })).data,
+
+  // --- Categorías de habitación (migración 008) ---
+  // La ventanilla lee las activas con su tarifa vigente; la gerencia las ve todas y las cambia.
+  getCategorias: async (): Promise<Categoria[]> => (await http.get('/categorias/')).data,
+
+  getCategoriasConfiguracion: async (): Promise<Categoria[]> => (await http.get('/configuracion/categorias')).data,
+
+  altaCategoria: async (datos: CategoriaAlta): Promise<Categoria> => (await http.post('/configuracion/categorias', datos)).data,
+
+  cambiarCategoria: async (id: number, datos: CategoriaDatos): Promise<Categoria> =>
+    (await http.patch(`/configuracion/categorias/${id}`, datos)).data,
+
+  getTarifasDe: async (categoriaId: number): Promise<Tarifa[]> =>
+    (await http.get('/configuracion/tarifas', { params: { categoria_id: categoriaId } })).data,
+
+  // --- Mi perfil ---
+  getPerfil: async (): Promise<Perfil> => (await http.get('/perfil/')).data,
+
+  setNombreVisible: async (nombre_visible: string): Promise<Perfil> => (await http.patch('/perfil/', { nombre_visible })).data,
+
+  cambiarClave: async (actual: string, nueva: string): Promise<void> => {
+    await http.post('/perfil/clave', { actual, nueva });
+  },
+
+  restablecerClave: async (operadorId: number, nueva: string): Promise<OperadorEstado> =>
+    (await http.post(`/operadores/${operadorId}/clave`, { nueva })).data,
 
   // --- Datos del establecimiento y registro de actividad (gerencia) ---
   getEstablecimiento: async (): Promise<Establecimiento> => (await http.get('/configuracion/establecimiento')).data,

@@ -33,5 +33,6 @@ export const ESTADO_META: Record<RoomStatus, EstadoMeta> = {
 
 export const FASE_META: Record<FaseEstadia, { text: string; bar: string | null }> = {
   normal: { text: 'text-ink', bar: null },
+  por_vencer: { text: 'text-warn', bar: 'border-l-warn' },
   excedido: { text: 'text-danger', bar: 'border-l-danger' },
 };

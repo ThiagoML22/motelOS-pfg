@@ -7,6 +7,8 @@ DO $$
 DECLARE
     otro integer;
     hab_otra integer;
+    cat_otra integer;
+    cat_nueva integer;
     turno_otro uuid;
     conserje_otro integer;
     guardia_otra integer;
@@ -20,8 +22,11 @@ DECLARE
 BEGIN
     -- Datos del dueno de las tablas: un segundo establecimiento con la habitacion 1, un conserje y un turno.
     INSERT INTO establecimientos (codigo, nombre) VALUES ('verif-otro', 'Otro') RETURNING id INTO otro;
-    INSERT INTO habitaciones (establecimiento_id, numero, estado) VALUES (otro, 1, 'Libre') RETURNING id INTO hab_otra;
-    INSERT INTO tarifas (establecimiento_id, nombre, tarifa_base, tarifa_fraccion) VALUES (otro, 'Otra', 9000, 3000);
+    INSERT INTO categorias_habitacion (establecimiento_id, nombre) VALUES (otro, 'Simple') RETURNING id INTO cat_otra;
+    INSERT INTO habitaciones (establecimiento_id, numero, estado, categoria_id) VALUES (otro, 1, 'Libre', cat_otra)
+    RETURNING id INTO hab_otra;
+    INSERT INTO tarifas (establecimiento_id, nombre, tarifa_base, tarifa_fraccion, categoria_id)
+    VALUES (otro, 'Otra', 9000, 3000, cat_otra);
     INSERT INTO operadores (establecimiento_id, usuario, nombre_visible, hash_clave)
     VALUES (otro, 'conserje1', 'Conserje del otro', 'x') RETURNING id INTO conserje_otro;
     INSERT INTO guardias (establecimiento_id, operador_id, franja) VALUES (otro, conserje_otro, '06:00')
@@ -64,7 +69,7 @@ BEGIN
 
     -- 3. No inserta filas a nombre de otro establecimiento (WITH CHECK).
     bloqueado := false;
-    BEGIN INSERT INTO habitaciones (establecimiento_id, numero, estado) VALUES (otro, 99, 'Libre');
+    BEGIN INSERT INTO habitaciones (establecimiento_id, numero, estado, categoria_id) VALUES (otro, 99, 'Libre', cat_otra);
     EXCEPTION WHEN insufficient_privilege THEN bloqueado := true; END;
     IF NOT bloqueado THEN RAISE EXCEPTION 'RLS: el establecimiento 1 inserto una fila de otro'; END IF;
 
@@ -100,7 +105,8 @@ BEGIN
     -- ... y da de alta un establecimiento con su gerencia inicial, una sola vez.
     INSERT INTO establecimientos (codigo, nombre) VALUES ('verif-nuevo', 'Nuevo') RETURNING id INTO nuevo;
     PERFORM set_config('app.establecimiento_id', nuevo::text, true);
-    INSERT INTO habitaciones (numero, estado) VALUES (1, 'Libre');
+    INSERT INTO categorias_habitacion (nombre) VALUES ('Simple') RETURNING id INTO cat_nueva;
+    INSERT INTO habitaciones (numero, estado, categoria_id) VALUES (1, 'Libre', cat_nueva);
     INSERT INTO configuracion_caja (fondo_cambio) VALUES (25000);
     PERFORM crear_gerencia_inicial('gerencia', 'Gerencia nueva', 'x');
     SELECT count(*) INTO cantidad FROM operadores WHERE rol = 'ADMINISTRADOR';

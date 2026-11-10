@@ -13,6 +13,7 @@ CAJA = "CAJA"
 HABITACION = "HABITACION"
 PERSONAL = "PERSONAL"
 ESTABLECIMIENTO = "ESTABLECIMIENTO"
+PERFIL = "PERFIL"  # migración 008: nombre visible y claves
 
 
 class RegistroActividad(DeEstablecimiento, Base):

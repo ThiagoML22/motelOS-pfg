@@ -4,10 +4,10 @@
 
 /*
  * Tokens semánticos (canales RGB para poder usar opacidad en Tailwind).
- * El modo noche (azul oscuro) se resolverá redefiniendo estas mismas variables
- * bajo [data-theme='dark'], sin tocar los componentes.
+ * El modo oscuro (azul noche) redefine estas mismas variables bajo [data-theme='dark'], sin tocar los componentes.
  */
 :root {
+  color-scheme: light;
   --bg: 242 244 247;
   --surface: 255 255 255;
   --surface-2: 247 248 250;
@@ -34,6 +34,203 @@
   --warn-soft: 252 243 224;
   --danger: 176 42 42;
   --danger-soft: 251 233 233;
+}
+
+/* Modo oscuro: azul noche. Los estados conservan su codificación (verde, azul, amarillo, gris) con más luz para que
+   el contraste con el fondo siga en AA. */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: 9 14 24;
+  --surface: 16 23 37;
+  --surface-2: 22 31 49;
+  --line: 35 47 69;
+  --line-strong: 55 70 97;
+  --ink: 230 235 243;
+  --muted: 163 174 192;
+  --subtle: 128 140 160;
+
+  --accent: 125 166 235;
+  --accent-hover: 152 186 242;
+  --accent-soft: 28 42 70;
+  --accent-fg: 9 14 24;
+
+  --libre: 74 205 152;
+  --libre-soft: 16 46 38;
+  --ocupada: 118 158 236;
+  --ocupada-soft: 25 37 64;
+  --limpieza: 236 183 82;
+  --limpieza-soft: 54 41 17;
+  --mant: 152 163 180;
+  --mant-soft: 32 39 52;
+  --warn: 236 183 82;
+  --warn-soft: 54 41 17;
+  --danger: 244 117 117;
+  --danger-soft: 62 25 30;
+}
+
+/* El logo es oscuro sobre transparente: en modo oscuro se aclara. */
+:root[data-theme='dark'] .logo {
+  filter: invert(1) hue-rotate(180deg) brightness(1.15);
+}
+
+/* Cambio de tema: la página nueva aparece en un círculo que crece desde la lunita (View Transitions). Donde el navegador
+   no lo soporta, los colores se funden en 400 ms. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+.tema-en-transicion,
+.tema-en-transicion *,
+.tema-en-transicion *::before,
+.tema-en-transicion *::after {
+  transition:
+    background-color 400ms ease,
+    border-color 400ms ease,
+    color 300ms ease,
+    fill 300ms ease !important;
+}
+
+/* --- Interruptor de tema (la lunita) ------------------------------------------------------------------------------ */
+.tema-boton {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 9999px;
+  color: rgb(var(--muted));
+  transition:
+    background-color 200ms ease,
+    color 200ms ease,
+    transform 150ms ease;
+}
+
+.tema-boton:hover {
+  background-color: rgb(var(--surface-2));
+  color: rgb(var(--ink));
+}
+
+.tema-boton:active {
+  transform: scale(0.86);
+}
+
+.tema-boton .astro {
+  position: absolute;
+  transition:
+    transform 600ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    opacity 300ms ease;
+}
+
+/* Claro: se ve la luna (invita a pasar a oscuro). Oscuro: se ve el sol. */
+.tema-boton .luna {
+  transform: rotate(0deg) scale(1);
+  opacity: 1;
+}
+
+.tema-boton .sol {
+  transform: rotate(-120deg) scale(0.3);
+  opacity: 0;
+}
+
+.tema-boton[data-modo='oscuro'] .luna {
+  transform: rotate(120deg) scale(0.3);
+  opacity: 0;
+}
+
+.tema-boton[data-modo='oscuro'] .sol {
+  transform: rotate(0deg) scale(1);
+  opacity: 1;
+  color: rgb(236 183 82);
+}
+
+/* La luna se balancea al pasar el mouse y sus estrellas titilan; el sol gira sus rayos. */
+.tema-boton:hover .luna .cuerpo {
+  animation: luna-balanceo 900ms ease-in-out;
+  transform-origin: center;
+  transform-box: fill-box;
+}
+
+.tema-boton .estrella {
+  opacity: 0;
+  transform-origin: center;
+  transform-box: fill-box;
+}
+
+.tema-boton:hover .estrella,
+.tema-boton:focus-visible .estrella {
+  animation: titilar 1200ms ease-in-out infinite;
+}
+
+.tema-boton:hover .estrella-2 {
+  animation-delay: 300ms;
+}
+
+.tema-boton:hover .estrella-3 {
+  animation-delay: 600ms;
+}
+
+.tema-boton:hover .rayos {
+  animation: girar 6s linear infinite;
+  transform-origin: center;
+  transform-box: fill-box;
+}
+
+/* Al apretar: una onda que sale del botón. */
+.tema-boton .onda {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  border: 2px solid rgb(var(--accent));
+  opacity: 0;
+  pointer-events: none;
+}
+
+.tema-boton.pulsado .onda {
+  animation: onda 600ms ease-out;
+}
+
+@keyframes luna-balanceo {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  30% {
+    transform: rotate(-18deg);
+  }
+  65% {
+    transform: rotate(10deg);
+  }
+}
+
+@keyframes titilar {
+  0%,
+  100% {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes girar {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes onda {
+  0% {
+    opacity: 0.7;
+    transform: scale(0.8);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.9);
+  }
 }
 
 @layer components {

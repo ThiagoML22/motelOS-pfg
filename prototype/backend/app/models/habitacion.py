@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, Integer, String, UniqueConstraint, true
+from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, UniqueConstraint, true
 
 from app.core.database import Base
 from app.core.inquilino import DeEstablecimiento
@@ -14,3 +14,5 @@ class Habitacion(DeEstablecimiento, Base):
     estado = Column(String(20), nullable=False, default="Libre") # Libre, Ocupada, En Limpieza, Mantenimiento
     # RF-11: una habitación dada de baja sale de la grilla y conserva su historial de turnos.
     activa = Column(Boolean, nullable=False, default=True, server_default=true())
+    # Categoría (migración 008): define la tarifa con la que se abre cada turno en esta habitación.
+    categoria_id = Column(Integer, ForeignKey("categorias_habitacion.id"), nullable=False)

@@ -4,6 +4,7 @@ import { Sesion } from '../types';
 import { api, getErrorMessage } from '../services/api';
 import Button from './ui/Button';
 import Field, { inputClass } from './ui/Field';
+import ThemeToggle from './ui/ThemeToggle';
 
 interface LoginViewProps {
   onIngreso: (sesion: Sesion) => void;
@@ -55,9 +56,10 @@ const LoginView: React.FC<LoginViewProps> = ({ onIngreso, aviso }) => {
   };
 
   return (
-    <main className="flex min-h-screen items-center justify-center px-4">
+    <main className="relative flex min-h-screen items-center justify-center px-4">
+      <ThemeToggle className="absolute right-4 top-4" />
       <div className="w-full max-w-sm animate-pop-in rounded-lg border border-line bg-surface p-8 shadow-lift">
-        <img src="/logo.png" alt="MotelOS" className="mx-auto mb-6 h-9 object-contain" />
+        <img src="/logo.png" alt="MotelOS" className="logo mx-auto mb-6 h-9 object-contain" />
         <h1 className="text-center text-lg font-semibold text-ink">Ingreso a la ventanilla</h1>
         <p className="mt-1 text-center text-sm text-muted">Cada operación queda registrada a su nombre.</p>
 
