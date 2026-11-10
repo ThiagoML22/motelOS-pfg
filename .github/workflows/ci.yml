@@ -6,10 +6,13 @@ on:
       - main
       # Rama de integración del prototipo v2 (AE3): cada etapa entra por una solicitud de cambios.
       - ae3/v2
+      # Rama de integración del prototipo v3 (AE4): cada etapa de la demo del Sprint 4 entra por una solicitud de cambios.
+      - ae4/v3
   pull_request:
     branches:
       - main
       - ae3/v2
+      - ae4/v3
 
 jobs:
   backend:
