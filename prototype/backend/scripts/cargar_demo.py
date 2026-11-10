@@ -50,6 +50,8 @@ LUNA = {
     "telefono": "3764-555000",
     "color_marca": "#6d28d9",
     "eslogan": "Noches bajo la luna",
+    # Motel Luna cuenta sus toallas y sábanas todas juntas; Motel C.C., separadas por estado (migración 017).
+    "ropa_por_estado": False,
 }
 # Eslogan de Motel C.C. (migración 009); su color queda el azul de MotelOS, así se ve la diferencia entre moteles.
 ESLOGAN_MOTELCC = "Tu descanso, a tu manera"

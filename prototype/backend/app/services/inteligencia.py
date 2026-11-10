@@ -17,7 +17,7 @@ from decimal import Decimal
 from statistics import mean, median, pstdev
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -30,11 +30,13 @@ from app.models.consumo import Consumo
 from app.models.franja_tarifa import FranjaTarifa
 from app.models.guardia import Guardia
 from app.models.habitacion import Habitacion
+from app.models.operacion import FALLA, RESUELTO, RUBROS, Arreglo
 from app.models.operador import Operador
 from app.models.pago import Pago
 from app.models.tarifa import Tarifa
 from app.models.turno import Turno
 from app.services import franjas
+from app.services import ropa as servicio_ropa
 from app.services.billing_service import ParametrosTarifa, calcular_sobreturno
 from app.services.caja import FALTANTE, SOBRANTE, guardia_abierta
 from app.services.liquidacion import con_zona
@@ -167,6 +169,16 @@ class Opinion:
     problemas: int
 
 
+@dataclass(frozen=True)
+class ArregloHecho:
+    abierto: datetime
+    resuelto: datetime | None
+    habitacion_id: int
+    tipo: str
+    rubro: str
+    costo: float | None
+
+
 @dataclass
 class Contexto:
     zona: ZoneInfo
@@ -188,6 +200,9 @@ class Contexto:
     # Todas, también las dadas de baja: lo cobrado con ellas sigue en el historial.
     franjas: list[FranjaTarifa] = field(default_factory=list)
     opiniones: list[Opinion] = field(default_factory=list)
+    arreglos: list[ArregloHecho] = field(default_factory=list)
+    # Lo que devuelve services.ropa.historial: el recuento vigente y las diferencias.
+    ropa: dict = field(default_factory=lambda: {"resumen": [], "diferencias": []})
 
     def franjas_de(self, categoria_id: int) -> list[FranjaTarifa]:
         return [f for f in self.franjas if f.activa and f.categoria_id == categoria_id]
@@ -324,6 +339,22 @@ async def contexto(db: AsyncSession, ahora: datetime | None = None) -> Contexto:
             )
         ).all()
     ]
+    # La operación diaria tampoco es caja: no espera al arqueo.
+    arreglos = [
+        ArregloHecho(local(abierto), local(resuelto) if resuelto else None, h, tipo, rubro, float(c) if c else None)
+        for abierto, resuelto, h, tipo, rubro, c in (
+            await db.execute(
+                select(
+                    Arreglo.abierto_en,
+                    Arreglo.resuelto_en,
+                    Arreglo.habitacion_id,
+                    Arreglo.tipo,
+                    Arreglo.rubro,
+                    Arreglo.costo,
+                ).where(or_(Arreglo.abierto_en >= desde_utc, Arreglo.estado != RESUELTO))
+            )
+        ).all()
+    ]
     limpiezas = [
         t
         for t in tramos_en_estado(await eventos_de(db, LIMPIEZA, desde_utc), LIMPIEZA)
@@ -348,6 +379,8 @@ async def contexto(db: AsyncSession, ahora: datetime | None = None) -> Contexto:
         limpiezas=limpiezas,
         franjas=todas_las_franjas,
         opiniones=opiniones,
+        arreglos=arreglos,
+        ropa=await servicio_ropa.historial(db),
     )
 
 
@@ -1012,6 +1045,107 @@ def _alertas_de_opiniones(ctx: Contexto, dias: int) -> list[dict]:
     return alertas
 
 
+# Con esta cantidad de fallas en el período, la habitación necesita más que otro arreglo.
+MINIMO_FALLAS = 3
+DIAS_ARREGLO_DEMORADO = 3
+# Una toalla perdida es un error de conteo; varias, una pregunta.
+MINIMO_ROPA_FALTANTE = 3
+
+
+def operacion(ctx: Contexto, dias: int = 30) -> dict:
+    """Arreglos y ropa del período, para las alertas y para Mot."""
+    desde = ctx.ahora - timedelta(days=dias)
+    resueltos = [a for a in ctx.arreglos if a.resuelto and a.resuelto >= desde]
+    sin_resolver = sorted((a for a in ctx.arreglos if a.resuelto is None), key=lambda a: a.abierto)
+    por_rubro: dict[str, list] = defaultdict(lambda: [0, 0.0])
+    for a in resueltos:
+        por_rubro[a.rubro][0] += 1
+        por_rubro[a.rubro][1] += a.costo or 0
+    fallas: dict[int, list[ArregloHecho]] = defaultdict(list)
+    for a in ctx.arreglos:
+        if a.tipo == FALLA and a.abierto >= desde:
+            fallas[a.habitacion_id].append(a)
+    habitaciones = []
+    for habitacion_id, propias in fallas.items():
+        rubro = Counter(a.rubro for a in propias).most_common(1)[0][0]
+        habitaciones.append(
+            {
+                "numero": ctx.numero(habitacion_id),
+                "fallas": len(propias),
+                "rubro": RUBROS[rubro],
+                "costo": sum(a.costo or 0 for a in propias),
+            }
+        )
+    faltas = [
+        d
+        for d in ctx.ropa["diferencias"]
+        if d["diferencia"] < 0 and datetime.fromisoformat(d["creado_en"]) >= desde
+    ]
+    return {
+        "dias": dias,
+        "resueltos": len(resueltos),
+        "gastado": sum(a.costo or 0 for a in resueltos),
+        "sin_costo": sum(1 for a in resueltos if a.costo is None),
+        "sin_resolver": sin_resolver,
+        "por_rubro": sorted(
+            ({"nombre": RUBROS[r], "cantidad": c, "costo": m} for r, (c, m) in por_rubro.items()),
+            key=lambda f: -f["costo"],
+        ),
+        "por_habitacion": sorted(habitaciones, key=lambda f: (-f["fallas"], -f["costo"])),
+        "ropa": ctx.ropa["resumen"],
+        "faltas": faltas,
+    }
+
+
+def _alertas_de_operacion(ctx: Contexto, dias: int) -> list[dict]:
+    datos = operacion(ctx, dias)
+    alertas = []
+    for fila in datos["por_habitacion"]:
+        if fila["fallas"] >= MINIMO_FALLAS:
+            gasto = f" Ya van {pesos(fila['costo'])} en arreglos." if fila["costo"] else ""
+            alertas.append(
+                _alerta(
+                    "habitacion",
+                    "media",
+                    f"Habitación {fila['numero']}: {fila['fallas']} fallas en {dias} días",
+                    f"La que más se repite es {fila['rubro'].lower()}.{gasto}",
+                    "Antes del próximo arreglo, conviene revisarla a fondo.",
+                )
+            )
+    for arreglo in datos["sin_resolver"]:
+        demora = (ctx.ahora - arreglo.abierto).days
+        if demora >= DIAS_ARREGLO_DEMORADO:
+            alertas.append(
+                _alerta(
+                    "habitacion",
+                    "media",
+                    f"Habitación {ctx.numero(arreglo.habitacion_id)}: {RUBROS[arreglo.rubro].lower()} sin resolver",
+                    f"Lleva {demora} días abierto.",
+                    "Lo ves en Operación, en Arreglos.",
+                )
+            )
+    por_prenda: dict[str, list[dict]] = defaultdict(list)
+    for falta in datos["faltas"]:
+        por_prenda[falta["etiqueta"]].append(falta)
+    for etiqueta, faltas in por_prenda.items():
+        unidades = -sum(d["diferencia"] for d in faltas)
+        if unidades < MINIMO_ROPA_FALTANTE:
+            continue
+        nombres = Counter(n for d in faltas for n in {d["operador"], d["anterior_por"]})
+        quien, veces = nombres.most_common(1)[0]
+        alertas.append(
+            _alerta(
+                "ropa",
+                "alta" if len(faltas) >= MINIMO_ROPA_FALTANTE and veces / len(faltas) >= 0.7 else "media",
+                f"Faltan {unidades} {etiqueta.lower()} en {dias} días",
+                f"Aparecen en {len(faltas)} recuentos, sin movimiento que lo explique. {quien} contó en {veces} de "
+                "ellos.",
+                "No prueba quién fue: revisá primero si hubo ropa que salió sin anotarse.",
+            )
+        )
+    return alertas
+
+
 ORDEN_SEVERIDAD = {"alta": 0, "media": 1, "info": 2}
 
 
@@ -1022,6 +1156,7 @@ def alertas(ctx: Contexto, reposiciones: list[dict] | None = None, dias: int = 3
         + _alertas_de_turnos(ctx, dias)
         + _alertas_de_rotacion(ctx, dias)
         + _alertas_de_opiniones(ctx, dias)
+        + _alertas_de_operacion(ctx, dias)
         + _alertas_de_inventario(ctx, reposiciones if reposiciones is not None else reposicion(ctx))
     )
     return sorted(lista, key=lambda a: ORDEN_SEVERIDAD[a["severidad"]])

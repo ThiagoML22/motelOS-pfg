@@ -38,6 +38,8 @@ class Settings(BaseSettings):
     # Guardias (RF-08): franjas de 06:00, 14:00 y 22:00 en la hora local del motel. Una guardia abierta hasta
     # GUARDIA_ANTICIPACION_MIN minutos antes de su hora de inicio corresponde a esa franja.
     ZONA_HORARIA: str = "America/Argentina/Buenos_Aires"
+    # Sin el recuento de toallas y sábanas no se abre ni se cierra una guardia (migración 016).
+    EXIGIR_RECUENTO_ROPA: bool = True
     GUARDIA_ANTICIPACION_MIN: int = 120
     # Fondo de cambio que recibe cada guardia en la gaveta: $25.000, aprobado por la gerencia en el acta de
     # validación del 19/10/2026 (punto 5). Se suma al efectivo que el sistema espera en el arqueo.

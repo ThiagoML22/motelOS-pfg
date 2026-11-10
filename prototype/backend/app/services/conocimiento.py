@@ -51,6 +51,45 @@ DEFINICIONES: tuple[Definicion, ...] = (
         extra="horario turno trabajo mañana tarde noche",
     ),
     Definicion(
+        "traspaso",
+        "Traspaso de guardia",
+        (r"\btraspaso\b",),
+        "Es lo que recibe quien entra: los turnos en curso, los pedidos sin resolver, las habitaciones en limpieza o "
+        "mantenimiento, los arreglos abiertos, las novedades y la ropa. Lo confirma al abrir su guardia y queda "
+        "registrado, sin importes ni patentes.",
+        "dashboard",
+        extra="cambio de guardia recibir entregar",
+    ),
+    Definicion(
+        "traslado",
+        "Traslado de turno",
+        (r"\btraslado\b",),
+        "Es pasar un turno a otra habitación disponible. Conserva su hora, la tarifa con la que entró, su cuenta y el "
+        "QR del cliente; la habitación de origen pasa a limpieza, o a mantenimiento si fue por una falla.",
+        "dashboard",
+        extra="cambiar habitacion mudar cliente",
+    ),
+    Definicion(
+        "arreglo",
+        "Arreglo",
+        (r"\barreglos?\b",),
+        "Es una falla o un mantenimiento de una habitación, con quién lo reparó y, si se sabe, cuánto costó. Cada "
+        "habitación tiene su historial. El costo es informativo: no mueve la caja.",
+        "dashboard",
+        extra="falla reparacion mantenimiento tecnico",
+    ),
+    Definicion(
+        "recuento_ropa",
+        "Recuento de ropa",
+        (r"recuento de (la )?ropa", r"conteo de (la )?ropa", r"recuento de toallas"),
+        "Es contar todas las toallas y sábanas del motel en cada cambio de guardia. Cada motel elige cómo: separadas "
+        "en limpias, sucias y en uso (las puestas en las habitaciones), o todo junto. Quien cierra cuenta a ciegas y "
+        "quien entra confirma o corrige. Lo que salió a la lavandería, se compró o se dio de baja se anota aparte, y "
+        "una diferencia sin explicar la ve la gerencia.",
+        "caja",
+        extra="toallas sabanas contar lavanderia faltante",
+    ),
+    Definicion(
         "turno",
         "Turno",
         (r"\bturnos?\b",),
@@ -381,8 +420,9 @@ DEFINICIONES: tuple[Definicion, ...] = (
         "cambio_habitacion",
         "El cliente quiere cambiarse de habitación",
         (r"cambiar(se)? de habitacion",),
-        "Hoy un turno no se traslada de una habitación a otra: cobrá el turno actual (con lo que lleve) y abrí uno "
-        "nuevo en la otra habitación. Dejá una novedad contando el motivo, sobre todo si fue por un desperfecto.",
+        "Se puede: abrí la habitación ocupada y tocá «Trasladar». El turno sigue igual, con su hora, la tarifa con la "
+        "que entró, su cuenta y el QR del cliente. Elegí el motivo: si fue por una falla, la habitación queda en "
+        "mantenimiento con el arreglo abierto.",
         "dashboard",
         extra="mudar trasladar otra pieza",
         situaciones=(r"(cambiar|cambiarse|pasar|mudar|trasladar)\w* (de|a otra) habitacion", r"quiere otra habitacion"),
@@ -560,6 +600,9 @@ VOCABULARIO_BASE = set(
     "libera libere liberan liberen liberar liberara desocupa esperar espera habilita registra escribi "
     "cargale cargame agregale agregame sumale sumame anotame anotale poneme pasame dejame liberame abrime ocupame "
     "cobrale cerrale cliente perdido mot "
+    "toalla toallas sabana sabanas ropa lavanderia arreglo arreglos falla fallas traslado trasladar traslada "
+    "trasladame junto juntas juntos separado separadas separados estado contar cuenta cuentan "
+    "traspaso recuento conteo mudar muda mudame "
     "especial especiales franja franjas noche noches tarde madrugada mediodia siesta sabado domingo miercoles rige "
     "gracias hola buenas buenos genial perfecto listo barbaro necesito quiero podes puedes sabes ayuda ayudame favor "
     "porfa tardes noches dias entonces bueno claro cliente clientes quejo quedarse momento ahora mismo pagar pagan "

@@ -67,6 +67,17 @@ INTENCIONES: list[tuple[str, list[str]]] = [
             r"clientes? (contentos?|conformes?|satisfechos?)",
         ],
     ),
+    ("ropa", [r"\btoallas?\b", r"\bsabanas?\b", r"ropa de cama", r"\bropa\b", r"\blavanderia\b"]),
+    (
+        "arreglos",
+        [
+            r"\barreglos?\b",
+            r"\bfallas?\b",
+            r"\breparacion(es)?\b",
+            r"(gast|cost)\w* .*mantenimiento",
+            r"se (rompe|rompio|rompen)",
+        ],
+    ),
     (
         "perdidos",
         [
@@ -346,6 +357,8 @@ class Asistente:
             "resumen": lambda: self.resumen(),
             "perdidos": lambda: self.perdidos(periodo, categoria_id),
             "opiniones": lambda: self.opiniones(),
+            "ropa": lambda: self.ropa(),
+            "arreglos": lambda: self.arreglos(texto),
             "gemelo": lambda: self.gemelo(texto, categoria_id),
             "pronostico": lambda: self.pronostico(texto),
             "stock": lambda: self.stock(texto),
@@ -369,7 +382,7 @@ class Asistente:
                 "desconocida",
                 sugerencias=SUGERENCIAS[:4],
             )
-        if not self.ctx.turnos and intencion not in ("ayuda", "stock", "opiniones"):
+        if not self.ctx.turnos and intencion not in ("ayuda", "stock", "opiniones", "ropa", "arreglos"):
             return _respuesta(
                 "Todavía no hay turnos cerrados para analizar: las respuestas aparecen cuando se arquea la primera "
                 "guardia con turnos.",
@@ -479,6 +492,73 @@ class Asistente:
             else None,
             detalle="Son anónimas: solo se ven totales, nunca una opinión suelta.",
             sugerencias=["¿Cuánto tarda la limpieza?", "¿Qué habitación se usa menos?"],
+        )
+
+    def ropa(self) -> dict:
+        datos = ia.operacion(self.ctx)
+        contadas = [r for r in datos["ropa"] if r["total"] is not None]
+        if not contadas:
+            return _respuesta("Todavía no se hizo ningún recuento de toallas y sábanas.", "ropa")
+        cuanto = " y ".join(f"{r['total']} {r['etiqueta'].lower()}" for r in contadas)
+        texto = f"Según el último recuento hay {cuanto}."
+        faltas = datos["faltas"]
+        if faltas:
+            unidades = -sum(d["diferencia"] for d in faltas)
+            texto += f" En los últimos {datos['dias']} días faltaron {unidades} en {len(faltas)} recuentos."
+        else:
+            texto += f" En los últimos {datos['dias']} días los recuentos coinciden."
+        return _respuesta(
+            texto,
+            "ropa",
+            tabla={
+                "columnas": ["Cuándo", "Qué", "Diferencia", "Contaron"],
+                "filas": [
+                    [
+                        datetime.fromisoformat(d["creado_en"]).astimezone(self.ctx.zona).strftime("%d/%m %H:%M"),
+                        d["etiqueta"],
+                        d["diferencia"],
+                        d["operador"]
+                        if d["operador"] == d["anterior_por"]
+                        else f"{d['anterior_por']} y {d['operador']}",
+                    ]
+                    for d in faltas[:6]
+                ],
+            }
+            if faltas
+            else None,
+            detalle="Lo que salió a la lavandería o se dio de baja no cuenta como faltante si se anotó.",
+            sugerencias=["¿Qué habitación se rompe más?", "¿Cuánto gastamos en arreglos?"],
+        )
+
+    def arreglos(self, pregunta: str) -> dict:
+        datos = ia.operacion(self.ctx)
+        sin_resolver = len(datos["sin_resolver"])
+        if not datos["resueltos"] and not sin_resolver:
+            return _respuesta(f"En los últimos {datos['dias']} días no se registraron arreglos.", "arreglos")
+        texto = (
+            f"En los últimos {datos['dias']} días se resolvieron {datos['resueltos']} arreglos, por "
+            f"{ia.pesos(datos['gastado'])}."
+        )
+        if sin_resolver:
+            texto += " Queda uno sin resolver." if sin_resolver == 1 else f" Quedan {sin_resolver} sin resolver."
+        filas = datos["por_habitacion"][:5]
+        if filas and re.search(r"(rompe|falla|arregl)\w* mas|mas (se )?(rompe|falla)|mas fallas", pregunta):
+            peor = filas[0]
+            texto = (
+                f"La {peor['numero']}: {peor['fallas']} fallas en {datos['dias']} días, sobre todo "
+                f"{peor['rubro'].lower()}. {texto}"
+            )
+        return _respuesta(
+            texto,
+            "arreglos",
+            tabla={
+                "columnas": ["Habitación", "Fallas", "Lo que más se repite", "Costo"],
+                "filas": [[f["numero"], f["fallas"], f["rubro"], ia.pesos(f["costo"])] for f in filas],
+            }
+            if filas
+            else None,
+            detalle=f"{datos['sin_costo']} resueltos todavía no tienen costo cargado." if datos["sin_costo"] else None,
+            sugerencias=["¿Faltan toallas?", "¿Qué arreglos hay abiertos?"],
         )
 
     def perdidos(self, periodo: Periodo, categoria_id: int | None) -> dict:

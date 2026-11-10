@@ -117,6 +117,8 @@ const ejecutarOrden = async (c: ConfirmacionAsistente) => {
   else if (c.tipo === 'consumo') await api.addConsumo(c.turno_id as string, c.articulo_id as number, c.cantidad as number);
   else if (c.tipo === 'novedad') await api.crearNovedad({ texto: c.texto as string, importante: Boolean(c.importante), habitacion_id: c.habitacion_id ?? null });
   else if (c.tipo === 'cliente_perdido') await api.registrarClientePerdido(c.motivo ?? 'SIN_LUGAR', c.categoria_id ?? null);
+  else if (c.tipo === 'traslado')
+    await api.trasladarTurno(c.turno_id as string, { habitacion_id: c.habitacion_id as number, motivo: c.motivo_traslado ?? 'OTRO' });
   else
     await api.createTurno({
       habitacion_id: c.habitacion_id as number,

@@ -12,6 +12,7 @@ import {
   Settings,
   Sparkles,
   UserRound,
+  Wrench,
 } from 'lucide-react';
 import { Sesion } from '../types';
 import { parseUtc } from '../utils/format';
@@ -23,6 +24,7 @@ export type View =
   | 'inventario'
   | 'caja'
   | 'gerencia'
+  | 'operacion'
   | 'configuracion'
   | 'actividad'
   | 'perfil';
@@ -48,6 +50,7 @@ export const ITEMS: { view: View; label: string; icon: React.ElementType; roles:
   { view: 'inventario', label: 'Inventario', icon: Package, roles: ['OPERADOR', 'ADMINISTRADOR'] },
   { view: 'caja', label: 'Cierre de caja', icon: Lock, roles: ['OPERADOR'] },
   { view: 'gerencia', label: 'Control de caja', icon: BarChart3, roles: ['ADMINISTRADOR'] },
+  { view: 'operacion', label: 'Operación', icon: Wrench, roles: ['ADMINISTRADOR'] },
   { view: 'configuracion', label: 'Configuración', icon: Settings, roles: ['ADMINISTRADOR'] },
   { view: 'actividad', label: 'Actividad', icon: ClipboardList, roles: ['ADMINISTRADOR'] },
   { view: 'inteligencia', label: 'Inteligencia', icon: Sparkles, roles: ['ADMINISTRADOR'] },
@@ -164,7 +167,8 @@ const TopNav: React.FC<TopNavProps> = ({
             );
           })}
         </nav>
-        <p className="hidden shrink-0 items-center gap-1.5 text-xs text-muted xl:flex">
+        {/* Con ocho secciones, la guardia aparece recién cuando entra sin mover el menú (también está en el de la cuenta). */}
+        <p className="hidden shrink-0 items-center gap-1.5 text-xs text-muted min-[1360px]:flex">
           <DoorOpen className="h-3.5 w-3.5" aria-hidden="true" />
           {textoGuardia(sesion)}
         </p>

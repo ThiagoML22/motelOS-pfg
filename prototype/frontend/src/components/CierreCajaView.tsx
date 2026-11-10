@@ -1,9 +1,11 @@
-import React, { useMemo, useState } from 'react';
-import { CheckCircle2, EyeOff, FileDown, LogOut, Printer, Lock } from 'lucide-react';
-import { Arqueo, Sesion } from '../types';
+import React, { useEffect, useMemo, useState } from 'react';
+import { CheckCircle2, EyeOff, FileDown, LogOut, Printer, Lock, Shirt } from 'lucide-react';
+import { Arqueo, PantallaTraspaso, RopaContada, Sesion } from '../types';
 import { api, getErrorMessage } from '../services/api';
 import { formatDateTime, formatMoney } from '../utils/format';
 import { CATEGORIA_META, NOMBRE_FRANJA, aImporte, redondear } from '../utils/caja';
+import RecuentoRopa, { aConteos, ropaVacia, textoDiferencia, totalDe } from './RecuentoRopa';
+import ResumenTraspaso from './ResumenTraspaso';
 import Button from './ui/Button';
 import Field, { inputClass } from './ui/Field';
 import Modal from './ui/Modal';
@@ -28,6 +30,39 @@ const CierreCajaView: React.FC<CierreCajaViewProps> = ({ sesion, resultado, onCo
   const [mercadoPago, setMercadoPago] = useState('');
   const [confirmando, setConfirmando] = useState(false);
   const [enviando, setEnviando] = useState(false);
+  const [traspaso, setTraspaso] = useState<PantallaTraspaso | null>(null);
+  const [ropa, setRopa] = useState(ropaVacia);
+  const [confirmandoRopa, setConfirmandoRopa] = useState(false);
+  const [contada, setContada] = useState<RopaContada[] | null>(null);
+
+  useEffect(() => {
+    api
+      .getTraspaso()
+      .then(setTraspaso)
+      .catch(() => setTraspaso(null));
+  }, []);
+
+  // Si no se pudo saber cómo cuenta el motel, se pide por estado y el servidor avisa si no era así.
+  const porEstado = traspaso?.ropa_por_estado ?? true;
+  const conteos = aConteos(ropa, porEstado);
+  // Sin el recuento no se cierra: si no se pudo saber, lo decide el servidor al confirmar.
+  const falta = Boolean(traspaso?.exige_recuento) && !traspaso?.ropa_contada && !contada;
+
+  const guardarRopa = async () => {
+    if (!conteos) return;
+    setEnviando(true);
+    try {
+      const resultado = await api.contarRopa(conteos);
+      setContada(resultado);
+      setConfirmandoRopa(false);
+      toast('Recuento de ropa guardado.', 'success');
+    } catch (err) {
+      setConfirmandoRopa(false);
+      toast(getErrorMessage(err, 'No se pudo guardar el recuento.'), 'error');
+    } finally {
+      setEnviando(false);
+    }
+  };
 
   const importes = useMemo(() => {
     const efectivo = aImporte(efectivoTexto);
@@ -88,6 +123,67 @@ const CierreCajaView: React.FC<CierreCajaViewProps> = ({ sesion, resultado, onCo
         </span>
       </p>
 
+      <div className="mb-5 grid gap-5 lg:grid-cols-[1.4fr_1fr]">
+        <section aria-labelledby="titulo-ropa" className="rounded-lg border border-line bg-surface p-5">
+          <h2 id="titulo-ropa" className="flex items-center gap-2 text-sm font-semibold text-ink">
+            <Shirt className="h-4 w-4 text-muted" aria-hidden="true" />
+            Toallas y sábanas
+          </h2>
+          {contada || traspaso?.ropa_contada ? (
+            <div className="mt-3 text-sm">
+              <p className="flex items-center gap-2 text-ink">
+                <CheckCircle2 className="h-4 w-4 text-libre" aria-hidden="true" />
+                Recuento hecho. Quien entra recibe estos números.
+              </p>
+              {contada && (
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  {contada.map((p) => (
+                    <div
+                      key={p.prenda}
+                      className={`rounded-lg border p-3 ${p.diferencia ? 'border-danger/40 bg-danger-soft/40' : 'border-line bg-surface-2/60'}`}
+                    >
+                      <p className="text-xs text-muted">{p.etiqueta}</p>
+                      <p className="mt-0.5 text-2xl font-semibold tabular-nums text-ink">{p.total}</p>
+                      <p className={`mt-1 text-xs ${p.diferencia ? 'font-medium text-danger' : 'text-muted'}`}>
+                        {p.diferencia === null && 'Primer recuento.'}
+                        {p.diferencia === 0 && 'Coincide con lo que debería haber.'}
+                        {!!p.diferencia && `Debería haber ${p.esperado}: ${textoDiferencia(p.diferencia)}. Lo verá la gerencia.`}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
+            <>
+              <p className="mt-0.5 mb-3 text-xs text-muted">
+                Cuente toda la ropa del motel{porEstado ? ', separada en limpias, sucias y en uso (las puestas en las habitaciones)' : ''},
+                sin ver cuánta debería haber. Quien entra recibe este número.
+              </p>
+              {traspaso ? (
+                <RecuentoRopa valores={ropa} onCambiar={setRopa} porEstado={porEstado} idBase="cierre" />
+              ) : (
+                <p className="text-sm text-muted">Cargando…</p>
+              )}
+              <Button className="mt-4 w-full sm:w-auto" disabled={!conteos} onClick={() => setConfirmandoRopa(true)}>
+                Guardar recuento
+              </Button>
+            </>
+          )}
+        </section>
+
+        <section aria-labelledby="titulo-deja" className="rounded-lg border border-line bg-surface p-5">
+          <h2 id="titulo-deja" className="text-sm font-semibold text-ink">
+            Lo que deja a la próxima guardia
+          </h2>
+          {traspaso ? (
+            <ResumenTraspaso foto={traspaso} className="mt-2" />
+          ) : (
+            <p className="mt-2 text-sm text-muted">Cargando…</p>
+          )}
+        </section>
+      </div>
+
       <div className="grid gap-5 lg:grid-cols-[1.4fr_1fr]">
         <section aria-labelledby="titulo-efectivo" className="rounded-lg border border-line bg-surface p-5">
           <h2 id="titulo-efectivo" className="text-sm font-semibold text-ink">
@@ -109,8 +205,6 @@ const CierreCajaView: React.FC<CierreCajaViewProps> = ({ sesion, resultado, onCo
                 id="efectivo"
                 inputMode="decimal"
                 placeholder="0"
-                data-autofocus
-                autoFocus
                 className={`${inputClass} h-12 text-lg tabular-nums`}
                 value={efectivoTexto}
                 onChange={(e) => setEfectivoTexto(e.target.value)}
@@ -162,13 +256,48 @@ const CierreCajaView: React.FC<CierreCajaViewProps> = ({ sesion, resultado, onCo
                 {importes.declarado === null ? '—' : formatMoney(importes.declarado)}
               </span>
             </div>
-            <Button className="mt-4 w-full" disabled={!importes.validos} onClick={() => setConfirmando(true)}>
+            {falta && <p className="mt-3 text-sm text-warn">Antes de cerrar, guarde el recuento de toallas y sábanas.</p>}
+            <Button className="mt-4 w-full" disabled={!importes.validos || falta} onClick={() => setConfirmando(true)}>
               <Lock className="h-4 w-4" aria-hidden="true" />
               Confirmar recuento y cerrar guardia
             </Button>
           </div>
         </section>
       </div>
+
+      {confirmandoRopa && conteos && (
+        <Modal
+          title="Guardar el recuento"
+          subtitle="Una vez guardado no se puede modificar."
+          onClose={() => !enviando && setConfirmandoRopa(false)}
+          footer={
+            <div className="flex justify-end gap-3">
+              <Button variant="secondary" onClick={() => setConfirmandoRopa(false)} disabled={enviando}>
+                Volver a contar
+              </Button>
+              <Button onClick={() => void guardarRopa()} disabled={enviando} data-autofocus>
+                {enviando ? 'Guardando…' : 'Guardar'}
+              </Button>
+            </div>
+          }
+        >
+          <dl className="space-y-2 text-sm">
+            {conteos.map((c) => (
+              <div key={c.prenda} className="flex items-baseline justify-between gap-3">
+                <dt className="text-muted">
+                  {c.prenda === 'TOALLAS' ? 'Toallas' : 'Sábanas'}
+                  {c.total === undefined && (
+                    <span className="block text-xs">
+                      {c.limpias} limpias · {c.sucias} sucias · {c.en_habitaciones} en uso
+                    </span>
+                  )}
+                </dt>
+                <dd className="text-lg font-semibold tabular-nums text-ink">{totalDe(ropa[c.prenda], porEstado)}</dd>
+              </div>
+            ))}
+          </dl>
+        </Modal>
+      )}
 
       {confirmando && importes.validos && (
         <Modal

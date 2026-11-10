@@ -19,6 +19,7 @@ from app.core.config import settings
 from app.models.categoria import CategoriaHabitacion
 from app.models.evento_habitacion import COBRO, EventoHabitacion
 from app.models.habitacion import Habitacion
+from app.models.operacion import TrasladoTurno
 from app.models.operador import Operador
 from app.models.pedido_cliente import RECHAZADO, SALIDA, TIEMPO, PedidoCliente
 from app.models.tarifa import Tarifa
@@ -301,7 +302,7 @@ async def linea_de_tiempo(db: AsyncSession, dia: date | None = None, ahora: date
     categorias = {c.id: c for c in (await db.execute(select(CategoriaHabitacion))).scalars()}
     tramos: dict[int, list[dict]] = defaultdict(list)
 
-    def agregar(habitacion_id: int, tipo: str, inicio: datetime, fin: datetime | None) -> None:
+    def agregar(habitacion_id: int, tipo: str, inicio: datetime, fin: datetime | None, sigue: bool = False) -> None:
         en_curso = fin is None
         recortado_inicio, recortado_fin = max(inicio, desde), min(fin or limite, limite)
         if recortado_fin > recortado_inicio:
@@ -312,18 +313,34 @@ async def linea_de_tiempo(db: AsyncSession, dia: date | None = None, ahora: date
                     "hasta": recortado_fin.isoformat(),
                     "en_curso": en_curso,
                     "minutos": round(((fin or limite) - inicio).total_seconds() / 60),
+                    # El turno siguió en otra habitación: en el resumen cuenta una vez.
+                    "sigue": sigue,
                 }
             )
 
     turnos = (
         await db.execute(
-            select(Turno.habitacion_id, Turno.hora_inicio, Turno.hora_fin).where(
+            select(Turno.id, Turno.habitacion_id, Turno.hora_inicio, Turno.hora_fin).where(
                 Turno.hora_inicio < hasta, or_(Turno.hora_fin.is_(None), Turno.hora_fin > desde)
             )
         )
     ).all()
-    for habitacion_id, inicio, fin in turnos:
-        agregar(habitacion_id, "ocupada", con_zona(inicio), con_zona(fin) if fin else None)
+    # Un turno trasladado ocupó más de una habitación: cada una muestra su parte.
+    traslados: dict = defaultdict(list)
+    if turnos:
+        consulta = await db.execute(
+            select(TrasladoTurno)
+            .where(TrasladoTurno.turno_id.in_([t[0] for t in turnos]))
+            .order_by(TrasladoTurno.creado_en, TrasladoTurno.id)
+        )
+        for traslado in consulta.scalars():
+            traslados[traslado.turno_id].append(traslado)
+    for turno_id, habitacion_id, inicio, fin in turnos:
+        desde_aca = con_zona(inicio)
+        for traslado in traslados[turno_id]:
+            agregar(traslado.desde_habitacion_id, "ocupada", desde_aca, con_zona(traslado.creado_en), sigue=True)
+            desde_aca = con_zona(traslado.creado_en)
+        agregar(habitacion_id, "ocupada", desde_aca, con_zona(fin) if fin else None)
 
     # Un período que empezó antes de la ventana también cuenta: una limpieza dura minutos, un arreglo, semanas.
     for estado, tipo, margen in ((LIMPIEZA, "limpieza", 2), (MANTENIMIENTO, "mantenimiento", 90)):
@@ -356,7 +373,7 @@ async def linea_de_tiempo(db: AsyncSession, dia: date | None = None, ahora: date
         "ahora": ahora.isoformat(),
         "habitaciones": filas,
         "resumen": {
-            "turnos": len(ocupados),
+            "turnos": sum(1 for t in ocupados if not t["sigue"]),
             "ocupacion": round(min(minutos_ocupados / disponibles, 1.0), 4) if disponibles > 0 else None,
             "limpieza_min": round(median(limpiezas)) if limpiezas else None,
             "turnos_por_habitacion": round(len(ocupados) / len(habitaciones), 1) if habitaciones else 0.0,

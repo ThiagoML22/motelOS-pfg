@@ -82,7 +82,15 @@ const RoomCard: React.FC<RoomCardProps> = ({ room, categoria, now, onClick, onAd
       className={`group relative flex h-full min-h-[9.5rem] cursor-pointer flex-col rounded-lg border border-l-4 border-line bg-surface p-4 transition duration-200 ease-out hover:-translate-y-0.5 hover:border-b-line-strong hover:border-r-line-strong hover:border-t-line-strong hover:shadow-lift active:translate-y-0 active:shadow-none ${barClass} ${destello ? 'animate-destello' : ''}`}
     >
       <div className="flex items-start justify-between gap-2">
-        <h3 className="text-base font-semibold text-ink">{formatRoomNumber(room.numero)}</h3>
+        <h3 className="flex items-center gap-1.5 text-base font-semibold text-ink">
+          {formatRoomNumber(room.numero)}
+          {(room.arreglos_abiertos ?? 0) > 0 && (
+            <span title={room.arreglos_abiertos === 1 ? '1 arreglo sin resolver' : `${room.arreglos_abiertos} arreglos sin resolver`}>
+              <Wrench className="h-3.5 w-3.5 text-warn" aria-hidden="true" />
+              <span className="sr-only">Tiene arreglos sin resolver</span>
+            </span>
+          )}
+        </h3>
         <span className={`flex items-center gap-1.5 text-xs font-medium ${meta.text}`}>
           <span className={`h-2 w-2 rounded-full ${meta.dot}`} aria-hidden="true" />
           {meta.label}

@@ -22,6 +22,15 @@ class TurnoCreate(TurnoBase):
     tarifa_id: int | None = None
 
 
+class TrasladoCreate(BaseModel):
+    """A qué habitación libre pasa el turno y por qué. Si es por una falla, qué falló."""
+
+    habitacion_id: int
+    motivo: Literal["FALLA", "CLIENTE", "OTRO"]
+    rubro: Literal["AIRE", "PLOMERIA", "ELECTRICIDAD", "TV", "MUEBLES", "OTRO"] | None = None
+    descripcion: str | None = Field(default=None, max_length=200)
+
+
 class TurnoResponse(TurnoBase):
     model_config = ConfigDict(from_attributes=True)
 

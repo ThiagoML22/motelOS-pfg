@@ -25,11 +25,12 @@ from app.schemas.turno import (
     CierreTurnoCreate,
     ConstanciaCobro,
     PagoConstancia,
+    TrasladoCreate,
     TurnoCreate,
     TurnoResponse,
     TurnoResumen,
 )
-from app.services import acceso_cliente, franjas, rotacion
+from app.services import acceso_cliente, arreglos, franjas, rotacion
 from app.services.actividad import pesos
 from app.services.caja import guardia_del_operador
 from app.services.consumos import cargar_consumo
@@ -104,6 +105,19 @@ async def create_turno(
     nuevo_turno.abierto_por = operador.nombre_visible
     nuevo_turno.estadia_base_min = tarifa.estadia_base_min
     return nuevo_turno
+
+
+@router.post("/{turno_id}/trasladar")
+async def trasladar(
+    turno_id: uuid.UUID,
+    datos: TrasladoCreate,
+    db: AsyncSession = Depends(get_db),
+    operador: Operador = Depends(operador_actual),
+) -> dict:
+    """El turno pasa a otra habitación libre y conserva su hora, su tarifa, su cuenta y el enlace del cliente."""
+    return await arreglos.trasladar(
+        db, operador, turno_id, datos.habitacion_id, datos.motivo, datos.rubro, datos.descripcion
+    )
 
 
 @router.post("/{turno_id}/consumos", status_code=status.HTTP_201_CREATED)

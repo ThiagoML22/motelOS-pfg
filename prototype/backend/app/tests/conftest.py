@@ -6,6 +6,8 @@ os.environ.setdefault("ARGON2_MEMORY_KIB", "1024")
 # Las pruebas de caja verifican la aritmética del arqueo sin fondo de cambio; el fondo aprobado ($25.000) se
 # prueba aparte en test_caja (test_el_fondo_de_cambio_integra_el_efectivo_del_sistema).
 os.environ.setdefault("FONDO_INICIAL_CAJA", "0")
+# Las pruebas de caja abren y cierran guardias sin el recuento de ropa; el que lo exige se prueba en test_operacion.
+os.environ.setdefault("EXIGIR_RECUENTO_ROPA", "false")
 # Multiinquilino: el inicio de sesión sin código entra al establecimiento de las pruebas.
 ESTABLECIMIENTO_PRUEBA = "prueba"
 ESTABLECIMIENTO_OTRO = "otro"
