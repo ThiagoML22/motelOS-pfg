@@ -1,9 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { BedDouble, LogOut, MessageSquarePlus, Moon, UserRound, WifiOff } from 'lucide-react';
+import { BedDouble, Keyboard, LogOut, MessageSquarePlus, Moon, Rows3, UserRound, WifiOff } from 'lucide-react';
 import { Arqueo, Categoria, HabitacionConDetalles, Novedad, RoomStatus, Sesion, TipoCliente } from './types';
 import { AsistenteFlotante, AsistenteProvider, useAsistente } from './components/Asistente';
+import AtajosTeclado, { escribiendo } from './components/AtajosTeclado';
 import CentroAvisos from './components/CentroAvisos';
+import LineaDeTiempo, {
+  guardarVistaHabitaciones,
+  leerVistaHabitaciones,
+  SelectorVista,
+  VistaHabitaciones,
+} from './components/LineaDeTiempo';
 import PaletaComandos, { Comando } from './components/PaletaComandos';
+import { AvisoProximaLibre, BotonClientePerdido } from './components/ProximaLibre';
 import { NovedadesCard, NuevaNovedadModal } from './components/NovedadesPanel';
 import { elegirTema, modoActual } from './utils/tema';
 import { api, esSinRespuesta, getErrorMessage, onSesionVencida } from './services/api';
@@ -27,6 +35,7 @@ import PanelGerencia from './components/PanelGerencia';
 import ConfiguracionView from './components/ConfiguracionView';
 import Button from './components/ui/Button';
 import { useToast } from './components/ui/Toast';
+import { EstadoVacio, EsqueletoGrilla } from './components/ui/Carga';
 import { ESTADOS_ORDEN, ESTADO_META } from './components/ui/status';
 
 const POLL_MS = 10000;
@@ -132,12 +141,21 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
       // sin almacenamiento local, vuelve a «por número» al recargar
     }
   };
+  // Habitaciones en grilla o en línea de tiempo: se recuerda en el puesto.
+  const [vistaHabitaciones, setVistaHabitaciones] = useState<VistaHabitaciones>(leerVistaHabitaciones);
+  const cambiarVistaHabitaciones = useCallback((vista: VistaHabitaciones) => {
+    setVistaHabitaciones(vista);
+    guardarVistaHabitaciones(vista);
+  }, []);
+  const vistaActual = useRef(vistaHabitaciones);
+  vistaActual.current = vistaHabitaciones;
   // Registro de actividad: entradas de los conserjes que la gerencia todavía no vio.
   const [pendientes, setPendientes] = useState(0);
   // Novedades de guardia (migración 009), la paleta de comandos y una pregunta enviada desde ella al asistente.
   const [novedades, setNovedades] = useState<Novedad[]>([]);
   const [nuevaNovedad, setNuevaNovedad] = useState(false);
   const [paleta, setPaleta] = useState(false);
+  const [atajos, setAtajos] = useState(false);
   // Panel flotante del asistente (gerencia); la paleta de comandos lo abre con una pregunta.
   const [asistenteAbierto, setAsistenteAbierto] = useState(false);
   const asistente = useAsistente();
@@ -175,17 +193,34 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
     }
   }, [esGerencia]);
 
-  // Ctrl+K (⌘K en Mac) abre y cierra la paleta de comandos.
+  // Ctrl+K (⌘K en Mac) abre y cierra la paleta de comandos. Fuera de los campos de texto también hay teclas sueltas:
+  // «/» busca, «?» muestra los atajos, «A» abre el asistente, «N» deja una novedad y los números van a cada sección.
+  const seccionesDelRol = useMemo(() => ITEMS.filter((i) => i.roles.includes(sesion.operador.rol)), [sesion.operador.rol]);
   useEffect(() => {
     const teclas = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         setPaleta((v) => !v);
+        return;
       }
+      if (e.ctrlKey || e.metaKey || e.altKey || escribiendo(e)) return;
+      const tecla = e.key.toLowerCase();
+      const seccion = /^[1-9]$/.test(tecla) ? seccionesDelRol[Number(tecla) - 1] : undefined;
+      if (tecla === '/') setPaleta(true);
+      else if (tecla === '?') setAtajos(true);
+      else if (tecla === 'a') setAsistenteAbierto((v) => !v);
+      else if (tecla === 'n' && conGuardiaPropia) setNuevaNovedad(true);
+      else if (tecla === 'l' && conGuardiaPropia) {
+        setActiveView('dashboard');
+        cambiarVistaHabitaciones(vistaActual.current === 'grilla' ? 'linea' : 'grilla');
+      }
+      else if (seccion) setActiveView(seccion.view);
+      else return;
+      e.preventDefault();
     };
     window.addEventListener('keydown', teclas);
     return () => window.removeEventListener('keydown', teclas);
-  }, []);
+  }, [seccionesDelRol, conGuardiaPropia, cambiarVistaHabitaciones]);
 
   // RNF-09: al volver la conexión se traen la sesión, la grilla y el contador del registro (en menos de 5 s).
   const conexion = useConexion(async () => {
@@ -265,6 +300,17 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
         });
       }
       lista.push({ id: 'novedad', titulo: 'Dejar una novedad', grupo: 'Acciones', icono: MessageSquarePlus, claves: 'nota aviso', accion: () => setNuevaNovedad(true) });
+      lista.push({
+        id: 'linea-tiempo',
+        titulo: 'Línea de tiempo de las habitaciones',
+        grupo: 'Ir a',
+        icono: Rows3,
+        claves: 'historial cronograma 24 horas',
+        accion: () => {
+          setActiveView('dashboard');
+          cambiarVistaHabitaciones('linea');
+        },
+      });
     }
     lista.push({
       id: 'tema',
@@ -274,15 +320,23 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
       claves: 'tema oscuro claro luna',
       accion: () => elegirTema(modoActual() === 'oscuro' ? 'claro' : 'oscuro'),
     });
+    lista.push({ id: 'atajos', titulo: 'Atajos de teclado', detalle: '?', grupo: 'Acciones', icono: Keyboard, claves: 'teclas rapidas ayuda', accion: () => setAtajos(true) });
     lista.push({ id: 'salir', titulo: 'Cerrar sesión', grupo: 'Acciones', icono: LogOut, claves: 'salir', accion: onSalir });
     return lista;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sesion.operador.rol, conGuardiaPropia, habitaciones, categorias, onSalir, paleta]);
+  }, [sesion.operador.rol, conGuardiaPropia, habitaciones, categorias, onSalir, paleta, cambiarVistaHabitaciones]);
 
   // Botones que propone el asistente: ir a una pantalla permitida para el rol o abrir una habitación.
   const habitacionesRef = useRef(habitaciones);
   habitacionesRef.current = habitaciones;
-  const { registrarAcciones } = asistente;
+  const { registrarAcciones, fijarPantalla } = asistente;
+
+  // El asistente sabe qué sección está a la vista; sin guardia propia, el conserje está en «Abrir su guardia».
+  const enApertura = !conGuardiaPropia && !mostrandoComprobante && activeView !== 'inventario' && activeView !== 'perfil';
+  useEffect(() => {
+    if (enApertura) fijarPantalla('guardia', 'abrir la guardia');
+    else fijarPantalla(activeView, ITEMS.find((i) => i.view === activeView)?.label ?? 'Mi perfil');
+  }, [activeView, enApertura, fijarPantalla]);
   useEffect(() => {
     const permitidas = new Set<string>([...ITEMS.filter((i) => i.roles.includes(sesion.operador.rol)).map((i) => i.view), 'perfil']);
     registrarAcciones((accion) => {
@@ -343,6 +397,11 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
   const filtradas = filtro === 'Todas' ? deCategoria : deCategoria.filter((h) => h.estado === filtro);
   const visibles = orden === 'numero' ? filtradas : ordenarPorVencimiento(filtradas, categorias, now);
   const categoriasConHabitaciones = categorias.filter((c) => habitaciones.some((h) => h.categoria_id === c.id));
+  const disponibles = habitaciones.filter((h) => h.estado === 'Libre').length;
+  const firmaEstados = habitaciones.map((h) => `${h.id}:${h.estado}`).join();
+  // Registrar un cliente que se fue es de quien atiende; la gerencia mira.
+  const puedeRegistrar = !esGerencia && conGuardiaPropia;
+  const conPocoLugar = carga === 'ok' && habitaciones.length > 0 && disponibles <= 2;
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -370,111 +429,147 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
 
       {!conexion.conectado && <AvisoSinConexion desde={conexion.sinConexionDesde} onReintentar={conexion.reintentar} />}
 
-      <main className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col px-4 py-6 sm:px-6">
-        {!conGuardiaPropia && !mostrandoComprobante && activeView !== 'inventario' && activeView !== 'perfil' && (
+      {/* Cada sección aparece con un fundido corto (la clave reinicia la animación). Solo opacidad: moverla desbordaría
+          la página un instante y la barra de desplazamiento correría el encabezado. */}
+      <main key={activeView} className="mx-auto flex w-full max-w-[1600px] flex-1 animate-fade-in flex-col px-4 pb-6 pt-4 sm:px-6">
+        {enApertura && (
           <GuardiaView sesion={sesion} onGuardiaAbierta={onRefrescarSesion} onSalir={onSalir} />
         )}
 
         {conGuardiaPropia && activeView === 'dashboard' && (
           <>
-            <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
-              <div>
-                <h1 className="text-xl font-semibold text-ink">Habitaciones</h1>
-                <p className="mt-0.5 text-sm text-muted">
-                  {habitaciones.length} habitaciones
-                  {esGerencia && ' · vista de consulta: la ventanilla la opera el conserje con su guardia'}
-                </p>
-              </div>
-
-              <div role="group" aria-label="Filtrar por estado" className="flex flex-wrap items-center gap-1.5">
-                <button
-                  type="button"
-                  aria-pressed={filtro === 'Todas'}
-                  onClick={() => setFiltro('Todas')}
-                  className={`press hit rounded-md border px-3 py-1.5 text-sm ${
-                    filtro === 'Todas'
-                      ? 'border-accent bg-accent-soft font-medium text-accent'
-                      : 'border-line-strong bg-surface text-muted hover:text-ink'
-                  }`}
-                >
-                  Todas <span className="tabular-nums">{deCategoria.length}</span>
-                </button>
-                {ESTADOS_ORDEN.map((estado) => (
+            {/* Lo principal de la ventanilla son las habitaciones: arriba de ellas, dos filas finas y una línea de novedades. */}
+            <div className="mb-2.5 flex flex-wrap items-center gap-x-3 gap-y-2">
+              <h1 className="flex items-baseline gap-2 text-xl font-semibold text-ink">
+                Habitaciones
+                <span className="text-sm font-normal tabular-nums text-muted">{habitaciones.length}</span>
+              </h1>
+              {esGerencia && (
+                <span title="La ventanilla la opera el conserje con su guardia" className="rounded-full bg-surface-2 px-2 py-0.5 text-xs text-muted">
+                  Solo consulta
+                </span>
+              )}
+              {vistaHabitaciones === 'grilla' && (
+                <div role="group" aria-label="Filtrar por estado" className="flex flex-wrap items-center gap-1.5">
                   <button
-                    key={estado}
                     type="button"
-                    aria-pressed={filtro === estado}
-                    onClick={() => setFiltro(estado)}
-                    className={`press hit flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm ${
-                      filtro === estado
+                    aria-pressed={filtro === 'Todas'}
+                    onClick={() => setFiltro('Todas')}
+                    className={`press hit rounded-md border px-2.5 py-1 text-sm ${
+                      filtro === 'Todas'
                         ? 'border-accent bg-accent-soft font-medium text-accent'
                         : 'border-line-strong bg-surface text-muted hover:text-ink'
                     }`}
                   >
-                    <span className={`h-2 w-2 rounded-full ${ESTADO_META[estado].dot}`} aria-hidden="true" />
-                    {ESTADO_META[estado].label} <span className="tabular-nums">{conteo(estado)}</span>
+                    Todas <span className="tabular-nums">{deCategoria.length}</span>
                   </button>
-                ))}
-                <label className="ml-1 flex items-center gap-1.5 text-xs text-muted">
-                  Ordenar
+                  {ESTADOS_ORDEN.map((estado) => (
+                    <button
+                      key={estado}
+                      type="button"
+                      aria-pressed={filtro === estado}
+                      onClick={() => setFiltro(estado)}
+                      className={`press hit flex items-center gap-2 rounded-md border px-2.5 py-1 text-sm ${
+                        filtro === estado
+                          ? 'border-accent bg-accent-soft font-medium text-accent'
+                          : 'border-line-strong bg-surface text-muted hover:text-ink'
+                      }`}
+                    >
+                      <span className={`h-2 w-2 rounded-full ${ESTADO_META[estado].dot}`} aria-hidden="true" />
+                      {ESTADO_META[estado].label} <span className="tabular-nums">{conteo(estado)}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div className="ml-auto flex items-center gap-2">
+                {vistaHabitaciones === 'grilla' && (
                   <select
+                    aria-label="Ordenar las habitaciones"
                     value={orden}
                     onChange={(e) => cambiarOrden(e.target.value as OrdenGrilla)}
                     className="h-8 rounded-md border border-line-strong bg-surface px-2 text-sm text-ink focus:border-accent focus-visible:outline-none"
                   >
-                    <option value="numero">por número</option>
-                    <option value="vencimiento">por vencimiento</option>
+                    <option value="numero">Por número</option>
+                    <option value="vencimiento">Por vencimiento</option>
                   </select>
-                </label>
+                )}
+                <SelectorVista vista={vistaHabitaciones} onCambiar={cambiarVistaHabitaciones} />
               </div>
             </div>
 
-            {/* Filtro por categoría: solo si el motel tiene más de una en uso. Cada una muestra su ocupación. */}
-            {categoriasConHabitaciones.length > 1 && (
-              <div role="group" aria-label="Filtrar por categoría" className="-mt-2 mb-5 flex flex-wrap items-center gap-1.5">
-                <span className="mr-1 text-xs font-medium uppercase tracking-wide text-subtle">Categoría</span>
-                <button
-                  type="button"
-                  aria-pressed={filtroCategoria === null}
-                  onClick={() => setFiltroCategoria(null)}
-                  className={`press hit rounded-full border px-3 py-1 text-sm ${
-                    filtroCategoria === null
-                      ? 'border-accent bg-accent-soft font-medium text-accent'
-                      : 'border-line-strong bg-surface text-muted hover:text-ink'
-                  }`}
-                >
-                  Todas
-                </button>
-                {categoriasConHabitaciones.map((c) => {
-                  const propias = habitaciones.filter((h) => h.categoria_id === c.id);
-                  const ocupadas = propias.filter((h) => h.estado === 'Ocupada').length;
-                  const activa = filtroCategoria === c.id;
-                  return (
+            {/* Categorías a la izquierda (solo si el motel usa más de una, cada una con su ocupación) y, a la derecha, la
+                próxima libre y el registro de un cliente que se fue. */}
+            {((vistaHabitaciones === 'grilla' && categoriasConHabitaciones.length > 1) || conPocoLugar || puedeRegistrar) && (
+              <div className="mb-2.5 flex flex-wrap items-center gap-x-3 gap-y-2">
+                {vistaHabitaciones === 'grilla' && categoriasConHabitaciones.length > 1 && (
+                  <div role="group" aria-label="Filtrar por categoría" className="flex flex-wrap items-center gap-1.5">
                     <button
-                      key={c.id}
                       type="button"
-                      aria-pressed={activa}
-                      onClick={() => setFiltroCategoria(activa ? null : c.id)}
-                      title={c.descripcion ?? undefined}
-                      className={`press hit flex items-center gap-2 rounded-full border px-3 py-1 text-sm ${
-                        activa ? 'font-medium' : 'border-line-strong bg-surface text-muted hover:text-ink'
+                      aria-pressed={filtroCategoria === null}
+                      onClick={() => setFiltroCategoria(null)}
+                      className={`press hit rounded-full border px-2.5 py-0.5 text-sm ${
+                        filtroCategoria === null
+                          ? 'border-accent bg-accent-soft font-medium text-accent'
+                          : 'border-line-strong bg-surface text-muted hover:text-ink'
                       }`}
-                      style={activa ? { borderColor: c.color, color: c.color, backgroundColor: `${c.color}14` } : undefined}
                     >
-                      <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: c.color }} aria-hidden="true" />
-                      {c.nombre}
-                      <span className="tabular-nums text-xs opacity-80">
-                        {ocupadas}/{propias.length}
-                      </span>
+                      Todas
                     </button>
-                  );
-                })}
+                    {categoriasConHabitaciones.map((c) => {
+                      const propias = habitaciones.filter((h) => h.categoria_id === c.id);
+                      const ocupadas = propias.filter((h) => h.estado === 'Ocupada').length;
+                      const activa = filtroCategoria === c.id;
+                      return (
+                        <button
+                          key={c.id}
+                          type="button"
+                          aria-pressed={activa}
+                          onClick={() => setFiltroCategoria(activa ? null : c.id)}
+                          title={c.descripcion ?? undefined}
+                          className={`press hit flex items-center gap-2 rounded-full border px-2.5 py-0.5 text-sm ${
+                            activa ? 'font-medium' : 'border-line-strong bg-surface text-muted hover:text-ink'
+                          }`}
+                          style={activa ? { borderColor: c.color, color: c.color, backgroundColor: `${c.color}14` } : undefined}
+                        >
+                          <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: c.color }} aria-hidden="true" />
+                          {c.nombre}
+                          <span className="tabular-nums text-xs opacity-80">
+                            {ocupadas}/{propias.length}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                <div className="ml-auto flex min-w-0 items-center gap-2">
+                  {conPocoLugar && (
+                    <AvisoProximaLibre
+                      firma={firmaEstados}
+                      onAbrir={(id) => {
+                        setSelectedId(id);
+                        setOpenAddProduct(false);
+                      }}
+                    />
+                  )}
+                  {puedeRegistrar && <BotonClientePerdido categorias={categoriasConHabitaciones} destacado={disponibles === 0} />}
+                </div>
               </div>
             )}
 
+            {vistaHabitaciones === 'linea' && (
+              <LineaDeTiempo
+                onAbrir={(id) => {
+                  setSelectedId(id);
+                  setOpenAddProduct(false);
+                }}
+              />
+            )}
+
+            {vistaHabitaciones === 'grilla' && (
+            <>
             <NovedadesCard novedades={novedades} onNueva={() => setNuevaNovedad(true)} />
 
-            {carga === 'cargando' && <p className="py-16 text-center text-sm text-muted">Cargando habitaciones…</p>}
+            {carga === 'cargando' && <EsqueletoGrilla />}
 
             {carga === 'error' && (
               <div className="flex flex-col items-center gap-3 rounded-lg border border-line bg-surface py-16">
@@ -486,7 +581,7 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
             )}
 
             {carga === 'ok' && visibles.length === 0 && (
-              <p className="py-16 text-center text-sm text-muted">No hay habitaciones con este estado.</p>
+              <EstadoVacio icono={BedDouble} titulo="No hay habitaciones con este filtro" texto="Probá con otro estado o con todas las categorías." />
             )}
 
             {carga === 'ok' && visibles.length > 0 && (
@@ -498,6 +593,8 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
                 onAddConsumo={(h) => openRoom(h, true)}
                 onChangeEstado={handleEstadoChange}
               />
+            )}
+            </>
             )}
           </>
         )}
@@ -540,6 +637,41 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
             setAsistenteAbierto(true);
             void asistente.preguntar(texto);
           }}
+        />
+      )}
+
+      {atajos && (
+        <AtajosTeclado
+          onClose={() => setAtajos(false)}
+          grupos={[
+            {
+              titulo: 'General',
+              atajos: [
+                { teclas: ['Ctrl K', '/'], descripcion: 'Buscar una sección, una habitación o una acción' },
+                { teclas: ['A'], descripcion: 'Abrir o cerrar el asistente' },
+                ...(conGuardiaPropia
+                  ? [
+                      { teclas: ['N'], descripcion: 'Dejar una novedad para la próxima guardia' },
+                      { teclas: ['L'], descripcion: 'Cambiar entre la grilla y la línea de tiempo' },
+                    ]
+                  : []),
+                { teclas: ['?'], descripcion: 'Ver estos atajos' },
+                { teclas: ['Esc'], descripcion: 'Cerrar el diálogo o el panel abierto' },
+              ],
+            },
+            {
+              titulo: 'Secciones',
+              atajos: seccionesDelRol.map((s, i) => ({ teclas: [String(i + 1)], descripcion: `Ir a ${s.label}` })),
+            },
+            {
+              titulo: 'En las listas y el asistente',
+              atajos: [
+                { teclas: ['Tab'], descripcion: 'Pasar de una habitación a la siguiente' },
+                { teclas: ['Enter'], descripcion: 'Abrir la habitación elegida o enviar la pregunta' },
+                { teclas: ['↑'], descripcion: 'Recuperar la pregunta anterior en el asistente' },
+              ],
+            },
+          ]}
         />
       )}
 

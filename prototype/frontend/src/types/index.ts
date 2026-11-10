@@ -537,6 +537,85 @@ export interface Tablero {
   reposicion: Reposicion[];
   medios_de_pago: { medio: string; etiqueta: string; monto: number; parte: number }[];
   mas_vendidos: { articulo_id: number; descripcion: string; unidades: number; importe: number }[];
+  clientes_perdidos: ClientesPerdidos;
+  rotacion: Rotacion;
+}
+
+// Clientes que se fueron sin quedarse (migración 011).
+export type MotivoPerdida = 'SIN_LUGAR' | 'ESPERA' | 'PRECIO';
+
+export interface ClientesPerdidos {
+  dias: number;
+  total: number;
+  parte: number;
+  valor_estimado: number;
+  motivos: { motivo: MotivoPerdida; etiqueta: string; cantidad: number; parte: number }[];
+  categorias: { categoria_id: number; categoria: string; color: string; cantidad: number }[];
+  horas: { hora: number; etiqueta: string; cantidad: number }[];
+  franja: { dia: string; desde: number; hasta: number; cantidad: number; parte: number } | null;
+  esperados_24h: number;
+}
+
+export interface Rotacion {
+  dias: number;
+  cantidad: number;
+  mediana: number | null;
+  p90: number | null;
+  por_franja: { franja: string; mediana: number; cantidad: number }[];
+  mas_lentas: { numero: number; mediana: number; cantidad: number }[];
+  sin_turno: number;
+}
+
+// Cuándo quedaría disponible cada habitación, con la duración real de las estadías y de la limpieza.
+export interface HabitacionProxima {
+  habitacion_id: number;
+  numero: number;
+  estado: RoomStatus;
+  categoria_id: number;
+  categoria: string;
+  color: string;
+  minutos: number;
+  minimo: number;
+  maximo: number;
+}
+
+export interface ProximaLibre {
+  disponibles: number;
+  habitaciones: number;
+  limpieza_min: number;
+  proximas: HabitacionProxima[];
+  categorias: {
+    categoria_id: number;
+    categoria: string;
+    color: string;
+    disponibles: number;
+    habitaciones: number;
+    proxima_min: number | null;
+  }[];
+}
+
+// Las 24 horas de cada habitación. No lleva patentes ni importes.
+export interface TramoHabitacion {
+  tipo: 'ocupada' | 'limpieza' | 'mantenimiento';
+  desde: string;
+  hasta: string;
+  en_curso: boolean;
+  minutos: number;
+}
+
+export interface LineaDeTiempoDatos {
+  desde: string;
+  hasta: string;
+  ahora: string;
+  habitaciones: {
+    habitacion_id: number;
+    numero: number;
+    estado: RoomStatus;
+    categoria: string;
+    color: string;
+    tramos: TramoHabitacion[];
+  }[];
+  resumen: { turnos: number; ocupacion: number | null; limpieza_min: number | null; turnos_por_habitacion: number };
 }
 
 // Botón que propone el asistente: ir a una pantalla o abrir una habitación.

@@ -8,6 +8,7 @@ import Button from './ui/Button';
 import Field, { inputClass } from './ui/Field';
 import Modal from './ui/Modal';
 import { useToast } from './ui/Toast';
+import { EsqueletoTabla } from './ui/Carga';
 import SeccionCategorias, { ChipCategoria } from './CategoriasConfig';
 
 type Seccion = 'tarifa' | 'fondo' | 'articulos' | 'habitaciones' | 'conserjes' | 'establecimiento' | 'apariencia';
@@ -125,7 +126,7 @@ const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({ onCambioHabitacio
         ))}
       </div>
 
-      {estado === 'cargando' && <p className="py-16 text-center text-sm text-muted">Cargando configuración…</p>}
+      {estado === 'cargando' && <EsqueletoTabla etiqueta="Cargando configuración…" />}
       {estado === 'error' && (
         <div className="flex flex-col items-center gap-3 rounded-lg border border-line bg-surface py-16">
           <p className="text-sm text-muted">No se pudo obtener la configuración.</p>

@@ -10,6 +10,7 @@ import Modal from './ui/Modal';
 import { useToast } from './ui/Toast';
 import CierreSupervisadoModal from './CierreSupervisadoModal';
 import HistorialArqueos from './HistorialArqueos';
+import { EsqueletoTabla } from './ui/Carga';
 
 // Línea de base de la AE1: 1 de cada 10 recambios con faltante o sobrante.
 const TDC_LINEA_DE_BASE = 0.1;
@@ -131,7 +132,7 @@ const PanelGerencia: React.FC<PanelGerenciaProps> = ({ onCambioGuardia }) => {
         </div>
       </div>
 
-      {estado === 'cargando' && <p className="py-16 text-center text-sm text-muted">Cargando arqueos…</p>}
+      {estado === 'cargando' && <EsqueletoTabla etiqueta="Cargando arqueos…" />}
       {estado === 'error' && (
         <div className="flex flex-col items-center gap-3 rounded-lg border border-line bg-surface py-16">
           <p className="text-sm text-muted">No se pudo obtener la información de caja.</p>

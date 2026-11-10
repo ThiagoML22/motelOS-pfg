@@ -6,6 +6,7 @@ import { formatMoney, parseUtc } from '../utils/format';
 import { CATEGORIA_META, formatPorcentaje } from '../utils/caja';
 import Button from './ui/Button';
 import { useToast } from './ui/Toast';
+import { EsqueletoTabla, EstadoVacio } from './ui/Carga';
 
 // Historial de arqueos segmentado (como el «Drawer History» de los sistemas de punto de venta): un mes por bloque
 // desplegable con su resumen, y dentro, cada día con las guardias de mañana, tarde y noche. El día es el de la apertura
@@ -194,9 +195,9 @@ const HistorialArqueos: React.FC<HistorialArqueosProps> = ({ operadorId, version
         </div>
       </div>
 
-      {meses === null && <p className="py-8 text-center text-sm text-muted">Cargando historial…</p>}
+      {meses === null && <EsqueletoTabla filas={3} etiqueta="Cargando historial…" />}
       {meses?.length === 0 && (
-        <p className="rounded-lg border border-line bg-surface py-10 text-center text-sm text-muted">Todavía no hay arqueos.</p>
+        <EstadoVacio icono={CalendarSearch} titulo="Todavía no hay arqueos" texto="Aparecen acá cuando un conserje cierra su caja." />
       )}
 
       <div className="space-y-2">

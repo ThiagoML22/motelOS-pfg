@@ -11,7 +11,7 @@ importes. La ocupación «ahora» sale del estado de las habitaciones, que la gr
 
 import math
 from collections import Counter, defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 from statistics import mean, median, pstdev
@@ -24,6 +24,7 @@ from app.core.config import settings
 from app.models.arqueo import ArqueoCaja
 from app.models.articulo import Articulo
 from app.models.categoria import CategoriaHabitacion
+from app.models.cliente_perdido import MOTIVOS, SIN_LUGAR, ClientePerdido
 from app.models.consumo import Consumo
 from app.models.guardia import Guardia
 from app.models.habitacion import Habitacion
@@ -34,6 +35,7 @@ from app.models.turno import Turno
 from app.services.billing_service import ParametrosTarifa, calcular_sobreturno
 from app.services.caja import FALTANTE, SOBRANTE, guardia_abierta
 from app.services.liquidacion import con_zona
+from app.services.rotacion import LIMPIEZA, Tramo, eventos_de, tramos_en_estado
 
 DIAS = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
 DIAS_CORTOS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"]
@@ -130,6 +132,14 @@ class Cobro:
     monto: float
 
 
+@dataclass(frozen=True)
+class Perdido:
+    momento: datetime
+    motivo: str
+    categoria_id: int | None
+    operador_id: int
+
+
 @dataclass
 class Contexto:
     zona: ZoneInfo
@@ -146,6 +156,8 @@ class Contexto:
     tarifas_por_id: dict[int, Tarifa]
     articulos: list[Articulo]
     nombres: dict[int, str]
+    perdidos: list[Perdido] = field(default_factory=list)
+    limpiezas: list[Tramo] = field(default_factory=list)
 
     def inicio_dia(self, dia: date) -> datetime:
         return datetime.combine(dia, time.min, self.zona)
@@ -251,6 +263,24 @@ async def contexto(db: AsyncSession, ahora: datetime | None = None) -> Contexto:
         (await db.execute(select(Articulo).where(Articulo.activo.is_(True)).order_by(Articulo.descripcion))).scalars()
     )
     nombres = {i: n for i, n in (await db.execute(select(Operador.id, Operador.nombre_visible))).all()}
+    perdidos = [
+        Perdido(local(m), motivo, categoria_id, operador_id)
+        for m, motivo, categoria_id, operador_id in (
+            await db.execute(
+                select(
+                    ClientePerdido.creado_en,
+                    ClientePerdido.motivo,
+                    ClientePerdido.categoria_id,
+                    ClientePerdido.operador_id,
+                ).where(ClientePerdido.creado_en >= desde_utc, ClientePerdido.creado_en < corte_utc)
+            )
+        ).all()
+    ]
+    limpiezas = [
+        t
+        for t in tramos_en_estado(await eventos_de(db, LIMPIEZA, desde_utc), LIMPIEZA)
+        if t.fin is not None and t.fin < corte_utc
+    ]
     return Contexto(
         zona=zona,
         ahora=local(ahora_utc),
@@ -266,6 +296,8 @@ async def contexto(db: AsyncSession, ahora: datetime | None = None) -> Contexto:
         tarifas_por_id={t.id: t for t in todas_las_tarifas},
         articulos=articulos,
         nombres=nombres,
+        perdidos=perdidos,
+        limpiezas=limpiezas,
     )
 
 
@@ -347,6 +379,113 @@ def mapa_demanda(ctx: Contexto, semanas: int = SEMANAS_ESTACIONALES) -> dict:
         "dia_mas_fuerte": DIAS[max(range(7), key=lambda d: por_dia[d])],
         "dia_mas_flojo": DIAS[min(range(7), key=lambda d: por_dia[d])],
         "por_dia": por_dia,
+    }
+
+
+# --- Clientes perdidos y rotación -------------------------------------------------------------------------------
+
+
+def clientes_perdidos(ctx: Contexto, dias: int = 30) -> dict:
+    """Los clientes que se fueron sin quedarse: cuántos, por qué, cuándo y cuánto representan.
+
+    El valor es una estimación: cada cliente, al ticket promedio de la categoría que buscaba (o al general).
+    """
+    desde = ctx.corte - timedelta(days=dias)
+    perdidos = [p for p in ctx.perdidos if p.momento >= desde]
+    atendidos = [t for t in ctx.turnos if t.inicio >= desde]
+    por_hora = [0] * 24
+    semana = [0] * 168
+    for p in perdidos:
+        por_hora[p.momento.hour] += 1
+        semana[p.momento.weekday() * 24 + p.momento.hour] += 1
+    horas = [{"hora": h, "etiqueta": hora_texto(h), "cantidad": por_hora[h]} for h in range(24)]
+    if not perdidos:
+        return {
+            "dias": dias,
+            "total": 0,
+            "parte": 0.0,
+            "valor_estimado": 0.0,
+            "motivos": [],
+            "categorias": [],
+            "horas": horas,
+            "franja": None,
+            "esperados_24h": 0.0,
+        }
+    general = mean(t.total for t in atendidos) if atendidos else 0.0
+    tickets: dict[int, list[float]] = defaultdict(list)
+    for t in atendidos:
+        tickets[t.categoria_id].append(t.total)
+    valor = sum(mean(tickets[p.categoria_id]) if p.categoria_id in tickets else general for p in perdidos)
+    motivos = Counter(p.motivo for p in perdidos)
+    categorias = Counter(p.categoria_id for p in perdidos if p.categoria_id is not None)
+    # Las cuatro horas seguidas de la semana con más clientes perdidos.
+    suma, inicio = max((sum(semana[(i + j) % 168] for j in range(4)), i) for i in range(168))
+    momentos = [ctx.ahora.replace(minute=0, second=0, microsecond=0) + timedelta(hours=i) for i in range(24)]
+    por_fecha = Counter((p.momento.date(), p.momento.hour) for p in ctx.perdidos)
+    primero = min(p.momento.date() for p in ctx.perdidos)
+    return {
+        "dias": dias,
+        "total": len(perdidos),
+        "parte": round(len(perdidos) / (len(perdidos) + len(atendidos)), 4),
+        "valor_estimado": round(valor, 2),
+        "motivos": [
+            {"motivo": m, "etiqueta": MOTIVOS.get(m, m), "cantidad": c, "parte": round(c / len(perdidos), 4)}
+            for m, c in motivos.most_common()
+        ],
+        "categorias": [
+            {
+                "categoria_id": c,
+                "categoria": ctx.nombre_categoria(c),
+                "color": ctx.categorias[c].color if c in ctx.categorias else "#244473",
+                "cantidad": n,
+            }
+            for c, n in categorias.most_common()
+        ],
+        "horas": horas,
+        "franja": {
+            "dia": DIAS[inicio // 24],
+            "desde": inicio % 24,
+            "hasta": (inicio + 4) % 24,
+            "cantidad": suma,
+            "parte": round(suma / len(perdidos), 4),
+        },
+        "esperados_24h": round(sum(estacional(por_fecha, primero, m.date(), m.hour) or 0.0 for m in momentos), 1),
+    }
+
+
+FRANJAS_DEL_DIA = (("Mañana", 6, 14), ("Tarde", 14, 22), ("Noche", 22, 6))
+
+
+def _en_franja(hora: int, desde: int, hasta: int) -> bool:
+    return desde <= hora < hasta if desde < hasta else hora >= desde or hora < hasta
+
+
+def rotacion(ctx: Contexto, dias: int = 30) -> dict:
+    """Cuánto tardan las limpiezas después de un turno, y las que no vinieron de un turno."""
+    desde = ctx.corte - timedelta(days=dias)
+    limpiezas = [t for t in ctx.limpiezas if t.inicio >= desde]
+    tras_turno = [t for t in limpiezas if t.tras_un_turno]
+    minutos = sorted(t.minutos for t in tras_turno)
+    por_franja = []
+    for nombre, inicio, fin in FRANJAS_DEL_DIA:
+        propias = [t.minutos for t in tras_turno if _en_franja(t.inicio.astimezone(ctx.zona).hour, inicio, fin)]
+        if propias:
+            por_franja.append({"franja": nombre, "mediana": round(median(propias)), "cantidad": len(propias)})
+    por_habitacion: dict[int, list[float]] = defaultdict(list)
+    for t in tras_turno:
+        por_habitacion[t.habitacion_id].append(t.minutos)
+    lentas = sorted(
+        ((median(v), h, len(v)) for h, v in por_habitacion.items() if len(v) >= 5 and ctx.numero(h) is not None),
+        reverse=True,
+    )[:3]
+    return {
+        "dias": dias,
+        "cantidad": len(tras_turno),
+        "mediana": round(median(minutos)) if minutos else None,
+        "p90": round(minutos[int(len(minutos) * 0.9)]) if minutos else None,
+        "por_franja": por_franja,
+        "mas_lentas": [{"numero": ctx.numero(h), "mediana": round(m), "cantidad": n} for m, h, n in lentas],
+        "sin_turno": len(limpiezas) - len(tras_turno),
     }
 
 
@@ -703,6 +842,44 @@ def _alertas_de_inventario(ctx: Contexto, reposiciones: list[dict]) -> list[dict
     return alertas
 
 
+def _alertas_de_rotacion(ctx: Contexto, dias: int) -> list[dict]:
+    alertas = []
+    perdidos = clientes_perdidos(ctx, dias)
+    if perdidos["total"] >= 5:
+        franja = perdidos["franja"]
+        sin_lugar = next((m for m in perdidos["motivos"] if m["motivo"] == SIN_LUGAR), None)
+        alertas.append(
+            _alerta(
+                "demanda",
+                "media" if perdidos["parte"] >= 0.03 else "info",
+                f"Se fueron {perdidos['total']} clientes sin quedarse",
+                f"Son {porcentaje(perdidos['parte'], 1)} de los que llegaron, unos "
+                f"{pesos(perdidos['valor_estimado'])} al ticket promedio. El {porcentaje(franja['parte'])} se "
+                f"concentra el {franja['dia']} de {franja['desde']} a {franja['hasta']} h.",
+                "En esa franja ayudan una limpieza más rápida y subir la tarifa: el que llega igual paga más y la "
+                "habitación se libera antes."
+                if sin_lugar and sin_lugar["parte"] >= 0.5
+                else "Revisá el motivo: si es el precio, mirá las sugerencias de tarifa.",
+            )
+        )
+    desde = ctx.corte - timedelta(days=dias)
+    sin_turno = [t for t in ctx.limpiezas if t.inicio >= desde and not t.tras_un_turno]
+    if len(sin_turno) >= 3:
+        operador_id, cantidad = Counter(t.operador_id for t in sin_turno).most_common(1)[0]
+        concentrado = cantidad >= 3 and cantidad / len(sin_turno) >= 0.6
+        alertas.append(
+            _alerta(
+                "habitacion",
+                "media" if concentrado else "info",
+                f"{len(sin_turno)} limpiezas sin un turno antes",
+                (f"{cantidad} las marcó {ctx.nombres.get(operador_id, '—')}. " if concentrado else "")
+                + "Puede ser un repaso de rutina o una estadía que no se registró.",
+                "Cruzalas con las novedades de esas guardias y con el stock del minibar antes de sacar conclusiones.",
+            )
+        )
+    return alertas
+
+
 ORDEN_SEVERIDAD = {"alta": 0, "media": 1, "info": 2}
 
 
@@ -711,6 +888,7 @@ def alertas(ctx: Contexto, reposiciones: list[dict] | None = None, dias: int = 3
         _alertas_de_caja(ctx, dias)
         + _alertas_de_habitaciones(ctx, dias)
         + _alertas_de_turnos(ctx, dias)
+        + _alertas_de_rotacion(ctx, dias)
         + _alertas_de_inventario(ctx, reposiciones if reposiciones is not None else reposicion(ctx))
     )
     return sorted(lista, key=lambda a: ORDEN_SEVERIDAD[a["severidad"]])
@@ -943,7 +1121,13 @@ def sugerencias_de_tarifa(ctx: Contexto, dias: int = 28) -> list[dict]:
 
 
 def resumen(
-    ctx: Contexto, kpis: dict, pron: dict, lista_alertas: list[dict], mapa: dict, reposiciones: list[dict]
+    ctx: Contexto,
+    kpis: dict,
+    pron: dict,
+    lista_alertas: list[dict],
+    mapa: dict,
+    reposiciones: list[dict],
+    perdidos: dict | None = None,
 ) -> dict:
     puntos: list[dict] = []
     if not ctx.turnos:
@@ -1054,6 +1238,15 @@ def resumen(
             texto += f" {primera['categoria']} se llenaría desde las {desde.hour} h."
         puntos.append({"icono": "sparkles", "texto": texto})
 
+    if perdidos and perdidos["total"]:
+        puntos.append(
+            {
+                "icono": "alert",
+                "texto": f"Últimos {perdidos['dias']} días: se fueron {perdidos['total']} clientes sin quedarse, unos "
+                f"{pesos(perdidos['valor_estimado'])} al ticket promedio.",
+            }
+        )
+
     urgentes = [r for r in reposiciones if r["urgencia"] in ("alta", "media")]
     if urgentes:
         puntos.append(
@@ -1116,12 +1309,13 @@ async def tablero(db: AsyncSession, ahora: datetime | None = None) -> dict:
     lista_alertas = alertas(ctx, reposiciones)
     pron = pronostico(ctx)
     mapa = mapa_demanda(ctx)
+    perdidos = clientes_perdidos(ctx)
     return {
         "generado_en": ctx.ahora.isoformat(),
         "corte": ctx.corte.isoformat(),
         "guardia_abierta": ctx.hay_guardia_abierta,
         "indicadores": kpis,
-        "resumen": resumen(ctx, kpis, pron, lista_alertas, mapa, reposiciones),
+        "resumen": resumen(ctx, kpis, pron, lista_alertas, mapa, reposiciones, perdidos),
         "alertas": lista_alertas,
         "pronostico": pron,
         "demanda": mapa,
@@ -1130,4 +1324,6 @@ async def tablero(db: AsyncSession, ahora: datetime | None = None) -> dict:
         "reposicion": reposiciones,
         "medios_de_pago": medios_de_pago(ctx),
         "mas_vendidos": articulos_mas_vendidos(ctx),
+        "clientes_perdidos": perdidos,
+        "rotacion": rotacion(ctx),
     }

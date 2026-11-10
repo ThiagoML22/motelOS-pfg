@@ -9,13 +9,16 @@ import {
   Package,
   RefreshCw,
   Sparkles,
+  Timer,
   TrendingDown,
   TrendingUp,
+  UserRoundX,
   Wallet,
 } from 'lucide-react';
-import { AlertaIA, Severidad, SugerenciaTarifa, Tablero } from '../types';
+import { AlertaIA, ClientesPerdidos, Rotacion, Severidad, SugerenciaTarifa, Tablero } from '../types';
 import { ChatAsistente } from './Asistente';
 import { BotonNuevoPedido } from './PedidosReposicion';
+import { Cifra, EsqueletoTablero } from './ui/Carga';
 import { api, EVENTO_RECONECTADO, getErrorMessage } from '../services/api';
 import { formatMoney, parseUtc } from '../utils/format';
 import { formatMinutos } from '../utils/turno';
@@ -127,7 +130,7 @@ const InteligenciaView: React.FC = () => {
           botón flotante (AsistenteFlotante), que comparte la misma conversación. */}
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_24rem]">
         <div className="min-w-0 space-y-5">
-          {estado === 'cargando' && <p className="py-16 text-center text-sm text-muted">Analizando los datos…</p>}
+          {estado === 'cargando' && <EsqueletoTablero />}
           {estado === 'error' && (
             <div className="flex flex-col items-center gap-3 rounded-lg border border-line bg-surface py-16">
               <p className="text-sm text-muted">No se pudo calcular el análisis.</p>
@@ -142,6 +145,10 @@ const InteligenciaView: React.FC = () => {
             <Indicadores tablero={tablero} />
             {tablero.alertas.length > 0 && <Alertas alertas={tablero.alertas} />}
             <PronosticoCard tablero={tablero} />
+            <div className="grid gap-5 2xl:grid-cols-2">
+              <ClientesPerdidosCard datos={tablero.clientes_perdidos} />
+              <RotacionCard datos={tablero.rotacion} />
+            </div>
             <div className="grid gap-5 2xl:grid-cols-2">
               <SerieCard tablero={tablero} />
               <DemandaCard tablero={tablero} />
@@ -213,13 +220,16 @@ const Resumen: React.FC<{ tablero: Tablero }> = ({ tablero }) => (
 
 const Indicadores: React.FC<{ tablero: Tablero }> = ({ tablero }) => {
   const k = tablero.indicadores;
-  const tiles: { etiqueta: string; valor: string; nota?: string | null; variacion?: number | null }[] = [
-    { etiqueta: 'Ocupadas ahora', valor: `${k.ocupadas_ahora} de ${k.habitaciones}` },
-    { etiqueta: 'Turnos · 7 días', valor: String(k.turnos_7d), variacion: k.turnos_7d_variacion },
-    { etiqueta: 'Ingresos · 7 días', valor: formatMoney(k.ingresos_7d), variacion: k.ingresos_7d_variacion },
-    { etiqueta: 'Ticket promedio', valor: formatMoney(k.ticket_7d) },
-    { etiqueta: 'Ocupación · 7 días', valor: porcentaje(k.ocupacion_7d) },
-    { etiqueta: 'TDC · 30 días', valor: porcentaje(k.tdc_30d), nota: `${k.arqueos_30d} arqueos` },
+  // Las cifras cuentan hasta su valor al aparecer (Cifra); las que no hay, un guion.
+  const dinero = (v: number) => formatMoney(Math.round(v));
+  const pct = (v: number) => `${Math.round(v * 100)}%`;
+  const tiles: { etiqueta: string; valor: React.ReactNode; nota?: string | null; variacion?: number | null }[] = [
+    { etiqueta: 'Ocupadas ahora', valor: <><Cifra valor={k.ocupadas_ahora} /> de {k.habitaciones}</> },
+    { etiqueta: 'Turnos · 7 días', valor: <Cifra valor={k.turnos_7d} />, variacion: k.turnos_7d_variacion },
+    { etiqueta: 'Ingresos · 7 días', valor: <Cifra valor={k.ingresos_7d} formato={dinero} />, variacion: k.ingresos_7d_variacion },
+    { etiqueta: 'Ticket promedio', valor: <Cifra valor={k.ticket_7d} formato={dinero} /> },
+    { etiqueta: 'Ocupación · 7 días', valor: k.ocupacion_7d === null ? '—' : <Cifra valor={k.ocupacion_7d} formato={pct} /> },
+    { etiqueta: 'TDC · 30 días', valor: k.tdc_30d === null ? '—' : <Cifra valor={k.tdc_30d} formato={pct} />, nota: `${k.arqueos_30d} arqueos` },
   ];
   return (
     <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-line bg-line sm:grid-cols-3 2xl:grid-cols-6">
@@ -272,6 +282,104 @@ const Alertas: React.FC<{ alertas: AlertaIA[] }> = ({ alertas }) => (
         );
       })}
     </ul>
+  </Tarjeta>
+);
+
+const Mini: React.FC<{ etiqueta: string; valor: React.ReactNode; nota?: string }> = ({ etiqueta, valor, nota }) => (
+  <div>
+    <p className="text-xs text-muted">{etiqueta}</p>
+    <p className="mt-0.5 text-xl font-semibold text-ink">{valor}</p>
+    {nota && <p className="text-xs text-subtle">{nota}</p>}
+  </div>
+);
+
+// La demanda que no se atendió: no aparece en los turnos, por eso se registra aparte.
+const ClientesPerdidosCard: React.FC<{ datos: ClientesPerdidos }> = ({ datos }) => {
+  if (!datos.total) {
+    return (
+      <Tarjeta titulo="Clientes que se fueron" icono={UserRoundX} extra={`últimos ${datos.dias} días`}>
+        <p className="text-sm text-muted">
+          Todavía no hay clientes registrados. El conserje los anota con «Se fue un cliente» en Habitaciones.
+        </p>
+      </Tarjeta>
+    );
+  }
+  const { franja } = datos;
+  return (
+    <Tarjeta titulo="Clientes que se fueron" icono={UserRoundX} extra={`últimos ${datos.dias} días`}>
+      <div className="grid grid-cols-3 gap-3">
+        <Mini etiqueta="Clientes" valor={<Cifra valor={datos.total} />} nota={`${porcentaje(datos.parte)} de los que llegaron`} />
+        <Mini
+          etiqueta="Valor estimado"
+          valor={<Cifra valor={datos.valor_estimado} formato={(v) => formatMoney(Math.round(v))} />}
+          nota="al ticket promedio"
+        />
+        <Mini etiqueta="Próximas 24 h" valor={`~${decimal(datos.esperados_24h)}`} nota="se esperan" />
+      </div>
+      {franja && (
+        <p className="mt-3 text-sm text-ink">
+          El <span className="font-semibold">{porcentaje(franja.parte)}</span> se concentra el{' '}
+          <span className="font-semibold">
+            {franja.dia} de {franja.desde} a {franja.hasta} h
+          </span>
+          .
+        </p>
+      )}
+      <div className="mt-3">
+        <Columnas
+          alto={130}
+          descripcion="Clientes que se fueron según la hora"
+          formatoEje={(v) => String(Math.round(v))}
+          columnas={datos.horas.map((h) => ({
+            clave: String(h.hora),
+            valor: h.cantidad,
+            eje: h.hora % 3 === 0 ? `${h.hora} h` : null,
+            detalle: (
+              <>
+                <span className="font-medium">{h.etiqueta}</span>: {h.cantidad} {h.cantidad === 1 ? 'cliente' : 'clientes'}
+              </>
+            ),
+          }))}
+        />
+      </div>
+      <div className="mt-3">
+        <BarraPartes partes={datos.motivos.map((m) => ({ clave: m.motivo, etiqueta: m.etiqueta, parte: m.parte, valor: String(m.cantidad) }))} />
+      </div>
+    </Tarjeta>
+  );
+};
+
+// Cuánto tarda la limpieza: cada minuto menos en hora pico es una habitación disponible antes.
+const RotacionCard: React.FC<{ datos: Rotacion }> = ({ datos }) => (
+  <Tarjeta titulo="Limpieza entre turnos" icono={Timer} extra={`últimos ${datos.dias} días`}>
+    {datos.mediana === null ? (
+      <p className="text-sm text-muted">Todavía no hay limpiezas medidas: se miden desde el cobro hasta «Liberar».</p>
+    ) : (
+      <>
+        <div className="grid grid-cols-3 gap-3">
+          <Mini etiqueta="Típica" valor={<><Cifra valor={datos.mediana} /> min</>} nota={`${datos.cantidad} limpiezas`} />
+          <Mini etiqueta="La más lenta de cada 10" valor={`${datos.p90 ?? '—'} min`} nota="o más" />
+          <Mini etiqueta="Sin turno antes" valor={<Cifra valor={datos.sin_turno} />} nota={datos.sin_turno ? 'para revisar' : 'ninguna'} />
+        </div>
+        <div className="mt-4">
+          <BarrasHorizontales
+            filas={datos.por_franja.map((f) => ({ clave: f.franja, etiqueta: f.franja, valor: f.mediana, texto: `${f.mediana} min` }))}
+          />
+        </div>
+        {datos.mas_lentas.length > 0 && (
+          <p className="mt-3 text-sm text-muted">
+            Las que más tardan:{' '}
+            {datos.mas_lentas.map((h, i) => (
+              <span key={h.numero}>
+                {i > 0 && ', '}
+                <span className="font-medium text-ink">la {h.numero}</span> ({h.mediana} min)
+              </span>
+            ))}
+            .
+          </p>
+        )}
+      </>
+    )}
   </Tarjeta>
 );
 

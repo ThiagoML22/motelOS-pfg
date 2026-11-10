@@ -5,6 +5,7 @@ import { api, EVENTO_RECONECTADO, getErrorMessage } from '../services/api';
 import { formatDateTime } from '../utils/format';
 import Button from './ui/Button';
 import { useToast } from './ui/Toast';
+import { EsqueletoTabla } from './ui/Carga';
 
 const CATEGORIAS: { id: CategoriaActividad; label: string }[] = [
   { id: 'INVENTARIO', label: 'Inventario' },
@@ -106,7 +107,7 @@ const ActividadView: React.FC<ActividadViewProps> = ({ onCambioPendientes }) => 
         ))}
       </div>
 
-      {estado === 'cargando' && <p className="py-16 text-center text-sm text-muted">Cargando registro…</p>}
+      {estado === 'cargando' && <EsqueletoTabla filas={8} etiqueta="Cargando registro…" />}
       {estado === 'error' && (
         <div className="flex flex-col items-center gap-3 rounded-lg border border-line bg-surface py-16">
           <p className="text-sm text-muted">No se pudo obtener el registro.</p>

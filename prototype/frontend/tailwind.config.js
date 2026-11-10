@@ -47,11 +47,52 @@ export default {
           from: { opacity: '0', transform: 'translateX(-12px)' },
           to: { opacity: '1', transform: 'translateX(0)' },
         },
+        // Tarjetas de la grilla y filas: entrada escalonada (el retraso lo pone cada elemento).
+        'tarjeta-in': {
+          from: { opacity: '0', transform: 'translateY(10px) scale(0.985)' },
+          to: { opacity: '1', transform: 'translateY(0) scale(1)' },
+        },
+        // Los tramos de la línea de tiempo crecen desde su inicio; el reloj de arena se da vuelta cada tanto.
+        tramo: { from: { transform: 'scaleX(0)', opacity: '0.4' }, to: { transform: 'scaleX(1)', opacity: '1' } },
+        reloj: {
+          '0%, 70%': { transform: 'rotate(0deg)' },
+          '85%, 100%': { transform: 'rotate(180deg)' },
+        },
+        // Una habitación que cambió de estado se ilumina un momento con el acento.
+        destello: {
+          '0%': { boxShadow: '0 0 0 0 rgb(var(--accent) / 0.55)' },
+          '60%': { boxShadow: '0 0 0 6px rgb(var(--accent) / 0)' },
+          '100%': { boxShadow: '0 0 0 0 rgb(var(--accent) / 0)' },
+        },
+        // Barras de los gráficos que crecen desde la base y líneas que se dibujan.
+        crecer: { from: { transform: 'scaleY(0)' }, to: { transform: 'scaleY(1)' } },
+        dibujar: { from: { strokeDashoffset: '1' }, to: { strokeDashoffset: '0' } },
+        // Brillo que recorre los esqueletos de carga.
+        brillo: { from: { backgroundPosition: '200% 0' }, to: { backgroundPosition: '-200% 0' } },
+        // Latido suave del cronómetro de un turno excedido.
+        latido: { '0%, 100%': { opacity: '1' }, '50%': { opacity: '0.55' } },
+        // El botón del asistente invita a usarlo con una onda.
+        llamado: {
+          '0%': { boxShadow: '0 0 0 0 rgb(var(--accent) / 0.45)' },
+          '70%': { boxShadow: '0 0 0 14px rgb(var(--accent) / 0)' },
+          '100%': { boxShadow: '0 0 0 0 rgb(var(--accent) / 0)' },
+        },
       },
+      // Las entradas usan `backwards`: si el estado final quedara aplicado, el elemento encerraría a los diálogos
+      // (`fixed`) que tiene adentro y anularía su propio transform al pasar el mouse.
       animation: {
-        'fade-in': 'fade-in 160ms ease-out both',
-        'pop-in': 'pop-in 200ms cubic-bezier(0.2, 0.8, 0.2, 1) both',
+        'fade-in': 'fade-in 160ms ease-out backwards',
+        'pop-in': 'pop-in 200ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards',
         'toast-in': 'toast-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both',
+        'tarjeta-in': 'tarjeta-in 320ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards',
+        tramo: 'tramo 520ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards',
+        reloj: 'reloj 2.8s ease-in-out infinite',
+        destello: 'destello 1.4s ease-out',
+        crecer: 'crecer 650ms cubic-bezier(0.2, 0.8, 0.2, 1) both',
+        dibujar: 'dibujar 900ms ease-out both',
+        brillo: 'brillo 1.6s linear infinite',
+        latido: 'latido 1.6s ease-in-out infinite',
+        llamado: 'llamado 1.8s ease-out 3',
       },
     },
   },

@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from statistics import mean, median
 
+from app.models.cliente_perdido import MOTIVOS
 from app.services import inteligencia as ia
 from app.services.caja import FALTANTE, SOBRANTE
 
@@ -47,6 +48,17 @@ SUGERENCIAS = [
 INTENCIONES: list[tuple[str, list[str]]] = [
     ("ayuda", [r"\bayuda\b", r"que (podes|sabes|puedo)", r"como (te uso|funciona)"]),
     ("resumen", [r"\bresumen\b", r"como (venimos|estamos|va|vamos)", r"\bnovedades\b", r"que (paso|hay de nuevo)"]),
+    (
+        "perdidos",
+        [
+            r"clientes? perdid",
+            r"\bperdimos\b",
+            r"se (nos )?fueron",
+            r"sin lugar",
+            r"no (hubo|habia) lugar",
+            r"clientes? (rechazad|que se fue)",
+        ],
+    ),
     (
         "pronostico",
         [
@@ -290,13 +302,22 @@ class Asistente:
 
     # --- Respuestas ---------------------------------------------------------------------------------------------
 
-    def responder(self, pregunta: str) -> dict:
+    def responder(self, pregunta: str, anterior: str | None = None) -> dict:
         texto = normalizar(pregunta)
         if not texto:
             return self.ayuda()
         intencion = _intencion(texto)
         periodo = interpretar_periodo(texto, self.hoy)
         categoria_id, conserje_id = self._categoria(texto), self._conserje(texto)
+        # Seguimiento («¿y la semana pasada?», «¿y en VIP?», «¿y conserje 2?»): lo que falta sale de la anterior.
+        if anterior and (texto.startswith("y ") or (intencion is None and len(texto.split()) <= 4)):
+            previo = normalizar(anterior)
+            intencion = intencion or _intencion(previo)
+            if not periodo.explicito:
+                periodo = interpretar_periodo(previo, self.hoy)
+            categoria_id = categoria_id or self._categoria(previo)
+            conserje_id = conserje_id or self._conserje(previo)
+            texto = f"{texto} {previo}"
         if intencion is None and categoria_id is not None:
             intencion = "ingresos"
         if intencion is None and self._habitacion(texto) is not None:
@@ -304,6 +325,7 @@ class Asistente:
         metodo = {
             "ayuda": lambda: self.ayuda(),
             "resumen": lambda: self.resumen(),
+            "perdidos": lambda: self.perdidos(periodo, categoria_id),
             "pronostico": lambda: self.pronostico(texto),
             "stock": lambda: self.stock(texto),
             "articulos": lambda: self.articulos(texto, periodo),
@@ -352,8 +374,38 @@ class Asistente:
         texto = datos["titular"] + " " + " ".join(p["texto"] for p in datos["puntos"])
         return _respuesta(texto, "resumen", sugerencias=["¿Qué alertas hay?", "¿Cuántos turnos esperamos mañana?"])
 
+    def perdidos(self, periodo: Periodo, categoria_id: int | None) -> dict:
+        perdidos = [
+            p
+            for p in self.ctx.perdidos
+            if periodo.contiene(p.momento) and (categoria_id is None or p.categoria_id == categoria_id)
+        ]
+        cuando = periodo.en_mayuscula
+        if not perdidos:
+            return _respuesta(
+                f"{cuando} no se registraron clientes que se fueran sin quedarse.{self._aviso_corte(periodo)}",
+                "perdidos",
+                periodo,
+                detalle="Los registra el conserje con «Se fue un cliente» en Habitaciones.",
+            )
+        turnos = self._turnos(periodo)
+        ticket = sum(t.total for t in turnos) / len(turnos) if turnos else 0.0
+        motivos = Counter(p.motivo for p in perdidos)
+        filas = [[MOTIVOS.get(m, m), c] for m, c in motivos.most_common()]
+        valor = f", unos {ia.pesos(len(perdidos) * ticket)} al ticket promedio" if ticket else ""
+        return _respuesta(
+            f"{cuando} se fueron {len(perdidos)} clientes sin quedarse{valor}.{self._aviso_corte(periodo)}",
+            "perdidos",
+            periodo,
+            tabla={"columnas": ["Motivo", "Clientes"], "filas": filas},
+            sugerencias=["¿Cuánto tarda la limpieza?", "¿Y la semana pasada?", "¿A qué hora hay más demanda?"],
+        )
+
     def ingresos(self, texto: str, periodo: Periodo, categoria_id: int | None, conserje_id: int | None) -> dict:
-        if re.search(r"que categoria|por categoria|cual categoria|categorias", texto) and categoria_id is None:
+        if (
+            re.search(r"que categoria|por categoria|cual categoria|cada categoria|categorias", texto)
+            and categoria_id is None
+        ):
             turnos = self._turnos(periodo)
             tabla = self._por_categoria(turnos)
             if not tabla["filas"]:
@@ -758,5 +810,5 @@ class Asistente:
         return _respuesta(texto_resp, "habitaciones", periodo, "Turnos cobrados por habitación.", tabla)
 
 
-def responder(ctx: ia.Contexto, pregunta: str) -> dict:
-    return Asistente(ctx).responder(pregunta)
+def responder(ctx: ia.Contexto, pregunta: str, anterior: str | None = None) -> dict:
+    return Asistente(ctx).responder(pregunta, anterior)

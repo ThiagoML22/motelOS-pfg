@@ -105,6 +105,7 @@ jobs:
           psql -h localhost -U postgres -d motel_schema -v ON_ERROR_STOP=1 -f db/verify_categorias_perfil.sql
           psql -h localhost -U postgres -d motel_schema -v ON_ERROR_STOP=1 -f db/verify_personalizacion_novedades.sql
           psql -h localhost -U postgres -d motel_schema -v ON_ERROR_STOP=1 -f db/verify_pedidos.sql
+          psql -h localhost -U postgres -d motel_schema -v ON_ERROR_STOP=1 -f db/verify_historial_clientes.sql
 
       - name: Verificar la migración desde una base v1.2 con datos
         working-directory: ./prototype
