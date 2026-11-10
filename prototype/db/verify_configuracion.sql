@@ -4,6 +4,9 @@
 -- cambia el fondo de cambio sin tocar la guardia abierta.
 -- Falla con error si alguna restriccion no se cumple. Corre dentro de una transaccion que se revierte.
 -- Uso: psql -v ON_ERROR_STOP=1 -d <base con las migraciones aplicadas> -f db/verify_configuracion.sql  (como dueno)
+-- Multiinquilino (migracion 006): las filas de esta verificacion son del establecimiento 1. Lo usan los
+-- valores por defecto de establecimiento_id y las politicas de RLS de motel_app.
+SET app.establecimiento_id = '1';
 BEGIN;
 DO $$
 DECLARE
@@ -95,10 +98,16 @@ BEGIN
     SELECT fondo_inicial INTO fondo_guardia FROM guardias WHERE id = gid;
     IF fondo_guardia <> 25000 THEN RAISE EXCEPTION 'El cambio de fondo altero la guardia abierta'; END IF;
 
+    -- Multiinquilino (migracion 006): una fila por establecimiento. motel_app no agrega una segunda para el suyo
+    -- (clave primaria) ni una para otro establecimiento (RLS).
     bloqueado := false;
-    BEGIN INSERT INTO configuracion_caja (id, fondo_cambio) VALUES (2, 1);
-    EXCEPTION WHEN insufficient_privilege THEN bloqueado := true; END;
+    BEGIN INSERT INTO configuracion_caja (fondo_cambio) VALUES (1);
+    EXCEPTION WHEN unique_violation THEN bloqueado := true; END;
     IF NOT bloqueado THEN RAISE EXCEPTION 'motel_app pudo agregar otra fila de configuracion'; END IF;
+    bloqueado := false;
+    BEGIN INSERT INTO configuracion_caja (establecimiento_id, fondo_cambio) VALUES (2, 1);
+    EXCEPTION WHEN insufficient_privilege THEN bloqueado := true; END;
+    IF NOT bloqueado THEN RAISE EXCEPTION 'motel_app agrego la configuracion de otro establecimiento'; END IF;
 
     RESET ROLE;
     RAISE NOTICE 'Panel verificado: motel_app crea solo conserjes, protege a la gerencia, no edita tarifas usadas ni borra historia';

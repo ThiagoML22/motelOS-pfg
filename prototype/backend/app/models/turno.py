@@ -5,11 +5,12 @@ from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, Numeric, St
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.core.database import Base
+from app.core.inquilino import DeEstablecimiento
 
 EN_CURSO = text("estado = 'En Curso'")
 
 
-class Turno(Base):
+class Turno(DeEstablecimiento, Base):
     __tablename__ = "turnos"
     # RN-EXI-01: a lo sumo un turno en curso por habitación (migración 004). Parcial para conservar el historial.
     __table_args__ = (

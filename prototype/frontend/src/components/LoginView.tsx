@@ -10,8 +10,28 @@ interface LoginViewProps {
   aviso?: string | null;
 }
 
+// Multiinquilino: la ventanilla recuerda el código del último establecimiento (es del puesto, no de la persona).
+const CLAVE_ESTABLECIMIENTO = 'motelos.establecimiento';
+
+const leerEstablecimiento = (): string => {
+  try {
+    return localStorage.getItem(CLAVE_ESTABLECIMIENTO) ?? '';
+  } catch {
+    return '';
+  }
+};
+
+const recordarEstablecimiento = (codigo: string) => {
+  try {
+    localStorage.setItem(CLAVE_ESTABLECIMIENTO, codigo);
+  } catch {
+    // sin almacenamiento local, se vuelve a escribir la próxima vez
+  }
+};
+
 // RNF-04: cada conserje entra con su usuario; todo lo que hace queda a su nombre.
 const LoginView: React.FC<LoginViewProps> = ({ onIngreso, aviso }) => {
+  const [establecimiento, setEstablecimiento] = useState(leerEstablecimiento);
   const [usuario, setUsuario] = useState('');
   const [clave, setClave] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -22,7 +42,10 @@ const LoginView: React.FC<LoginViewProps> = ({ onIngreso, aviso }) => {
     setEnviando(true);
     setError(null);
     try {
-      onIngreso(await api.login(usuario, clave));
+      const codigo = establecimiento.trim().toLowerCase();
+      const sesion = await api.login(codigo, usuario, clave);
+      recordarEstablecimiento(codigo);
+      onIngreso(sesion);
     } catch (err) {
       setError(getErrorMessage(err, 'No se pudo iniciar sesión.'));
       setClave('');
@@ -45,6 +68,18 @@ const LoginView: React.FC<LoginViewProps> = ({ onIngreso, aviso }) => {
         )}
 
         <form onSubmit={ingresar} className="mt-6 space-y-4" noValidate>
+          <Field label="Establecimiento" htmlFor="establecimiento" hint="Código del motel. Vacío: el de esta instalación.">
+            <input
+              id="establecimiento"
+              autoCapitalize="none"
+              spellCheck={false}
+              maxLength={30}
+              placeholder="motelcc"
+              className={inputClass}
+              value={establecimiento}
+              onChange={(e) => setEstablecimiento(e.target.value)}
+            />
+          </Field>
           <Field label="Usuario" htmlFor="usuario">
             <input
               id="usuario"

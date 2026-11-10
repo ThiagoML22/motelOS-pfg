@@ -3,6 +3,9 @@
 -- roles o claves, no reabre guardias, no modifica ni borra arqueos, y si elimina patentes.
 -- Falla con error si alguna restriccion no se cumple. Corre dentro de una transaccion que se revierte.
 -- Uso: psql -v ON_ERROR_STOP=1 -d <base con las migraciones aplicadas> -f db/verify_roles.sql  (como dueno)
+-- Multiinquilino (migracion 006): las filas de esta verificacion son del establecimiento 1. Lo usan los
+-- valores por defecto de establecimiento_id y las politicas de RLS de motel_app.
+SET app.establecimiento_id = '1';
 BEGIN;
 DO $$
 DECLARE

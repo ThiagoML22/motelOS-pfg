@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { BarChart3, DoorOpen, RefreshCw } from 'lucide-react';
+import { BarChart3, DoorOpen, FileDown, RefreshCw } from 'lucide-react';
 import { Arqueo, ArqueoDetalle, Guardia, MetricasCaja } from '../types';
 import { api, getErrorMessage } from '../services/api';
 import { formatDateTime, formatMoney, formatRoomNumber } from '../utils/format';
@@ -351,6 +351,20 @@ const PanelGerencia: React.FC<PanelGerenciaProps> = ({ onCambioGuardia }) => {
               El efectivo del sistema incluye el fondo de cambio de {formatMoney(detalle.fondo_inicial)}.
             </p>
           )}
+          <div className="mt-4 flex justify-end">
+            <Button
+              variant="secondary"
+              className="h-11"
+              onClick={() =>
+                void api
+                  .descargarComprobante(detalle.id, true)
+                  .catch((err) => toast(getErrorMessage(err, 'No se pudo generar el comprobante en PDF.'), 'error'))
+              }
+            >
+              <FileDown className="h-4 w-4" aria-hidden="true" />
+              Comprobante en PDF
+            </Button>
+          </div>
         </Modal>
       )}
 

@@ -1,10 +1,12 @@
 """Guardias del operador y cierre de caja ciego (RF-08, RN-RES-03)."""
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import operador_actual, requiere_rol
+from app.api.v1.endpoints.arqueos import respuesta_pdf
 from app.core.database import get_db
+from app.models.arqueo import ArqueoCaja
 from app.models.guardia import Guardia
 from app.models.operador import ROL_OPERADOR, Operador
 from app.schemas.caja import ArqueoResultado, DeclaracionCaja, GuardiaPublica
@@ -54,3 +56,14 @@ async def confirmar_arqueo(
         db, operador, declaracion.efectivo, declaracion.posnet, declaracion.mercado_pago
     )
     return await resultado_de_arqueo(db, arqueo)
+
+
+@router.get("/arqueos/{arqueo_id}/comprobante.pdf", response_class=Response)
+async def comprobante_propio(
+    arqueo_id: int, db: AsyncSession = Depends(get_db), operador: Operador = Depends(operador_actual)
+):
+    """RF-10: el conserje descarga el comprobante de su propio arqueo (ya confirmado: no expone una caja abierta)."""
+    arqueo = await db.get(ArqueoCaja, arqueo_id)
+    if arqueo is None or arqueo.operador_id != operador.id:
+        raise HTTPException(status_code=404, detail="Arqueo no encontrado")
+    return await respuesta_pdf(db, arqueo)

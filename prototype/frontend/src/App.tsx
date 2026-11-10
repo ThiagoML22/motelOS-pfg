@@ -1,8 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
+import { WifiOff } from 'lucide-react';
 import { Arqueo, HabitacionConDetalles, RoomStatus, Sesion, TipoCliente } from './types';
 import { api, getErrorMessage, onSesionVencida } from './services/api';
+import { useConexion } from './hooks/useConexion';
 import { useNow } from './hooks/useNow';
-import { formatRoomNumber } from './utils/format';
+import { formatClock, formatRoomNumber } from './utils/format';
+import ActividadView from './components/ActividadView';
+import PlataformaView from './components/PlataformaView';
 import TopNav, { View } from './components/TopNav';
 import RoomsGrid from './components/RoomsGrid';
 import RoomDialog from './components/RoomDialog';
@@ -68,6 +72,10 @@ function App() {
       />
     );
   }
+  // Multiinquilino: la plataforma no opera ningún motel; solo da de alta y suspende establecimientos.
+  if (sesion.operador.rol === 'PLATAFORMA') {
+    return <PlataformaView sesion={sesion} onSalir={() => void salir()} />;
+  }
   return (
     <Ventanilla key={sesion.operador.id} sesion={sesion} onRefrescarSesion={refrescarSesion} onSalir={() => void salir()} />
   );
@@ -88,8 +96,9 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
   const [activeView, setActiveView] = useState<View>(esGerencia ? 'gerencia' : 'dashboard');
   const [habitaciones, setHabitaciones] = useState<HabitacionConDetalles[]>([]);
   const [carga, setCarga] = useState<Carga>('cargando');
-  const [online, setOnline] = useState(true);
   const [filtro, setFiltro] = useState<Filtro>('Todas');
+  // Registro de actividad: entradas de los conserjes que la gerencia todavía no vio.
+  const [pendientes, setPendientes] = useState(0);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [openAddProduct, setOpenAddProduct] = useState(false);
   // Arqueo recién confirmado: el comprobante queda a la vista hasta que el conserje finaliza, aunque el
@@ -107,13 +116,32 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
   const fetchHabitaciones = useCallback(async () => {
     try {
       setHabitaciones(await api.getHabitaciones());
-      setOnline(true);
       setCarga('ok');
     } catch {
-      setOnline(false);
       setCarga((prev) => (prev === 'ok' ? 'ok' : 'error'));
     }
   }, []);
+
+  const fetchPendientes = useCallback(async () => {
+    if (!esGerencia) return;
+    try {
+      setPendientes(await api.getActividadPendiente());
+    } catch {
+      // el contador se actualiza en el próximo sondeo
+    }
+  }, [esGerencia]);
+
+  // RNF-09: al volver la conexión se traen la sesión, la grilla y el contador del registro (en menos de 5 s).
+  const conexion = useConexion(async () => {
+    await Promise.all([onRefrescarSesion(), fetchHabitaciones(), fetchPendientes()]);
+    toast('Conexión recuperada: la ventanilla se actualizó con los datos del servidor.', 'success');
+  });
+
+  useEffect(() => {
+    void fetchPendientes();
+    const intervalo = setInterval(() => void fetchPendientes(), SESION_POLL_MS);
+    return () => clearInterval(intervalo);
+  }, [fetchPendientes]);
 
   useEffect(() => {
     void fetchHabitaciones();
@@ -182,10 +210,13 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
         sesion={sesion}
         activeView={activeView}
         setActiveView={setActiveView}
-        online={online}
+        online={conexion.conectado}
         now={now}
+        pendientes={pendientes}
         onSalir={onSalir}
       />
+
+      {!conexion.conectado && <AvisoSinConexion desde={conexion.sinConexionDesde} onReintentar={conexion.reintentar} />}
 
       <main className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col px-4 py-6 sm:px-6">
         {!conGuardiaPropia && !mostrandoComprobante && activeView !== 'inventario' && (
@@ -235,12 +266,6 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
               </div>
             </div>
 
-            {!online && carga === 'ok' && (
-              <p role="alert" className="mb-4 rounded-md border border-warn/30 bg-warn-soft px-4 py-2.5 text-sm text-warn">
-                Sin conexión con el servidor. Los datos pueden estar desactualizados.
-              </p>
-            )}
-
             {carga === 'cargando' && <p className="py-16 text-center text-sm text-muted">Cargando habitaciones…</p>}
 
             {carga === 'error' && (
@@ -268,7 +293,7 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
           </>
         )}
 
-        {activeView === 'inventario' && <InventarioView />}
+        {activeView === 'inventario' && <InventarioView esConserje={!esGerencia} />}
 
         {(conGuardiaPropia || mostrandoComprobante) && activeView === 'caja' && !esGerencia && (
           <CierreCajaView sesion={sesion} resultado={ultimoArqueo} onConfirmado={setUltimoArqueo} onFinalizar={onSalir} />
@@ -277,6 +302,8 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
         {esGerencia && activeView === 'gerencia' && <PanelGerencia onCambioGuardia={onRefrescarSesion} />}
 
         {esGerencia && activeView === 'configuracion' && <ConfiguracionView onCambioHabitaciones={fetchHabitaciones} />}
+
+        {esGerencia && activeView === 'actividad' && <ActividadView onCambioPendientes={setPendientes} />}
       </main>
 
       {selectedRoom && (
@@ -290,6 +317,25 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
           initialAddProduct={openAddProduct}
         />
       )}
+    </div>
+  );
+}
+
+// RNF-09: aviso fijo mientras dura el corte. Lo que no se confirmó antes del corte no quedó registrado.
+function AvisoSinConexion({ desde, onReintentar }: { desde: number | null; onReintentar: () => void }) {
+  return (
+    <div role="alert" className="border-b border-warn/30 bg-warn-soft print:hidden">
+      <div className="mx-auto flex max-w-[1600px] flex-wrap items-center gap-3 px-4 py-2.5 text-sm text-warn sm:px-6">
+        <WifiOff className="h-4 w-4 shrink-0" aria-hidden="true" />
+        <p className="flex-1">
+          <span className="font-medium">Sin conexión con el servidor{desde ? ` desde las ${formatClock(new Date(desde))}` : ''}.</span>{' '}
+          No se pueden abrir ni cobrar turnos hasta que vuelva; los cronómetros siguen corriendo en el servidor. Reintentando
+          cada 2 segundos…
+        </p>
+        <Button variant="secondary" className="h-11" onClick={onReintentar}>
+          Reintentar ahora
+        </Button>
+      </div>
     </div>
   );
 }

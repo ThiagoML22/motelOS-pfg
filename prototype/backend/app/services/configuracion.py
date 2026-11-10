@@ -14,12 +14,19 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.inquilino import establecimiento_de
+from app.models.actividad import CAJA, TARIFA
 from app.models.configuracion import ConfiguracionCaja
 from app.models.operador import Operador
 from app.models.tarifa import Tarifa
 from app.schemas.configuracion import TarifaCreate
+from app.services.actividad import pesos, registrar
 
 CENTAVO = Decimal("0.01")
+
+
+def _resumen_tarifa(base, fraccion) -> str:
+    return f"{pesos(base)} + {pesos(fraccion)}/fracción"
 
 
 async def tarifa_vigente(db: AsyncSession) -> Tarifa | None:
@@ -34,6 +41,14 @@ async def cambiar_tarifa(db: AsyncSession, datos: TarifaCreate, operador: Operad
     for anterior in anteriores:
         anterior.vigente = False
     await db.flush()
+    previa = anteriores[0] if anteriores else None
+    await registrar(
+        db, operador, TARIFA, "TARIFA_NUEVA",
+        f"Tarifa nueva: {datos.estadia_base_min} min por {pesos(datos.tarifa_base)} y fracción de "
+        f"{datos.fraccion_min} min por {pesos(datos.tarifa_fraccion)}",
+        valor_anterior=_resumen_tarifa(previa.tarifa_base, previa.tarifa_fraccion) if previa else None,
+        valor_nuevo=_resumen_tarifa(datos.tarifa_base, datos.tarifa_fraccion),
+    )
     nueva = Tarifa(
         nombre=f"Vigente desde {ahora:%Y-%m-%d %H:%M:%S.%f}",
         tarifa_base=Decimal(str(datos.tarifa_base)).quantize(CENTAVO),
@@ -60,14 +75,16 @@ async def cambiar_tarifa(db: AsyncSession, datos: TarifaCreate, operador: Operad
 
 
 async def configuracion_caja(db: AsyncSession) -> ConfiguracionCaja | None:
-    return await db.get(ConfiguracionCaja, 1)
+    """La fila del establecimiento de la sesión (una por establecimiento desde la migración 006)."""
+    establecimiento_id = establecimiento_de(db)
+    return await db.get(ConfiguracionCaja, establecimiento_id) if establecimiento_id else None
 
 
 async def fondo_de_cambio(db: AsyncSession) -> Decimal:
     """Monto con el que abre la próxima guardia.
 
-    La migración 005 crea la fila con $25.000 (acta del 19/10/2026). Sin esa fila rige FONDO_INICIAL_CAJA, el
-    valor de configuración del entorno.
+    La migración 005 crea la fila con $25.000 (acta del 19/10/2026) y la plataforma crea la de cada establecimiento
+    nuevo. Sin esa fila rige FONDO_INICIAL_CAJA, el valor de configuración del entorno.
     """
     configuracion = await configuracion_caja(db)
     return Decimal(str(configuracion.fondo_cambio)) if configuracion else settings.FONDO_INICIAL_CAJA
@@ -77,14 +94,19 @@ async def cambiar_fondo(db: AsyncSession, monto: float, operador: Operador) -> C
     """El monto nuevo lo toma la guardia siguiente; la guardia abierta conserva el suyo (fondo_inicial)."""
     configuracion = await configuracion_caja(db)
     if configuracion is None:
-        # motel_app no puede crear la fila: la crea la migración 005.
+        # La fila la crea la migración 005 (establecimiento 1) o la plataforma al dar de alta el establecimiento.
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="La base no tiene la configuración de la caja: falta aplicar la migración 005.",
+            detail="El establecimiento no tiene la configuración de la caja.",
         )
+    anterior = Decimal(str(configuracion.fondo_cambio))
     configuracion.fondo_cambio = Decimal(str(monto)).quantize(CENTAVO)
     configuracion.actualizado_en = datetime.now(UTC)
     configuracion.actualizado_por_id = operador.id
+    await registrar(
+        db, operador, CAJA, "FONDO_CAMBIO", "Cambio del fondo de cambio de la caja",
+        valor_anterior=pesos(anterior), valor_nuevo=pesos(configuracion.fondo_cambio),
+    )
     await db.commit()
     await db.refresh(configuracion)
     return configuracion

@@ -1,12 +1,18 @@
 import axios from 'axios';
 import {
+  Actividad,
   Arqueo,
   ArqueoDetalle,
   Articulo,
   ArticuloCambios,
+  CategoriaActividad,
   ConserjeAlta,
   ConstanciaCobro,
   DeclaracionCaja,
+  Establecimiento,
+  EstablecimientoAlta,
+  EstablecimientoDatos,
+  EstablecimientoResumen,
   FondoCambio,
   Guardia,
   HabitacionConDetalles,
@@ -40,18 +46,73 @@ export const onSesionVencida = (handler: () => void) => {
   alVencerSesion = handler;
 };
 
+// --- RNF-09: recuperación al reconectar ------------------------------------------------------------------------
+// Cualquier petición sin respuesta marca la ventanilla sin conexión; cualquier respuesta, conectada. Durante el corte
+// no se envían operaciones (abrir, cobrar, cargar): se rechazan antes de salir, para que nada quede a medias ni se
+// duplique al volver. Los cronómetros siguen en el servidor: al reconectar la grilla trae los minutos que él calcula.
+export const EVENTO_RECONECTADO = 'motelos:reconectado';
+const SIN_CONEXION = 'Sin conexión con el servidor: la operación no se envió. Reintente cuando vuelva la conexión.';
+const METODOS_QUE_MODIFICAN = new Set(['post', 'put', 'patch', 'delete']);
+const URL_SALUD = API_URL.replace(/\/api\/v1\/?$/, '') + '/health';
+
+let conectado = true;
+const oyentesConexion = new Set<(conectado: boolean) => void>();
+
+const marcarConexion = (valor: boolean) => {
+  if (valor === conectado) return;
+  conectado = valor;
+  oyentesConexion.forEach((oyente) => oyente(valor));
+};
+
+export const onCambioConexion = (oyente: (conectado: boolean) => void): (() => void) => {
+  oyentesConexion.add(oyente);
+  return () => oyentesConexion.delete(oyente);
+};
+
+export const estaConectado = (): boolean => conectado;
+
+export const marcarSinConexion = () => marcarConexion(false);
+
+// Sondeo liviano del servidor (sin sesión ni interceptores) para detectar la vuelta de la conexión.
+export const sondearServidor = async (): Promise<boolean> => {
+  try {
+    await axios.get(URL_SALUD, { timeout: 2000 });
+    marcarConexion(true);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+class OperacionSinConexion extends Error {}
+
+http.interceptors.request.use((config) => {
+  const url = config.url ?? '';
+  if (!conectado && METODOS_QUE_MODIFICAN.has((config.method ?? 'get').toLowerCase()) && !url.startsWith('/auth/')) {
+    return Promise.reject(new OperacionSinConexion(SIN_CONEXION));
+  }
+  return config;
+});
+
 http.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    marcarConexion(true);
+    return response;
+  },
   (error) => {
     const url: string = error?.config?.url ?? '';
-    if (axios.isAxiosError(error) && error.response?.status === 401 && !url.startsWith('/auth/')) {
-      alVencerSesion?.();
+    if (axios.isAxiosError(error)) {
+      marcarConexion(Boolean(error.response));
+      if (error.response?.status === 401 && !url.startsWith('/auth/')) {
+        alVencerSesion?.();
+      }
     }
     return Promise.reject(error);
   },
 );
 
 export const getErrorMessage = (error: unknown, fallback: string): string => {
+  if (error instanceof OperacionSinConexion) return error.message;
   if (axios.isAxiosError(error)) {
     if (!error.response) return 'No se pudo conectar con el servidor.';
     const detail = error.response.data?.detail;
@@ -67,7 +128,9 @@ export const esConflicto = (error: unknown): boolean => axios.isAxiosError(error
 
 export const api = {
   // --- Sesión ---
-  login: async (usuario: string, clave: string): Promise<Sesion> => (await http.post('/auth/login', { usuario, clave })).data,
+  // El establecimiento es el código del motel (multiinquilino); vacío, el predeterminado de la instalación.
+  login: async (establecimiento: string, usuario: string, clave: string): Promise<Sesion> =>
+    (await http.post('/auth/login', { establecimiento: establecimiento || null, usuario, clave })).data,
 
   logout: async (): Promise<void> => {
     await http.post('/auth/logout');
@@ -128,6 +191,45 @@ export const api = {
   setOperadorActivo: async (id: number, activo: boolean): Promise<OperadorEstado> =>
     (await http.patch(`/operadores/${id}`, { activo })).data,
 
+  // --- Datos del establecimiento y registro de actividad (gerencia) ---
+  getEstablecimiento: async (): Promise<Establecimiento> => (await http.get('/configuracion/establecimiento')).data,
+
+  setEstablecimiento: async (datos: EstablecimientoDatos): Promise<Establecimiento> =>
+    (await http.patch('/configuracion/establecimiento', datos)).data,
+
+  getActividad: async (filtro: { categoria?: CategoriaActividad; pendientes?: boolean }): Promise<Actividad[]> =>
+    (await http.get('/configuracion/actividad', { params: filtro })).data,
+
+  getActividadPendiente: async (): Promise<number> => (await http.get('/configuracion/actividad/pendientes')).data.pendientes,
+
+  // Sin ids marca todas las pendientes. Devuelve cuántas quedan.
+  revisarActividad: async (ids?: number[]): Promise<number> =>
+    (await http.post('/configuracion/actividad/revision', { ids: ids ?? null })).data.pendientes,
+
+  // --- Comprobante del arqueo en PDF (RF-10) ---
+  // El conserje descarga el de su propio arqueo; la gerencia, el de cualquiera.
+  descargarComprobante: async (arqueoId: number, comoGerencia: boolean): Promise<void> => {
+    const ruta = comoGerencia ? `/arqueos/${arqueoId}/comprobante.pdf` : `/guardias/arqueos/${arqueoId}/comprobante.pdf`;
+    const datos: Blob = (await http.get(ruta, { responseType: 'blob' })).data;
+    const url = URL.createObjectURL(datos);
+    const enlace = document.createElement('a');
+    enlace.href = url;
+    enlace.download = `arqueo-${arqueoId}.pdf`;
+    document.body.appendChild(enlace);
+    enlace.click();
+    enlace.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  },
+
+  // --- Plataforma (multiinquilino) ---
+  getEstablecimientos: async (): Promise<EstablecimientoResumen[]> => (await http.get('/plataforma/establecimientos')).data,
+
+  altaEstablecimiento: async (datos: EstablecimientoAlta): Promise<Establecimiento> =>
+    (await http.post('/plataforma/establecimientos', datos)).data,
+
+  setEstablecimientoActivo: async (id: number, activo: boolean): Promise<Establecimiento> =>
+    (await http.patch(`/plataforma/establecimientos/${id}`, { activo })).data,
+
   // --- Operación de la ventanilla ---
   getHabitaciones: async (): Promise<HabitacionConDetalles[]> => (await http.get('/habitaciones/')).data,
 
@@ -137,6 +239,10 @@ export const api = {
 
   createArticulo: async (articulo: Omit<Articulo, 'id'>): Promise<Articulo> =>
     (await http.post('/articulos/', articulo)).data,
+
+  // Unidades que llegan de un artículo existente; queda en el registro de la gerencia.
+  reponerArticulo: async (id: number, cantidad: number): Promise<Articulo> =>
+    (await http.post(`/articulos/${id}/reposicion`, { cantidad })).data,
 
   addConsumo: async (turno_id: string, articulo_id: number, cantidad: number) =>
     (await http.post(`/turnos/${turno_id}/consumos`, { articulo_id, cantidad })).data,

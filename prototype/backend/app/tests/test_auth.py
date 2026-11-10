@@ -51,7 +51,7 @@ async def test_usuario_inexistente_y_clave_incorrecta_dan_el_mismo_mensaje(anoni
     b = await _login(anonimo, "conserje1", "clave-equivocada")
 
     assert a.status_code == b.status_code == 401
-    assert a.json() == b.json() == {"detail": "Usuario o clave incorrectos."}
+    assert a.json() == b.json() == {"detail": "Establecimiento, usuario o clave incorrectos."}
 
 
 async def test_operador_dado_de_baja_no_inicia_sesion(anonimo: AsyncClient):
@@ -127,11 +127,11 @@ async def test_toda_ruta_de_la_api_exige_sesion(anonimo: AsyncClient, metodo: st
 
 async def test_token_adulterado_o_vencido_responde_401(anonimo: AsyncClient):
     # Control: el mismo mecanismo con un token válido sí da acceso.
-    anonimo.cookies.set(settings.COOKIE_NOMBRE, crear_token(1, "OPERADOR"), path="/api")
+    anonimo.cookies.set(settings.COOKIE_NOMBRE, crear_token(1, "OPERADOR", 1), path="/api")
     assert (await anonimo.get("/api/v1/habitaciones/")).status_code == 200
 
-    vencido = crear_token(1, "OPERADOR", ahora=datetime.now(UTC) - timedelta(hours=settings.SESION_HORAS + 1))
-    firma = crear_token(1, "OPERADOR")
+    vencido = crear_token(1, "OPERADOR", 1, ahora=datetime.now(UTC) - timedelta(hours=settings.SESION_HORAS + 1))
+    firma = crear_token(1, "OPERADOR", 1)
     adulterado = firma[:-4] + ("AAAA" if not firma.endswith("AAAA") else "BBBB")
     for token in (vencido, adulterado):
         anonimo.cookies.set(settings.COOKIE_NOMBRE, token, path="/api")
@@ -140,7 +140,7 @@ async def test_token_adulterado_o_vencido_responde_401(anonimo: AsyncClient):
 
 async def test_token_con_otro_rol_que_el_del_operador_responde_401(anonimo: AsyncClient):
     # Un token que diga ADMINISTRADOR para un conserje (firmado o no) no da permisos de gerencia.
-    anonimo.cookies.set(settings.COOKIE_NOMBRE, crear_token(1, "ADMINISTRADOR"), path="/api")
+    anonimo.cookies.set(settings.COOKIE_NOMBRE, crear_token(1, "ADMINISTRADOR", 1), path="/api")
     assert (await anonimo.get("/api/v1/habitaciones/")).status_code == 401
 
 

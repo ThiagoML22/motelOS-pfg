@@ -3,9 +3,10 @@ from datetime import UTC, datetime
 from sqlalchemy import Column, DateTime, ForeignKey, Integer, Numeric, String
 
 from app.core.database import Base
+from app.core.inquilino import DeEstablecimiento
 
 
-class ArqueoCaja(Base):
+class ArqueoCaja(DeEstablecimiento, Base):
     """Cierre de caja ciego de una guardia (RF-08) con su diferencia clasificada (RF-09).
 
     En PostgreSQL el trigger calcular_arqueo recalcula los totales del sistema, la diferencia y la

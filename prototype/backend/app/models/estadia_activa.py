@@ -2,9 +2,10 @@ from sqlalchemy import Column, ForeignKey, String
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.core.database import Base
+from app.core.inquilino import DeEstablecimiento
 
 
-class EstadiaActiva(Base):
+class EstadiaActiva(DeEstablecimiento, Base):
     """Dato operativo de una estadía: la patente vive aquí, separada del registro financiero (RNF-08).
 
     El turno (importes, horarios y pagos) es inmutable; esta fila se elimina dentro del plazo de

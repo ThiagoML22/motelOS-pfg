@@ -5,8 +5,18 @@ from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api.deps import operador_actual, solo_administrador
-from app.api.v1.endpoints import arqueos, articulos, auth, configuracion, guardias, habitaciones, operadores, turnos
+from app.api.deps import operador_de_establecimiento, solo_administrador, solo_plataforma
+from app.api.v1.endpoints import (
+    arqueos,
+    articulos,
+    auth,
+    configuracion,
+    guardias,
+    habitaciones,
+    operadores,
+    plataforma,
+    turnos,
+)
 from app.core.config import settings
 from app.services.estadia import ciclo_depuracion
 
@@ -62,8 +72,9 @@ app.add_middleware(
     allow_headers=["Content-Type", ENCABEZADO_APP[0]],
 )
 
-# Todas las rutas de la API exigen sesión, salvo el inicio y el cierre de sesión.
-con_sesion = [Depends(operador_actual)]
+# Todas las rutas de la API exigen sesión, salvo el inicio y el cierre de sesión. Las de la ventanilla y la
+# gerencia, además, una sesión de un establecimiento (la plataforma no opera ningún motel).
+con_sesion = [Depends(operador_de_establecimiento)]
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["sesión"])
 app.include_router(habitaciones.router, prefix="/api/v1/habitaciones", tags=["habitaciones"], dependencies=con_sesion)
 app.include_router(turnos.router, prefix="/api/v1/turnos", tags=["turnos"], dependencies=con_sesion)
@@ -75,6 +86,10 @@ app.include_router(arqueos.router, prefix="/api/v1/arqueos", tags=["gerencia"], 
 app.include_router(operadores.router, prefix="/api/v1/operadores", tags=["gerencia"], dependencies=solo_gerencia)
 app.include_router(
     configuracion.router, prefix="/api/v1/configuracion", tags=["gerencia"], dependencies=solo_gerencia
+)
+# Plataforma (multiinquilino): alta, suspensión y resumen de establecimientos. Solo el rol PLATAFORMA.
+app.include_router(
+    plataforma.router, prefix="/api/v1/plataforma", tags=["plataforma"], dependencies=[Depends(solo_plataforma)]
 )
 
 

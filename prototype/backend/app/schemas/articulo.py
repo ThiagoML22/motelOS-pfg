@@ -20,6 +20,12 @@ class ArticuloResponse(ArticuloBase):
     activo: bool = True
 
 
+class Reposicion(BaseModel):
+    """Unidades que llegan a la ventanilla de un artículo que ya existe (las carga el conserje)."""
+
+    cantidad: int = Field(gt=0, le=10_000)
+
+
 class ConsumoCreate(BaseModel):
     articulo_id: int
     cantidad: int = Field(gt=0)

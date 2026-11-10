@@ -6,6 +6,10 @@ os.environ.setdefault("ARGON2_MEMORY_KIB", "1024")
 # Las pruebas de caja verifican la aritmética del arqueo sin fondo de cambio; el fondo aprobado ($25.000) se
 # prueba aparte en test_caja (test_el_fondo_de_cambio_integra_el_efectivo_del_sistema).
 os.environ.setdefault("FONDO_INICIAL_CAJA", "0")
+# Multiinquilino: el inicio de sesión sin código entra al establecimiento de las pruebas.
+ESTABLECIMIENTO_PRUEBA = "prueba"
+ESTABLECIMIENTO_OTRO = "otro"
+os.environ.setdefault("ESTABLECIMIENTO_PREDETERMINADO", ESTABLECIMIENTO_PRUEBA)
 
 import pytest_asyncio  # noqa: E402
 from httpx import ASGITransport, AsyncClient  # noqa: E402
@@ -13,11 +17,13 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import StaticPool  # noqa: E402
 
 from app.core.database import Base, get_db  # noqa: E402
+from app.core.inquilino import CLAVE as CLAVE_ESTABLECIMIENTO  # noqa: E402
 from app.core.seguridad import hashear_clave  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models.articulo import Articulo  # noqa: E402
+from app.models.establecimiento import Establecimiento  # noqa: E402
 from app.models.habitacion import Habitacion  # noqa: E402
-from app.models.operador import ROL_ADMINISTRADOR, ROL_OPERADOR, Operador  # noqa: E402
+from app.models.operador import ROL_ADMINISTRADOR, ROL_OPERADOR, ROL_PLATAFORMA, Operador  # noqa: E402
 from app.models.tarifa import Tarifa  # noqa: E402
 
 # Por defecto los tests son herméticos (SQLite en memoria). En CI se puede apuntar a un
@@ -36,6 +42,8 @@ OPERADORES = {
     "baja": ("Conserje dado de baja", ROL_OPERADOR, "clave-prueba-baja", False),
 }
 ENCABEZADOS_APP = {"X-Requested-With": "motelos"}
+CLAVE_OTRO_MOTEL = "clave-prueba-otro-motel"
+CLAVE_PLATAFORMA = "clave-prueba-plataforma"
 
 
 @pytest_asyncio.fixture
@@ -49,7 +57,14 @@ async def session_factory():
         await conn.run_sync(Base.metadata.create_all)
 
     factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    # Multiinquilino: las pruebas de siempre corren en el establecimiento 1 («prueba», el predeterminado). El 2
+    # («otro») tiene sus propios datos con los mismos números y códigos, para probar el aislamiento.
+    # Sin id explícito: en PostgreSQL la secuencia tiene que avanzar para que la plataforma pueda dar de alta otros.
     async with factory() as session:
+        for codigo, nombre in ((ESTABLECIMIENTO_PRUEBA, "Motel de prueba"), (ESTABLECIMIENTO_OTRO, "Otro motel")):
+            session.add(Establecimiento(codigo=codigo, nombre=nombre))
+            await session.commit()
+    async with factory(info={CLAVE_ESTABLECIMIENTO: 1}) as session:
         session.add_all(
             [
                 Tarifa(
@@ -72,6 +87,25 @@ async def session_factory():
                 for u, (n, r, c, a) in OPERADORES.items()
             ]
         )
+        await session.commit()
+    async with factory(info={CLAVE_ESTABLECIMIENTO: 2}) as session:
+        session.add_all(
+            [
+                Tarifa(nombre="Estandar", tarifa_base=9000, estadia_base_min=120, tolerancia_min=0, fraccion_min=30,
+                       tarifa_fraccion=3000, vigente=True),
+                Habitacion(numero=1, estado="Ocupada"),
+                Habitacion(numero=7, estado="Libre"),
+                Articulo(codigo="MIN-001", descripcion="Agua del otro motel", precio_unitario=999, stock_actual=50),
+                Operador(usuario="conserje1", nombre_visible="Conserje del otro motel", rol=ROL_OPERADOR,
+                         hash_clave=hashear_clave(CLAVE_OTRO_MOTEL)),
+                Operador(usuario="gerencia", nombre_visible="Gerencia del otro motel", rol=ROL_ADMINISTRADOR,
+                         hash_clave=hashear_clave(CLAVE_OTRO_MOTEL)),
+            ]
+        )
+        await session.commit()
+    async with factory() as session:
+        session.add(Operador(usuario="plataforma", nombre_visible="Plataforma", rol=ROL_PLATAFORMA,
+                             hash_clave=hashear_clave(CLAVE_PLATAFORMA), establecimiento_id=None))
         await session.commit()
 
     async def override_get_db():
@@ -134,5 +168,6 @@ async def cliente_como(session_factory):
 
 @pytest_asyncio.fixture
 async def db(session_factory):
-    async with session_factory() as session:
+    """Sesión directa sobre el establecimiento de las pruebas (1)."""
+    async with session_factory(info={CLAVE_ESTABLECIMIENTO: 1}) as session:
         yield session
