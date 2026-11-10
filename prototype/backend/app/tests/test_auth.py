@@ -106,7 +106,9 @@ async def test_logout_cierra_la_sesion(client: AsyncClient):
 
 def _rutas_protegidas() -> list[tuple[str, str]]:
     """Todas las rutas de la API según su esquema OpenAPI, salvo las públicas."""
-    publicas = {"/health", "/api/v1/auth/login", "/api/v1/auth/logout"}
+    # /auth/marca (migración 009): el nombre y la apariencia de un motel para la pantalla de ingreso; no expone usuarios
+    # ni datos de la operación (test_personalizacion_novedades.test_la_marca_publica_del_ingreso).
+    publicas = {"/health", "/api/v1/auth/login", "/api/v1/auth/logout", "/api/v1/auth/marca"}
     rutas = []
     for camino, operaciones in sorted(app.openapi()["paths"].items()):
         if not camino.startswith("/api/") or camino in publicas:

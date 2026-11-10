@@ -2,7 +2,7 @@
 
 from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,7 +20,7 @@ from app.core.seguridad import (
 )
 from app.models.establecimiento import Establecimiento
 from app.models.operador import ROL_PLATAFORMA, Operador
-from app.schemas.auth import EstablecimientoPublico, LoginRequest, OperadorPublico, SesionResponse
+from app.schemas.auth import EstablecimientoPublico, LoginRequest, MarcaPublica, OperadorPublico, SesionResponse
 from app.services.caja import guardia_abierta
 from app.services.liquidacion import con_zona
 
@@ -91,6 +91,21 @@ async def login(datos: LoginRequest, response: Response, db: AsyncSession = Depe
 
     poner_cookie_sesion(response, crear_token(operador.id, operador.rol, establecimiento_id, ahora))
     return await _sesion_de(db, operador)
+
+
+@router.get("/marca", response_model=MarcaPublica)
+async def marca(codigo: str = Query(min_length=1, max_length=30), db: AsyncSession = Depends(get_db)):
+    """Nombre y apariencia de un motel para la pantalla de ingreso (migración 009), sin sesión.
+
+    El código identifica al comercio y no es secreto (como su nombre en el cartel); no dice nada de sus usuarios. Un
+    código inexistente o suspendido responde 404.
+    """
+    establecimiento = (
+        await db.execute(select(Establecimiento).where(Establecimiento.codigo == codigo.strip().lower()))
+    ).scalars().first()
+    if establecimiento is None or not establecimiento.activo:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No hay un establecimiento con ese código.")
+    return establecimiento
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)

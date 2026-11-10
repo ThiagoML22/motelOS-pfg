@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { BedDouble, Building2, Coins, KeyRound, Package, Tags, Users } from 'lucide-react';
+import { BedDouble, Building2, Coins, KeyRound, Package, Palette, Tags, Users, Volume2 } from 'lucide-react';
+import { COLORES_SUGERIDOS, aplicarMarca, sonarAviso } from '../utils/marca';
 import { Articulo, Categoria, Establecimiento, FondoCambio, HabitacionConfiguracion, OperadorEstado } from '../types';
 import { api, getErrorMessage } from '../services/api';
 import { formatDateTime, formatMoney, formatRoomNumber } from '../utils/format';
@@ -9,7 +10,7 @@ import Modal from './ui/Modal';
 import { useToast } from './ui/Toast';
 import SeccionCategorias, { ChipCategoria } from './CategoriasConfig';
 
-type Seccion = 'tarifa' | 'fondo' | 'articulos' | 'habitaciones' | 'conserjes' | 'establecimiento';
+type Seccion = 'tarifa' | 'fondo' | 'articulos' | 'habitaciones' | 'conserjes' | 'establecimiento' | 'apariencia';
 
 const SECCIONES: { id: Seccion; label: string; icon: React.ElementType }[] = [
   { id: 'tarifa', label: 'Categorías y tarifas', icon: Tags },
@@ -18,6 +19,7 @@ const SECCIONES: { id: Seccion; label: string; icon: React.ElementType }[] = [
   { id: 'habitaciones', label: 'Habitaciones', icon: BedDouble },
   { id: 'conserjes', label: 'Conserjes', icon: Users },
   { id: 'establecimiento', label: 'Establecimiento', icon: Building2 },
+  { id: 'apariencia', label: 'Apariencia y avisos', icon: Palette },
 ];
 
 // RNF-05: los campos del panel miden 44 px de alto, como el resto de los controles de la ventanilla.
@@ -31,12 +33,14 @@ interface Confirmacion {
 
 interface ConfiguracionViewProps {
   onCambioHabitaciones: () => Promise<void>;
+  // La apariencia viaja en la sesión: al guardarla se refresca para aplicarla en toda la interfaz.
+  onCambioApariencia: () => Promise<void>;
 }
 
 // RF-11 ampliado (acta del 27/10/2026): la gerencia cambia la tarifa, el fondo de cambio, los artículos, las
 // habitaciones y los conserjes sin pedírselo al autor. Cada cambio rige hacia adelante (RN-DER-06) y ninguna baja
 // borra historia.
-const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({ onCambioHabitaciones }) => {
+const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({ onCambioHabitaciones, onCambioApariencia }) => {
   const { toast } = useToast();
   const [seccion, setSeccion] = useState<Seccion>('tarifa');
   const [categorias, setCategorias] = useState<Categoria[]>([]);
@@ -169,6 +173,17 @@ const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({ onCambioHabitacio
           {seccion === 'establecimiento' && establecimiento && (
             <SeccionEstablecimiento key={establecimiento.nombre} establecimiento={establecimiento} ocupado={ocupado} ejecutar={ejecutar} />
           )}
+          {seccion === 'apariencia' && establecimiento && (
+            <SeccionApariencia
+              establecimiento={establecimiento}
+              ocupado={ocupado}
+              ejecutar={async (accion, exito, error) => {
+                const ok = await ejecutar(accion, exito, error);
+                if (ok) await onCambioApariencia();
+                return ok;
+              }}
+            />
+          )}
         </section>
       )}
 
@@ -236,6 +251,142 @@ const SeccionFondo: React.FC<{ fondo: FondoCambio; ocupado: boolean; ejecutar: E
       <Button type="submit" disabled={ocupado} className="h-11">
         Guardar fondo de cambio
       </Button>
+    </form>
+  );
+};
+
+// --- Apariencia y avisos (migración 009) --------------------------------------------------------------------------
+
+const SeccionApariencia: React.FC<{ establecimiento: Establecimiento; ocupado: boolean; ejecutar: Ejecutar }> = ({
+  establecimiento,
+  ocupado,
+  ejecutar,
+}) => {
+  const [color, setColor] = useState(establecimiento.color_marca ?? '');
+  const [eslogan, setEslogan] = useState(establecimiento.eslogan ?? '');
+  const [aviso, setAviso] = useState(String(establecimiento.aviso_por_vencer_min ?? 10));
+  const [sonido, setSonido] = useState(Boolean(establecimiento.alertas_sonoras));
+  const colorValido = color === '' || /^#[0-9a-fA-F]{6}$/.test(color);
+  const avisoValido = /^\d{1,3}$/.test(aviso) && Number(aviso) <= 120;
+
+  // Vista previa en vivo: el color elegido se aplica a toda la interfaz mientras se edita; al salir sin guardar
+  // vuelve el de la sesión.
+  const guardado = establecimiento.color_marca ?? null;
+  useEffect(() => {
+    if (colorValido) aplicarMarca(color || null);
+  }, [color, colorValido]);
+  useEffect(() => () => aplicarMarca(guardado), [guardado]);
+
+  const guardar = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await ejecutar(
+      () =>
+        api.setEstablecimiento({
+          color_marca: color,
+          eslogan,
+          aviso_por_vencer_min: Number(aviso),
+          alertas_sonoras: sonido,
+        }),
+      'Apariencia y avisos guardados: rigen en todos los puestos desde su próxima actualización.',
+      'No se pudieron guardar la apariencia y los avisos.',
+    );
+  };
+
+  return (
+    <form onSubmit={guardar} className="grid gap-8 lg:grid-cols-2">
+      <div className="space-y-4">
+        <h2 className="text-base font-semibold text-ink">Color de marca</h2>
+        <p className="text-sm text-muted">
+          Reemplaza el azul de MotelOS en botones, enlaces y la pantalla de ingreso. Se ajusta solo para leerse bien en
+          modo claro y oscuro.
+        </p>
+        <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Colores sugeridos">
+          {COLORES_SUGERIDOS.map((c) => {
+            const elegido = (color || '#244473').toLowerCase() === c.hex;
+            return (
+              <button
+                key={c.hex}
+                type="button"
+                role="radio"
+                aria-checked={elegido}
+                title={c.nombre}
+                onClick={() => setColor(c.hex === '#244473' ? '' : c.hex)}
+                className={`press hit h-9 w-9 rounded-full border-2 ${elegido ? 'border-ink' : 'border-transparent'}`}
+                style={{ backgroundColor: c.hex }}
+              >
+                <span className="sr-only">{c.nombre}</span>
+              </button>
+            );
+          })}
+        </div>
+        <div className="flex items-end gap-3">
+          <Field label="Otro color (hex)" htmlFor="ap_color" error={colorValido ? undefined : 'Formato #rrggbb'}>
+            <input
+              id="ap_color"
+              maxLength={7}
+              placeholder="#244473"
+              className={`${campo} w-36 font-mono`}
+              value={color}
+              onChange={(e) => setColor(e.target.value.trim())}
+            />
+          </Field>
+          <input
+            type="color"
+            aria-label="Elegir color"
+            value={colorValido && color ? color : '#244473'}
+            onChange={(e) => setColor(e.target.value)}
+            className="h-11 w-14 cursor-pointer rounded-md border border-line-strong bg-surface p-1"
+          />
+        </div>
+        <div className="rounded-md border border-line bg-surface-2 p-4">
+          <p className="mb-3 text-xs font-medium uppercase tracking-wide text-subtle">Vista previa</p>
+          <div className="flex flex-wrap items-center gap-3">
+            <Button type="button">Botón principal</Button>
+            <span className="rounded-md border border-accent bg-accent-soft px-3 py-1.5 text-sm font-medium text-accent">
+              Filtro elegido
+            </span>
+            <span className="text-sm font-medium text-accent underline">Un enlace</span>
+          </div>
+        </div>
+        <Field label="Eslogan" htmlFor="ap_eslogan" hint="Se ve en la pantalla de ingreso, debajo del nombre del motel.">
+          <input id="ap_eslogan" maxLength={120} className={campo} value={eslogan} onChange={(e) => setEslogan(e.target.value)} />
+        </Field>
+      </div>
+
+      <div className="space-y-4">
+        <h2 className="text-base font-semibold text-ink">Avisos de la ventanilla</h2>
+        <Field
+          label="Aviso «por vencer» (minutos antes del fin del turno)"
+          htmlFor="ap_aviso"
+          hint="La tarjeta de la habitación se pone amarilla. 0 = sin aviso."
+          error={avisoValido ? undefined : 'Entre 0 y 120 minutos'}
+        >
+          <input id="ap_aviso" inputMode="numeric" className={`${campo} w-32`} value={aviso} onChange={(e) => setAviso(e.target.value)} />
+        </Field>
+        <label className="flex cursor-pointer items-start gap-3 rounded-md border border-line p-3">
+          <input type="checkbox" className="mt-1 h-4 w-4 accent-[rgb(var(--accent))]" checked={sonido} onChange={(e) => setSonido(e.target.checked)} />
+          <span>
+            <span className="block text-sm font-medium text-ink">Alertas sonoras</span>
+            <span className="block text-sm text-muted">
+              Un sonido corto en la ventanilla del conserje cuando un turno pasa a «por vencer» y otro, más agudo, cuando
+              se excede.
+            </span>
+          </span>
+        </label>
+        <div className="flex gap-2">
+          <Button type="button" variant="secondary" size="sm" onClick={() => sonarAviso('por_vencer')}>
+            <Volume2 className="h-3.5 w-3.5" aria-hidden="true" />
+            Probar «por vencer»
+          </Button>
+          <Button type="button" variant="secondary" size="sm" onClick={() => sonarAviso('excedido')}>
+            <Volume2 className="h-3.5 w-3.5" aria-hidden="true" />
+            Probar «excedido»
+          </Button>
+        </div>
+        <Button type="submit" disabled={ocupado || !colorValido || !avisoValido} className="h-11">
+          Guardar apariencia y avisos
+        </Button>
+      </div>
     </form>
   );
 };

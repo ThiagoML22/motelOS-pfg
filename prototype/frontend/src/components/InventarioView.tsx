@@ -7,6 +7,7 @@ import Button from './ui/Button';
 import Field, { inputClass } from './ui/Field';
 import Modal from './ui/Modal';
 import { useToast } from './ui/Toast';
+import { BotonNuevoPedido, SeccionPedidos } from './PedidosReposicion';
 
 const STOCK_BAJO = 5;
 const SIN_CATEGORIA = 'General';
@@ -51,6 +52,7 @@ const InventarioView: React.FC<InventarioViewProps> = ({ esConserje }) => {
   const [modalAbierto, setModalAbierto] = useState(false);
   const [form, setForm] = useState(FORM_VACIO);
   const [guardando, setGuardando] = useState(false);
+  const [versionPedidos, setVersionPedidos] = useState(0);
 
   const cargar = useCallback(async () => {
     try {
@@ -179,11 +181,17 @@ const InventarioView: React.FC<InventarioViewProps> = ({ esConserje }) => {
           <h1 className="text-xl font-semibold text-ink">Inventario</h1>
           <p className="mt-0.5 text-sm text-muted">Minibar y productos de venta</p>
         </div>
-        <Button onClick={abrirModal}>
-          <Plus className="h-4 w-4" aria-hidden="true" />
-          Nuevo artículo
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          {!esConserje && <BotonNuevoPedido onCreado={() => setVersionPedidos((v) => v + 1)} />}
+          <Button onClick={abrirModal}>
+            <Plus className="h-4 w-4" aria-hidden="true" />
+            Nuevo artículo
+          </Button>
+        </div>
       </div>
+
+      {/* Pedidos a proveedores (migración 010): solo aparece si hay alguno; el conserje los recibe. */}
+      <SeccionPedidos esGerencia={!esConserje} onStockCambiado={() => void cargar()} version={versionPedidos} />
 
       {estado === 'cargando' && <p className="py-16 text-center text-sm text-muted">Cargando inventario…</p>}
 

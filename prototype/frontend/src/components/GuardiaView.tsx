@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
-import { DoorOpen, LogOut, ShieldAlert } from 'lucide-react';
-import { Sesion } from '../types';
+import React, { useEffect, useState } from 'react';
+import { DoorOpen, LogOut, NotebookPen, ShieldAlert } from 'lucide-react';
+import { Novedad, Sesion } from '../types';
+import { ListaNovedades, recientes } from './NovedadesPanel';
 import { api, getErrorMessage } from '../services/api';
 import { formatDateTime, formatMoney } from '../utils/format';
 import { NOMBRE_FRANJA } from '../utils/caja';
@@ -18,7 +19,16 @@ interface GuardiaViewProps {
 const GuardiaView: React.FC<GuardiaViewProps> = ({ sesion, onGuardiaAbierta, onSalir }) => {
   const { toast } = useToast();
   const [abriendo, setAbriendo] = useState(false);
+  const [novedades, setNovedades] = useState<Novedad[]>([]);
   const ajena = sesion.guardia && !sesion.guardia.es_propia ? sesion.guardia : null;
+
+  // Antes de abrir, el conserje lee lo que dejaron las guardias anteriores (migración 009).
+  useEffect(() => {
+    api
+      .getNovedades(20)
+      .then((lista) => setNovedades(recientes(lista)))
+      .catch(() => setNovedades([]));
+  }, []);
 
   const abrir = async () => {
     setAbriendo(true);
@@ -37,7 +47,7 @@ const GuardiaView: React.FC<GuardiaViewProps> = ({ sesion, onGuardiaAbierta, onS
   };
 
   return (
-    <div className="flex flex-1 items-center justify-center py-10">
+    <div className="flex flex-1 flex-col items-center justify-center gap-5 py-10">
       <div className="w-full max-w-lg animate-pop-in rounded-lg border border-line bg-surface p-8 text-center shadow-lift">
         {ajena ? (
           <>
@@ -77,6 +87,15 @@ const GuardiaView: React.FC<GuardiaViewProps> = ({ sesion, onGuardiaAbierta, onS
           </>
         )}
       </div>
+      {novedades.length > 0 && (
+        <section className="w-full max-w-lg animate-fade-in" aria-labelledby="titulo-novedades-anteriores">
+          <h2 id="titulo-novedades-anteriores" className="mb-2 flex items-center gap-2 text-sm font-semibold text-ink">
+            <NotebookPen className="h-4 w-4 text-muted" aria-hidden="true" />
+            Lo que dejaron las guardias anteriores
+          </h2>
+          <ListaNovedades novedades={novedades} />
+        </section>
+      )}
     </div>
   );
 };

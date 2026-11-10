@@ -129,6 +129,33 @@ export interface EstablecimientoPublico {
   id: number;
   codigo: string;
   nombre: string;
+  // Apariencia y avisos (migración 009).
+  color_marca?: string | null;
+  eslogan?: string | null;
+  aviso_por_vencer_min?: number;
+  alertas_sonoras?: boolean;
+}
+
+// Lo que el ingreso muestra al reconocer el código de un motel.
+export interface MarcaPublica {
+  codigo: string;
+  nombre: string;
+  color_marca: string | null;
+  eslogan: string | null;
+}
+
+// Novedades de guardia (migración 009).
+export interface Novedad {
+  id: number;
+  texto: string;
+  importante: boolean;
+  creado_en: string;
+  operador_id: number;
+  operador_nombre: string;
+  guardia_id: number | null;
+  franja: string | null;
+  habitacion_id: number | null;
+  habitacion_numero: number | null;
 }
 
 export interface Sesion {
@@ -322,6 +349,10 @@ export interface EstablecimientoDatos {
   domicilio?: string | null;
   telefono?: string | null;
   leyenda_comprobante?: string | null;
+  color_marca?: string | null;
+  eslogan?: string | null;
+  aviso_por_vencer_min?: number;
+  alertas_sonoras?: boolean;
 }
 
 export interface EstablecimientoResumen extends Establecimiento {
@@ -375,4 +406,200 @@ export interface Actividad {
   requiere_revision: boolean;
   revisado_en?: string | null;
   revisado_por_nombre?: string | null;
+}
+
+// --- Inteligencia local de la gerencia (services/inteligencia.py) -----------------------------------------------
+
+export type Severidad = 'alta' | 'media' | 'info';
+
+export interface AlertaIA {
+  tipo: string;
+  severidad: Severidad;
+  titulo: string;
+  detalle: string;
+  sugerencia: string | null;
+  evidencia: { etiqueta: string; valor: string }[];
+}
+
+export interface HoraPronostico {
+  hora: string;
+  etiqueta: string;
+  llegadas: number;
+  minimo: number;
+  maximo: number;
+  ocupacion: number;
+  ocupacion_pct: number;
+}
+
+export interface Saturacion {
+  categoria_id: number;
+  categoria: string;
+  color: string;
+  desde: string;
+  hasta: string;
+  habitaciones: number;
+}
+
+export interface Pronostico {
+  horas: HoraPronostico[];
+  total: number;
+  minimo: number;
+  maximo: number;
+  saturacion: Saturacion[];
+  precision: { error_medio: number; dias: number } | null;
+  tendencia: number;
+  pico: HoraPronostico | null;
+}
+
+export interface MapaDemanda {
+  dias: string[];
+  valores: number[][];
+  maximo: number;
+  semanas: number;
+  pico: { dia: string; hora: number; llegadas: number };
+  dia_mas_fuerte: string;
+  dia_mas_flojo: string;
+  por_dia: number[];
+}
+
+export interface DiaSerie {
+  fecha: string;
+  dia: string;
+  turnos: number;
+  ingresos: number;
+}
+
+export interface ParametrosTarifa {
+  tarifa_base: number;
+  estadia_base_min: number;
+  fraccion_min: number;
+  tarifa_fraccion: number;
+  tolerancia_min: number;
+  tope: number | null;
+}
+
+export interface SugerenciaTarifa {
+  categoria_id: number;
+  categoria: string;
+  color: string;
+  habitaciones: number;
+  turnos: number;
+  ocupacion_pico: number | null;
+  ocupacion_valle: number | null;
+  ocupacion_total: number | null;
+  con_sobreturno: number;
+  accion: 'subir' | 'bajar' | 'estadia' | 'mantener';
+  titulo: string;
+  explicacion: string;
+  impacto_mensual: number | null;
+  supuesto: string | null;
+  actual: ParametrosTarifa;
+  propuesta: ParametrosTarifa | null;
+}
+
+export interface Reposicion {
+  articulo_id: number;
+  codigo: string;
+  descripcion: string;
+  stock: number;
+  vendidas_28d: number;
+  por_dia: number;
+  dias_restantes: number | null;
+  agota_el: string | null;
+  sugerido: number;
+  urgencia: 'alta' | 'media' | 'baja' | 'sin_movimiento';
+}
+
+export interface Indicadores {
+  ocupadas_ahora: number;
+  habitaciones: number;
+  turnos_7d: number;
+  turnos_7d_variacion: number | null;
+  ingresos_7d: number;
+  ingresos_7d_variacion: number | null;
+  ticket_7d: number;
+  ocupacion_7d: number | null;
+  tdc_30d: number | null;
+  arqueos_30d: number;
+}
+
+export interface Tablero {
+  generado_en: string;
+  corte: string;
+  guardia_abierta: boolean;
+  indicadores: Indicadores;
+  resumen: { titular: string; puntos: { icono: string; texto: string }[] };
+  alertas: AlertaIA[];
+  pronostico: Pronostico;
+  demanda: MapaDemanda;
+  serie: DiaSerie[];
+  sugerencias: SugerenciaTarifa[];
+  reposicion: Reposicion[];
+  medios_de_pago: { medio: string; etiqueta: string; monto: number; parte: number }[];
+  mas_vendidos: { articulo_id: number; descripcion: string; unidades: number; importe: number }[];
+}
+
+// Botón que propone el asistente: ir a una pantalla o abrir una habitación.
+export interface AccionAsistente {
+  etiqueta: string;
+  vista: string | null;
+  habitacion_id: number | null;
+}
+
+export interface RespuestaAsistente {
+  respuesta: string;
+  intencion: string;
+  periodo: string | null;
+  detalle: string | null;
+  tabla: { columnas: string[]; filas: (string | number)[][] } | null;
+  sugerencias: string[];
+  // Ayuda para usar el sistema (services/ayuda.py): pasos a seguir y botones para ir.
+  pasos?: string[];
+  acciones?: AccionAsistente[];
+}
+
+// Pedidos de reposición a proveedores (migración 010).
+export interface PedidoItem {
+  articulo_id: number;
+  codigo: string;
+  descripcion: string;
+  cantidad: number;
+  recibida: number | null;
+  stock_actual: number;
+}
+
+export interface Pedido {
+  id: number;
+  creado_en: string;
+  creado_por_nombre: string;
+  proveedor: string | null;
+  nota: string | null;
+  estado: 'Pendiente' | 'Recibido' | 'Anulado';
+  cerrado_en: string | null;
+  cerrado_por_nombre: string | null;
+  items: PedidoItem[];
+}
+
+export interface SugeridoPedido {
+  articulo_id: number;
+  codigo: string;
+  descripcion: string;
+  stock: number;
+  por_dia: number;
+  dias_restantes: number | null;
+  sugerido: number;
+}
+
+// Arqueos de un mes (por el día en que se abrió cada guardia).
+export interface ResumenMes {
+  mes: string;
+  desde: string;
+  hasta: string;
+  arqueos: number;
+  correctos: number;
+  faltantes: number;
+  sobrantes: number;
+  total_faltante: number;
+  total_sobrante: number;
+  tdc: number;
 }

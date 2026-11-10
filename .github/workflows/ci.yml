@@ -103,6 +103,8 @@ jobs:
         run: |
           psql -h localhost -U postgres -d motel_schema -v ON_ERROR_STOP=1 -f db/verify_multiinquilino.sql
           psql -h localhost -U postgres -d motel_schema -v ON_ERROR_STOP=1 -f db/verify_categorias_perfil.sql
+          psql -h localhost -U postgres -d motel_schema -v ON_ERROR_STOP=1 -f db/verify_personalizacion_novedades.sql
+          psql -h localhost -U postgres -d motel_schema -v ON_ERROR_STOP=1 -f db/verify_pedidos.sql
 
       - name: Verificar la migración desde una base v1.2 con datos
         working-directory: ./prototype
@@ -136,6 +138,7 @@ jobs:
           python -m scripts.recorrido_panel --api http://localhost:8000
           python -m scripts.recorrido_multiinquilino --api http://localhost:8000
           python -m scripts.recorrido_categorias_perfil --api http://localhost:8000
+          python -m scripts.recorrido_inteligencia_novedades --api http://localhost:8000
 
       - name: Guardar la medición de latencia
         if: always()

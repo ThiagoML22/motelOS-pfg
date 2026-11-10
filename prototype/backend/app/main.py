@@ -9,12 +9,16 @@ from app.api.deps import operador_actual, operador_de_establecimiento, solo_admi
 from app.api.v1.endpoints import (
     arqueos,
     articulos,
+    asistente,
     auth,
     categorias,
     configuracion,
     guardias,
     habitaciones,
+    inteligencia,
+    novedades,
     operadores,
+    pedidos,
     perfil,
     plataforma,
     turnos,
@@ -83,6 +87,11 @@ app.include_router(turnos.router, prefix="/api/v1/turnos", tags=["turnos"], depe
 app.include_router(articulos.router, prefix="/api/v1/articulos", tags=["articulos"], dependencies=con_sesion)
 app.include_router(guardias.router, prefix="/api/v1/guardias", tags=["caja"], dependencies=con_sesion)
 app.include_router(categorias.router, prefix="/api/v1/categorias", tags=["habitaciones"], dependencies=con_sesion)
+app.include_router(novedades.router, prefix="/api/v1/novedades", tags=["novedades"], dependencies=con_sesion)
+# Pedidos de reposición (migración 010): los arma la gerencia; los recibe el conserje o la gerencia.
+app.include_router(pedidos.router, prefix="/api/v1/pedidos", tags=["inventario"], dependencies=con_sesion)
+# Asistente para todo el personal (ayuda y ventanilla); a la gerencia además le responde el análisis de datos.
+app.include_router(asistente.router, prefix="/api/v1/asistente", tags=["asistente"], dependencies=con_sesion)
 # Mi perfil: cualquier sesión, también la plataforma.
 app.include_router(perfil.router, prefix="/api/v1/perfil", tags=["perfil"], dependencies=[Depends(operador_actual)])
 # Panel de la gerencia: solo el rol ADMINISTRADOR.
@@ -91,6 +100,9 @@ app.include_router(arqueos.router, prefix="/api/v1/arqueos", tags=["gerencia"], 
 app.include_router(operadores.router, prefix="/api/v1/operadores", tags=["gerencia"], dependencies=solo_gerencia)
 app.include_router(
     configuracion.router, prefix="/api/v1/configuracion", tags=["gerencia"], dependencies=solo_gerencia
+)
+app.include_router(
+    inteligencia.router, prefix="/api/v1/inteligencia", tags=["gerencia"], dependencies=solo_gerencia
 )
 # Plataforma (multiinquilino): alta, suspensión y resumen de establecimientos. Solo el rol PLATAFORMA.
 app.include_router(

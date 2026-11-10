@@ -51,6 +51,21 @@ router = APIRouter()
 
 
 # --- Datos del establecimiento (multiinquilino) ------------------------------------------------------------------
+CAMPOS_ESTABLECIMIENTO = {
+    "color_marca": "color de marca",
+    "aviso_por_vencer_min": "aviso «por vencer» (minutos)",
+    "alertas_sonoras": "alertas sonoras",
+}
+
+
+def _como_texto(valor) -> str | None:
+    if valor is None:
+        return None
+    if isinstance(valor, bool):
+        return "Sí" if valor else "No"
+    return str(valor)
+
+
 @router.get("/establecimiento", response_model=EstablecimientoResponse)
 async def ver_establecimiento(operador: Operador = Depends(operador_actual), db: AsyncSession = Depends(get_db)):
     return await db.get(Establecimiento, operador.establecimiento_id)
@@ -60,19 +75,26 @@ async def ver_establecimiento(operador: Operador = Depends(operador_actual), db:
 async def cambiar_establecimiento(
     datos: EstablecimientoDatos, db: AsyncSession = Depends(get_db), operador: Operador = Depends(operador_actual)
 ):
-    """Nombre, domicilio, teléfono y leyenda del comprobante. El código y la suspensión son de la plataforma."""
+    """Nombre, domicilio, teléfono, leyenda del comprobante, apariencia y avisos (migración 009). El código y la
+    suspensión son de la plataforma."""
     establecimiento = await db.get(Establecimiento, operador.establecimiento_id, with_for_update=True)
     for campo, valor in datos.model_dump(exclude_unset=True).items():
-        valor = valor.strip() if isinstance(valor, str) else valor
+        if isinstance(valor, str):
+            valor = valor.strip() or None
+        if campo == "color_marca" and valor:
+            valor = valor.lower()
         if campo == "nombre" and not valor:
             raise HTTPException(status_code=422, detail="El nombre no puede quedar vacío.")
+        if valor is None and campo in ("aviso_por_vencer_min", "alertas_sonoras"):
+            continue  # no admiten vacío
         anterior = getattr(establecimiento, campo)
-        if (anterior or None) == (valor or None):
+        if anterior == valor:
             continue
-        setattr(establecimiento, campo, valor or None)
+        setattr(establecimiento, campo, valor)
         await registrar(
-            db, operador, ESTABLECIMIENTO, "ESTABLECIMIENTO_DATOS", f"Cambio de {campo.replace('_', ' ')}",
-            valor_anterior=anterior, valor_nuevo=valor or None,
+            db, operador, ESTABLECIMIENTO, "ESTABLECIMIENTO_DATOS",
+            f"Cambio de {CAMPOS_ESTABLECIMIENTO.get(campo, campo.replace('_', ' '))}",
+            valor_anterior=_como_texto(anterior), valor_nuevo=_como_texto(valor),
         )
     await db.commit()
     await db.refresh(establecimiento)

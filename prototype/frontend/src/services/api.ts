@@ -20,12 +20,19 @@ import {
   Guardia,
   HabitacionConDetalles,
   HabitacionConfiguracion,
+  MarcaPublica,
   MedioPago,
   MetricasCaja,
+  Novedad,
   OperadorEstado,
+  Pedido,
   Perfil,
   ResumenCategoria,
+  ResumenMes,
+  RespuestaAsistente,
   Sesion,
+  SugeridoPedido,
+  Tablero,
   Tarifa,
   TarifaDatos,
   Turno,
@@ -133,6 +140,18 @@ export const getErrorMessage = (error: unknown, fallback: string): string => {
   return fallback;
 };
 
+// Guarda un archivo generado (PDF, CSV) con el diálogo de descarga del navegador.
+export const descargar = (datos: Blob, nombre: string) => {
+  const url = URL.createObjectURL(datos);
+  const enlace = document.createElement('a');
+  enlace.href = url;
+  enlace.download = nombre;
+  document.body.appendChild(enlace);
+  enlace.click();
+  enlace.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+};
+
 export const esConflicto = (error: unknown): boolean => axios.isAxiosError(error) && error.response?.status === 409;
 
 // La petición no llegó a tener respuesta (corte, servidor caído o tiempo agotado): no dice nada de la sesión.
@@ -149,6 +168,22 @@ export const api = {
   },
 
   getSesion: async (): Promise<Sesion> => (await http.get('/auth/sesion')).data,
+
+  // Nombre y apariencia del motel para la pantalla de ingreso (sin sesión). null si el código no existe.
+  getMarca: async (codigo: string): Promise<MarcaPublica | null> => {
+    try {
+      return (await http.get('/auth/marca', { params: { codigo } })).data;
+    } catch (err) {
+      if (axios.isAxiosError(err) && err.response?.status === 404) return null;
+      throw err;
+    }
+  },
+
+  // --- Novedades de guardia (migración 009) ---
+  getNovedades: async (limite = 30): Promise<Novedad[]> => (await http.get('/novedades/', { params: { limite } })).data,
+
+  crearNovedad: async (datos: { texto: string; importante: boolean; habitacion_id?: number | null }): Promise<Novedad> =>
+    (await http.post('/novedades/', datos)).data,
 
   // --- Guardias y cierre de caja ciego (RF-08) ---
   abrirGuardia: async (): Promise<Guardia> => (await http.post('/guardias/')).data,
@@ -260,6 +295,44 @@ export const api = {
     enlace.click();
     enlace.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
+  },
+
+  // --- Inteligencia local de la gerencia (todo se calcula en el servidor del motel) ---
+  getTablero: async (): Promise<Tablero> => (await http.get('/inteligencia/tablero')).data,
+
+  // Asistente de todo el personal: ayuda y estado de la ventanilla; a la gerencia, además, el análisis de datos.
+  preguntar: async (texto: string): Promise<RespuestaAsistente> =>
+    (await http.post('/asistente/pregunta', { texto })).data,
+
+  getArqueosMeses: async (operador_id?: number): Promise<ResumenMes[]> =>
+    (await http.get('/arqueos/meses', { params: { operador_id } })).data,
+
+  // --- Pedidos de reposición (migración 010) ---
+  getPedidos: async (): Promise<Pedido[]> => (await http.get('/pedidos/')).data,
+
+  getPedidoSugerido: async (): Promise<SugeridoPedido[]> => (await http.get('/pedidos/sugerido')).data,
+
+  crearPedido: async (datos: {
+    proveedor?: string;
+    nota?: string;
+    items: { articulo_id: number; cantidad: number }[];
+  }): Promise<Pedido> => (await http.post('/pedidos/', datos)).data,
+
+  recibirPedido: async (id: number, items: { articulo_id: number; recibida: number }[]): Promise<Pedido> =>
+    (await http.post(`/pedidos/${id}/recepcion`, { items })).data,
+
+  anularPedido: async (id: number): Promise<Pedido> => (await http.post(`/pedidos/${id}/anulacion`)).data,
+
+  descargarPedido: async (id: number): Promise<void> => {
+    const datos: Blob = (await http.get(`/pedidos/${id}/pedido.pdf`, { responseType: 'blob' })).data;
+    descargar(datos, `pedido-${id}.pdf`);
+  },
+
+  // Informe del mes en PDF (resumen y cada guardia), generado por el servidor.
+  descargarInformeMes: async (mes: string, operador_id?: number): Promise<void> => {
+    const datos: Blob = (await http.get(`/arqueos/meses/${mes}/informe.pdf`, { params: { operador_id }, responseType: 'blob' }))
+      .data;
+    descargar(datos, `arqueos-${mes}.pdf`);
   },
 
   // --- Plataforma (multiinquilino) ---

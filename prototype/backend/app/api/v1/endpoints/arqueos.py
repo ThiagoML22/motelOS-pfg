@@ -2,7 +2,7 @@
 
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import operador_actual
@@ -10,8 +10,15 @@ from app.core.database import get_db
 from app.models.arqueo import ArqueoCaja
 from app.models.establecimiento import Establecimiento
 from app.models.operador import Operador
-from app.schemas.caja import ArqueoDetalle, ArqueoResultado, DeclaracionSupervisada, MetricasCaja, ResumenCategoria
-from app.services import caja, reportes
+from app.schemas.caja import (
+    ArqueoDetalle,
+    ArqueoResultado,
+    DeclaracionSupervisada,
+    MetricasCaja,
+    ResumenCategoria,
+    ResumenMes,
+)
+from app.services import caja, informe_mensual, reportes
 from app.services.comprobante import comprobante_arqueo
 
 router = APIRouter()
@@ -41,6 +48,30 @@ async def metricas(
 async def por_categoria(desde: date | None = None, hasta: date | None = None, db: AsyncSession = Depends(get_db)):
     """Turnos cobrados, ingresos y ocupación por categoría de habitación (migración 008)."""
     return await reportes.por_categoria(db, desde, hasta)
+
+
+@router.get("/meses", response_model=list[ResumenMes])
+async def meses(operador_id: int | None = None, db: AsyncSession = Depends(get_db)):
+    """Resumen de los arqueos de cada mes (cantidad, TDC, faltantes y sobrantes), del más reciente al más antiguo."""
+    return await reportes.resumen_por_mes(db, operador_id)
+
+
+@router.get("/meses/{mes}/informe.pdf", response_class=Response)
+async def informe_del_mes(
+    mes: str = Path(pattern=r"^\d{4}-(0[1-9]|1[0-2])$"),
+    operador_id: int | None = None,
+    db: AsyncSession = Depends(get_db),
+    gerencia: Operador = Depends(operador_actual),
+):
+    """Informe de los arqueos del mes en PDF (resumen y cada guardia), para archivo o el contador."""
+    arqueos, metrica = await informe_mensual.arqueos_del_mes(db, mes, operador_id)
+    conserje = await caja.nombre_de(db, operador_id) if operador_id else None
+    establecimiento = await db.get(Establecimiento, gerencia.establecimiento_id)
+    return Response(
+        content=informe_mensual.informe_pdf(mes, arqueos, metrica, establecimiento, conserje),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="arqueos-{mes}.pdf"'},
+    )
 
 
 @router.get("/{arqueo_id}", response_model=ArqueoDetalle)
