@@ -179,11 +179,11 @@ Después, http://localhost:5173 muestra la pantalla de ingreso.
 |---|---|---|
 | 1 | Entrar con `motelcc` / `conserje1`. La pantalla muestra lo que deja la guardia anterior y pide la ropa: confirmar las cantidades y tocar **Recibí y abrir guardia** | RNF-04, RF-08 |
 | 2 | La grilla muestra las habitaciones con su estado (Disponible en verde) | RF-01, RNF-05 |
-| 3 | Tocar una habitación disponible y abrir un turno: pasa a Ocupada y empieza el cronómetro | RF-02 |
-| 4 | En el turno abierto, agregar un consumo del minibar: la cuenta suma y baja el stock. Con un artículo sin stock, el sistema lo rechaza | RF-04, RF-05 |
-| 5 | Pasar el turno a Limpieza sin cobrar: se rechaza por la deuda | RF-07 |
-| 6 | Cobrar: elegir el medio de pago; con POSNET o Mercado Pago pide el número de comprobante. Al quedar en cero, emite la constancia | RF-03, RF-06 |
-| 7 | **Cierre de caja:** contar la ropa a ciegas, declarar el efectivo (con el fondo de $25.000) y los comprobantes, sin ver el total del sistema. Al confirmar se ve la diferencia clasificada y se descarga el PDF | RF-08, RF-09, RF-10 |
+| 3 | Tocar una habitación disponible y **Ocupar habitación**: pasa a Ocupada y empieza el cronómetro | RF-02 |
+| 4 | Tocar la habitación ocupada: la cuenta muestra la estadía base, el sobreturno y el total. **Agregar productos** suma un consumo del minibar y baja el stock; pedir más unidades que las que hay se rechaza | RF-03, RF-04, RF-05 |
+| 5 | La tarjeta ocupada no ofrece pasar a Limpieza: solo el cobro la libera (la API rechaza ese cambio con deuda; lo cubren las pruebas automáticas) | RF-07 |
+| 6 | **Cobrar**: elegir el medio de pago (con POSNET o Mercado Pago pide el número de comprobante) y confirmar. El turno se cierra con saldo cero y la habitación pasa a Limpieza | RF-06 |
+| 7 | **Cierre de caja:** cargar la ropa a ciegas y tocar **Guardar recuento** (pide confirmación). Declarar el efectivo, que incluye el fondo de $25.000, y los comprobantes, sin ver el total del sistema, y tocar **Confirmar recuento y cerrar guardia**. Aparece el comprobante con lo declarado, lo del sistema y la diferencia clasificada, y **Descargar PDF**. Ejemplo: con un solo cobro de $8.000 en efectivo, declarar $33.000 da «Correcto» | RF-08, RF-09, RF-10 |
 | 8 | Entrar con `motelcc` / `gerencia`: en **Control de caja** se ven el arqueo recién hecho, el detalle de cobros y la TDC. En **Configuración** se cambia la tarifa de una categoría y queda el historial | RF-09, RF-11 |
 | 9 | Entrar con `luna` / `gerencia`: otro motel, con otros datos. Lo de `motelcc` no aparece | multiinquilino |
 | 10 | Detener la API con `docker compose stop backend` con la ventanilla abierta: a los pocos segundos aparece el aviso. Con `docker compose start backend` se recupera sola, sin cerrar la sesión | RNF-09 |
@@ -198,7 +198,11 @@ Después, http://localhost:5173 muestra la pantalla de ingreso.
 docker compose run --rm --no-deps backend sh -c "pip install -q -r requirements-dev.txt && python -m pytest -q"
 ```
 
-Instala las herramientas de prueba (`requirements-dev.txt`) en un contenedor descartable y corre las pruebas sobre SQLite en memoria. Resultado esperado: todas pasan; en la v3 son 624 en SQLite. En SQLite, alguna prueba puede fallar muy de vez en cuando porque SQLite lee como número un identificador al azar: al repetir el comando, pasa.
+Instala las herramientas de prueba (`requirements-dev.txt`) en un contenedor descartable y corre las pruebas sobre SQLite en memoria.
+
+- **Resultado esperado:** `624 passed, 2 skipped`. Las 2 omitidas son carreras de concurrencia que solo corren sobre PostgreSQL, en el canal.
+- **Duración:** en Windows con Docker Desktop, unos 11 minutos.
+- **Falla esporádica:** en SQLite, alguna prueba puede fallar muy de vez en cuando porque SQLite lee como número un identificador al azar. Al repetir el comando, pasa.
 
 **Verificaciones SQL en un PostgreSQL 16 descartable** (Windows con Docker, desde `prototype/`):
 
