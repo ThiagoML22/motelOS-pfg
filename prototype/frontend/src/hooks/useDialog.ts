@@ -20,6 +20,9 @@ export const useDialog = <T extends HTMLElement>(onClose: () => void) => {
     (node?.querySelector<HTMLElement>('[data-autofocus]') ?? focusables()[0] ?? node)?.focus();
 
     const onKeyDown = (e: KeyboardEvent) => {
+      // Con dos diálogos abiertos (una confirmación sobre otro), las teclas son del de arriba.
+      const abiertos = document.querySelectorAll('[role="dialog"]');
+      if (node?.matches('[role="dialog"]') && abiertos[abiertos.length - 1] !== node) return;
       if (e.key === 'Escape') {
         e.stopPropagation();
         closeRef.current();

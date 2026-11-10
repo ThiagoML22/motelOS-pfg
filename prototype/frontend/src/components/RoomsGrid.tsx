@@ -1,5 +1,5 @@
 import React from 'react';
-import { Categoria, HabitacionConDetalles, RoomStatus } from '../types';
+import { Categoria, HabitacionConDetalles, PedidoVentanilla, RoomStatus } from '../types';
 import RoomCard from './RoomCard';
 
 interface RoomsGridProps {
@@ -9,9 +9,11 @@ interface RoomsGridProps {
   onRoomClick: (habitacion: HabitacionConDetalles) => void;
   onAddConsumo: (habitacion: HabitacionConDetalles) => void;
   onChangeEstado: (habitacion: HabitacionConDetalles, newState: RoomStatus) => void;
+  // Lo que pidieron los clientes con su QR y todavía espera.
+  pedidos: PedidoVentanilla[];
 }
 
-const RoomsGrid: React.FC<RoomsGridProps> = ({ habitaciones, categorias, now, onRoomClick, onAddConsumo, onChangeEstado }) => (
+const RoomsGrid: React.FC<RoomsGridProps> = ({ habitaciones, categorias, now, onRoomClick, onAddConsumo, onChangeEstado, pedidos }) => (
   <div className="grid grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-4">
     {/* La entrada escalonada va en una envoltura: la tarjeta queda libre para su propio destello. */}
     {habitaciones.map((habitacion, orden) => (
@@ -23,6 +25,7 @@ const RoomsGrid: React.FC<RoomsGridProps> = ({ habitaciones, categorias, now, on
           onClick={onRoomClick}
           onAddConsumo={onAddConsumo}
           onChangeEstado={onChangeEstado}
+          pedidos={pedidos.filter((p) => p.habitacion_id === habitacion.id)}
         />
       </div>
     ))}

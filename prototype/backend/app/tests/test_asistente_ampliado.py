@@ -168,3 +168,42 @@ async def test_busqueda_por_parecido(client):
     assert otra["intencion"].startswith(("ayuda:", "definicion:")), otra
     nada = await _preguntar(client, "xyzzy plugh")
     assert nada["intencion"] == "desconocida" and nada["sugerencias"]
+
+
+# --- Mot ---------------------------------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "pregunta", ["¿Cómo te llamás?", "¿quién es Mot?", "¿cuál es tu nombre?", "¿Quién sos?", "¿sos Mot?"]
+)
+async def test_mot_dice_quien_es(client, pregunta):
+    datos = await _preguntar(client, pregunta)
+    assert datos["intencion"] == "charla" and datos["respuesta"].startswith("Soy Mot")
+
+
+@pytest.mark.parametrize("saludo", ["Mot", "hola Mot", "Hola, Mot!", "che mot"])
+async def test_si_solo_lo_llaman_saluda(client, saludo):
+    datos = await _preguntar(client, saludo)
+    assert datos["intencion"] == "charla" and datos["respuesta"].startswith("¡Hola! Soy Mot")
+
+
+async def test_el_agradecimiento_con_su_nombre_sigue_siendo_gracias(client):
+    assert (await _preguntar(client, "gracias, Mot"))["respuesta"].startswith("¡De nada!")
+
+
+@pytest.mark.parametrize(
+    "pregunta", ["Mot, ¿cuánto sale la simple?", "¿Mot, cuánto sale la simple?", "¿cuánto sale la simple, Mot?"]
+)
+async def test_su_nombre_no_cambia_la_pregunta(client, pregunta):
+    datos = await _preguntar(client, pregunta)
+    assert datos["intencion"] == "tarifas" and "Simple: $8.000" in datos["respuesta"]
+
+
+async def test_una_orden_por_su_nombre_tambien_se_propone(client):
+    datos = await _preguntar(client, "Mot, pasá la 2 a mantenimiento")
+    assert datos["intencion"] == "accion:estado" and datos["confirmacion"]["estado"] == "Mantenimiento"
+
+
+async def test_moto_no_es_su_nombre(client):
+    datos = await _preguntar(client, "abrí la 2 para una moto")
+    assert datos["intencion"] == "accion:abrir_turno" and datos["confirmacion"]["tipo_cliente"] == "Moto"

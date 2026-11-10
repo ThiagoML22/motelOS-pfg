@@ -18,7 +18,7 @@ from app.schemas.caja import (
     ResumenCategoria,
     ResumenMes,
 )
-from app.services import caja, informe_mensual, reportes
+from app.services import caja, informe_mensual, reportes, sellos
 from app.services.comprobante import comprobante_arqueo
 
 router = APIRouter()
@@ -72,6 +72,18 @@ async def informe_del_mes(
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="arqueos-{mes}.pdf"'},
     )
+
+
+@router.get("/integridad")
+async def integridad(db: AsyncSession = Depends(get_db)) -> dict:
+    """Recalcula la huella de todos los comprobantes y dice cuáles ya no coinciden (migración 012)."""
+    return await sellos.verificar_cadena(db)
+
+
+@router.get("/verificar/{codigo}")
+async def verificar(codigo: str = Path(max_length=80), db: AsyncSession = Depends(get_db)) -> dict:
+    """Busca un comprobante por el código impreso y recalcula su huella."""
+    return await sellos.verificar_codigo(db, codigo)
 
 
 @router.get("/{arqueo_id}", response_model=ArqueoDetalle)

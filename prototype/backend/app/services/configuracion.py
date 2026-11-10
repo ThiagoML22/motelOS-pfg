@@ -34,17 +34,6 @@ def _importe(valor) -> Decimal | None:
     return None if valor is None else Decimal(str(valor)).quantize(CENTAVO)
 
 
-async def tarifa_vigente(db: AsyncSession, categoria_id: int | None = None) -> Tarifa | None:
-    """La tarifa vigente de una categoría (migración 008); sin categoría, la de la primera."""
-    if categoria_id is None:
-        categoria = await categoria_por_defecto(db)
-        if categoria is None:
-            return None
-        categoria_id = categoria.id
-    consulta = select(Tarifa).where(Tarifa.vigente.is_(True), Tarifa.categoria_id == categoria_id)
-    return (await db.execute(consulta)).scalars().first()
-
-
 async def categoria_por_defecto(db: AsyncSession) -> CategoriaHabitacion | None:
     consulta = (
         select(CategoriaHabitacion)
@@ -66,7 +55,9 @@ async def categoria_activa(db: AsyncSession, categoria_id: int | None) -> Catego
     return categoria
 
 
-def nueva_tarifa_de(categoria: CategoriaHabitacion, datos: ParametrosTarifa, operador_id: int | None) -> Tarifa:
+def nueva_tarifa_de(
+    categoria: CategoriaHabitacion, datos: ParametrosTarifa, operador_id: int | None, franja_id: int | None = None
+) -> Tarifa:
     ahora = datetime.now(UTC)
     return Tarifa(
         nombre=f"{categoria.id}·{ahora:%Y-%m-%d %H:%M:%S.%f}",
@@ -81,6 +72,7 @@ def nueva_tarifa_de(categoria: CategoriaHabitacion, datos: ParametrosTarifa, ope
         vigente=True,
         vigente_desde=ahora,
         creada_por_id=operador_id,
+        franja_id=franja_id,
     )
 
 
@@ -88,8 +80,13 @@ async def cambiar_tarifa(db: AsyncSession, datos: TarifaCreate, operador: Operad
     """Crea la tarifa nueva de la categoría y deja de usar la anterior, que no se edita: los turnos que la usaron
     la conservan (RN-DER-06)."""
     categoria = await categoria_activa(db, datos.categoria_id)
-    # Bloquea la tarifa vigente: dos cambios simultáneos se ordenan y no quedan dos tarifas vigentes.
-    consulta = select(Tarifa).where(Tarifa.vigente.is_(True), Tarifa.categoria_id == categoria.id).with_for_update()
+    # Bloquea la tarifa general vigente: dos cambios simultáneos se ordenan y no quedan dos vigentes. Las tarifas
+    # especiales de la categoría no se tocan.
+    consulta = (
+        select(Tarifa)
+        .where(Tarifa.vigente.is_(True), Tarifa.franja_id.is_(None), Tarifa.categoria_id == categoria.id)
+        .with_for_update()
+    )
     anteriores = (await db.execute(consulta)).scalars().all()
     for anterior in anteriores:
         anterior.vigente = False

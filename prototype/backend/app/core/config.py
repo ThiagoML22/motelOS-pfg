@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/motel_db"
     SQL_ECHO: bool = False
     CORS_ORIGINS: str = "http://localhost:5173"
+    # Dirección de la aplicación en la red del motel, para el QR de los comprobantes. Vacía: la primera de CORS_ORIGINS.
+    URL_PUBLICA: str = ""
     # RNF-08: la patente se elimina dentro de las N horas posteriores al cierre del turno (24 h, aprobado por
     # la gerencia el 06/10/2026) y la tarea de depuración corre cada DEPURACION_INTERVALO_MIN minutos.
     RETENCION_PATENTE_HORAS: int = 24
@@ -43,6 +45,11 @@ class Settings(BaseSettings):
     # Multiinquilino (migración 006): código del establecimiento cuando el inicio de sesión no indica uno. Así
     # una instalación de un solo motel se usa igual que antes.
     ESTABLECIMIENTO_PREDETERMINADO: str = "motelcc"
+
+    @property
+    def url_aplicacion(self) -> str:
+        """La dirección de la aplicación: la configurada o la primera de CORS_ORIGINS."""
+        return (self.URL_PUBLICA or self.CORS_ORIGINS.split(",")[0].strip()).rstrip("/")
 
     @model_validator(mode="after")
     def exigir_configuracion_segura(self) -> "Settings":

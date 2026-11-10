@@ -58,6 +58,11 @@ export default {
           '0%, 70%': { transform: 'rotate(0deg)' },
           '85%, 100%': { transform: 'rotate(180deg)' },
         },
+        // Los eslabones de la cadena de comprobantes se encienden uno tras otro.
+        eslabon: {
+          from: { opacity: '0.2', transform: 'scaleY(0.4)' },
+          to: { opacity: '1', transform: 'scaleY(1)' },
+        },
         // Una habitación que cambió de estado se ilumina un momento con el acento.
         destello: {
           '0%': { boxShadow: '0 0 0 0 rgb(var(--accent) / 0.55)' },
@@ -72,11 +77,6 @@ export default {
         // Latido suave del cronómetro de un turno excedido.
         latido: { '0%, 100%': { opacity: '1' }, '50%': { opacity: '0.55' } },
         // El botón del asistente invita a usarlo con una onda.
-        llamado: {
-          '0%': { boxShadow: '0 0 0 0 rgb(var(--accent) / 0.45)' },
-          '70%': { boxShadow: '0 0 0 14px rgb(var(--accent) / 0)' },
-          '100%': { boxShadow: '0 0 0 0 rgb(var(--accent) / 0)' },
-        },
       },
       // Las entradas usan `backwards`: si el estado final quedara aplicado, el elemento encerraría a los diálogos
       // (`fixed`) que tiene adentro y anularía su propio transform al pasar el mouse.
@@ -86,13 +86,13 @@ export default {
         'toast-in': 'toast-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both',
         'tarjeta-in': 'tarjeta-in 320ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards',
         tramo: 'tramo 520ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards',
+        eslabon: 'eslabon 260ms ease-out backwards',
         reloj: 'reloj 2.8s ease-in-out infinite',
         destello: 'destello 1.4s ease-out',
         crecer: 'crecer 650ms cubic-bezier(0.2, 0.8, 0.2, 1) both',
         dibujar: 'dibujar 900ms ease-out both',
         brillo: 'brillo 1.6s linear infinite',
         latido: 'latido 1.6s ease-in-out infinite',
-        llamado: 'llamado 1.8s ease-out 3',
       },
     },
   },

@@ -8,6 +8,9 @@ import {
   Categoria,
   CategoriaActividad,
   CategoriaAlta,
+  Franja,
+  FranjaAlta,
+  FranjaCambio,
   CategoriaDatos,
   ConserjeAlta,
   ConstanciaCobro,
@@ -16,10 +19,13 @@ import {
   EstablecimientoAlta,
   EstablecimientoDatos,
   EstablecimientoResumen,
+  EstadiaCliente,
+  EscenarioGemelo,
   FondoCambio,
   Guardia,
   HabitacionConDetalles,
   HabitacionConfiguracion,
+  IntegridadComprobantes,
   LineaDeTiempoDatos,
   MarcaPublica,
   MedioPago,
@@ -28,9 +34,11 @@ import {
   Novedad,
   OperadorEstado,
   Pedido,
+  PedidoVentanilla,
   Perfil,
   ProximaLibre,
   ResumenCategoria,
+  ResultadoGemelo,
   ResumenMes,
   RespuestaAsistente,
   Sesion,
@@ -38,12 +46,15 @@ import {
   Tablero,
   Tarifa,
   TarifaDatos,
+  TicketCliente,
   Turno,
   TurnoCreate,
   TurnoResumen,
+  VerificacionComprobante,
 } from '../types';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
+// Desde otro equipo de la red (el celular de un cliente), «localhost» sería ese equipo: se usa la dirección de la página.
+const API_URL = (import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1').replace('localhost', window.location.hostname);
 
 // RNF-04: la sesión viaja en una cookie httpOnly que el navegador envía solo (withCredentials); este código
 // nunca la lee. El encabezado X-Requested-With es la marca de la aplicación que el backend exige en las
@@ -182,6 +193,39 @@ export const api = {
     }
   },
 
+  // --- El cliente en su habitación (migración 013): sin sesión, con el enlace de su ticket ---
+  getEstadiaCliente: async (token: string): Promise<EstadiaCliente> => (await http.get(`/cliente/${token}`)).data,
+
+  pedirCliente: async (token: string, pedido: { tipo: string; articulo_id?: number; cantidad?: number; minutos?: number; medio_pago?: string }) =>
+    (await http.post(`/cliente/${token}/pedidos`, pedido)).data,
+
+  pedirCarrito: async (token: string, lineas: { articulo_id: number; cantidad: number }[]) =>
+    (await http.post(`/cliente/${token}/carrito`, { lineas })).data,
+
+  calificarEstadia: async (token: string, puntaje: number, problemas: number) =>
+    (await http.post(`/cliente/${token}/calificacion`, { puntaje, problemas })).data,
+
+  // --- Lo que pide el cliente, en la ventanilla ---
+  getTicket: async (turno_id: string): Promise<TicketCliente> => (await http.get(`/turnos/${turno_id}/ticket`)).data,
+
+  getPedidosCliente: async (): Promise<PedidoVentanilla[]> => (await http.get('/pedidos-cliente/')).data,
+
+  llevarPedidoCliente: async (id: number) => (await http.post(`/pedidos-cliente/${id}/llevar`)).data,
+
+  atenderPedidoCliente: async (id: number) => (await http.post(`/pedidos-cliente/${id}/atender`)).data,
+
+  rechazarPedidoCliente: async (id: number) => (await http.post(`/pedidos-cliente/${id}/rechazar`)).data,
+
+  // --- Comprobantes verificables (migración 012) ---
+  getIntegridad: async (): Promise<IntegridadComprobantes> => (await http.get('/arqueos/integridad')).data,
+
+  verificarComprobante: async (codigo: string): Promise<VerificacionComprobante> =>
+    (await http.get(`/arqueos/verificar/${encodeURIComponent(codigo)}`)).data,
+
+  // --- Gemelo del motel ---
+  probarEscenario: async (escenario: EscenarioGemelo): Promise<ResultadoGemelo> =>
+    (await http.post('/inteligencia/gemelo', escenario)).data,
+
   // --- Rotación (migración 011): próxima libre, línea de tiempo y clientes perdidos ---
   getProximaLibre: async (): Promise<ProximaLibre> => (await http.get('/habitaciones/proxima-libre')).data,
 
@@ -266,6 +310,16 @@ export const api = {
 
   getTarifasDe: async (categoriaId: number): Promise<Tarifa[]> =>
     (await http.get('/configuracion/tarifas', { params: { categoria_id: categoriaId } })).data,
+
+  // --- Tarifas especiales por día y franja (migración 014) ---
+  altaFranja: async (datos: FranjaAlta): Promise<Franja> => (await http.post('/configuracion/franjas', datos)).data,
+
+  cambiarFranja: async (id: number, datos: FranjaCambio): Promise<Franja> =>
+    (await http.patch(`/configuracion/franjas/${id}`, datos)).data,
+
+  bajaFranja: async (id: number): Promise<void> => {
+    await http.delete(`/configuracion/franjas/${id}`);
+  },
 
   // --- Mi perfil ---
   getPerfil: async (): Promise<Perfil> => (await http.get('/perfil/')).data,

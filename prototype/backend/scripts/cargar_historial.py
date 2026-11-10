@@ -35,6 +35,7 @@ from app.core.config import settings
 from app.core.inquilino import CLAVE
 from app.models.arqueo import ArqueoCaja
 from app.models.articulo import Articulo
+from app.models.calificacion import Calificacion
 from app.models.categoria import CategoriaHabitacion
 from app.models.cliente_perdido import ESPERA, PRECIO, SIN_LUGAR, ClientePerdido
 from app.models.configuracion import ConfiguracionCaja
@@ -48,6 +49,7 @@ from app.models.operador import ROL_OPERADOR, Operador
 from app.models.pago import Pago
 from app.models.tarifa import Tarifa
 from app.models.turno import Turno
+from app.services import franjas, sellos
 from app.services.billing_service import calcular_sobreturno
 from app.services.caja import clasificar_diferencia
 
@@ -163,7 +165,9 @@ async def generar_historial(
             )
         ).scalars()
     )
-    tarifas = {t.categoria_id: t for t in (await db.execute(select(Tarifa).where(Tarifa.vigente.is_(True)))).scalars()}
+    # Cada turno se liquida con lo que regía cuando entró: la tarifa especial de esa hora o la general.
+    tarifario = await franjas.tarifario(db)
+    tarifas = tarifario.generales
     categorias = {
         c.id: c
         for c in (await db.execute(select(CategoriaHabitacion).where(CategoriaHabitacion.activa.is_(True)))).scalars()
@@ -308,7 +312,7 @@ async def generar_historial(
         if rng_extra.random() < SE_VAN_POR_PRECIO:
             perdido(llegada + timedelta(minutes=1), PRECIO, preferida)
 
-        tarifa = tarifas[elegida.categoria_id]
+        tarifa = tarifario.en(elegida.categoria_id, llegada).tarifa
         nombre = categorias[elegida.categoria_id].nombre.lower() if elegida.categoria_id in categorias else ""
         minutos = _duracion(rng, tarifa, nocturno, elegida.categoria_id == premium, SE_QUEDA_MAS.get(nombre, 0.3))
         salida = llegada + timedelta(minutes=minutos)
@@ -439,6 +443,9 @@ async def generar_historial(
             )
         )
         contador["arqueos"] += 1
+    await db.flush()
+    # Comprobantes verificables: la cadena de huellas, en orden, como si cada arqueo se hubiera sellado al confirmarse.
+    await sellos.sellar_pendientes(db)
 
     # Stock final: cada artículo queda con unos días de cobertura según lo que se vendió (algunos casi agotados).
     for i, articulo in enumerate(articulos):
@@ -446,6 +453,53 @@ async def generar_historial(
         articulo.stock_actual = max(0, round(por_dia * COBERTURA_DIAS[i % len(COBERTURA_DIAS)]))
     await db.commit()
     return contador
+
+
+# Opiniones de ejemplo: cuántos califican, con qué puntajes y qué marcan los que no quedaron conformes. En la habitación
+# poco usada falla el aire: es lo mismo que cuenta su novedad y lo que detecta la inteligencia.
+CALIFICAN = 0.22
+PUNTAJES = ((5, 0.56), (4, 0.27), (3, 0.1), (2, 0.05), (1, 0.02))
+PUNTAJES_CON_FALLA = ((4, 0.2), (3, 0.34), (2, 0.3), (1, 0.16))
+PROBLEMAS_COMUNES = ((1, 0.28), (2, 0.24), (8, 0.2), (16, 0.16), (32, 0.12))
+AIRE_Y_RUIDO = 4 | 2
+
+
+async def agregar_opiniones(db: AsyncSession, semilla: int, habitacion_poco_usada: int | None = None) -> int:
+    """Calificaciones de los turnos ya cobrados. Como el resto del historial, va como dueño y con replica: el trigger no
+    dejaría calificar estadías viejas."""
+    if db.get_bind().dialect.name == "postgresql":
+        await db.execute(text("SET LOCAL session_replication_role = replica"))
+    rng = random.Random(semilla + 2)
+    numeros = {h.id: h.numero for h in (await db.execute(select(Habitacion))).scalars()}
+    turnos = (
+        await db.execute(
+            select(Turno.id, Turno.habitacion_id, Turno.hora_fin)
+            .where(Turno.estado == "FINALIZADO")
+            .order_by(Turno.hora_fin, Turno.id)
+        )
+    ).all()
+    cantidad = 0
+    for turno_id, habitacion_id, hora_fin in turnos:
+        if rng.random() >= CALIFICAN:
+            continue
+        con_falla = habitacion_poco_usada is not None and numeros.get(habitacion_id) == habitacion_poco_usada
+        puntaje = _elegir(rng, PUNTAJES_CON_FALLA if con_falla else PUNTAJES)
+        problemas = 0
+        if con_falla and puntaje <= 3:
+            problemas = AIRE_Y_RUIDO if rng.random() < 0.6 else 4
+        elif puntaje <= 3:
+            problemas = _elegir(rng, PROBLEMAS_COMUNES)
+        db.add(
+            Calificacion(
+                turno_id=turno_id,
+                habitacion_id=habitacion_id,
+                puntaje=puntaje,
+                problemas=problemas,
+                creado_en=hora_fin + timedelta(minutes=rng.randint(1, 30)),
+            )
+        )
+        cantidad += 1
+    return cantidad
 
 
 # Artículos que se suman al catálogo de Motel C.C. para que el inventario tenga variedad.
@@ -530,6 +584,10 @@ async def cargar() -> None:
             async with sesiones(info={CLAVE: establecimiento.id}) as db:
                 if (await db.execute(select(Turno.id).limit(1))).first():
                     print(f"{codigo}: ya tiene turnos, no se agrega historial.")
+                    if not (await db.execute(select(Calificacion.id).limit(1))).first():
+                        opiniones = await agregar_opiniones(db, 7, poco_usada)
+                        await db.commit()
+                        print(f"{codigo}: {opiniones} opiniones de clientes agregadas.")
                     continue
                 existentes = set((await db.execute(select(Articulo.codigo))).scalars())
                 for cod, descripcion, precio, rubro in ARTICULOS_EXTRA.get(codigo, []):
@@ -553,11 +611,14 @@ async def cargar() -> None:
                     semilla=11 if codigo == "luna" else 7,
                 )
             async with sesiones(info={CLAVE: establecimiento.id}) as db:
+                opiniones = await agregar_opiniones(db, 11 if codigo == "luna" else 7, poco_usada)
+                await db.commit()
+            async with sesiones(info={CLAVE: establecimiento.id}) as db:
                 await _novedades_demo(db, codigo, inicio_de_franja(datetime.now(UTC), ZoneInfo(settings.ZONA_HORARIA)))
             print(
                 f"{codigo}: {dias} días de historial · {resultado.get('turnos', 0)} turnos, "
                 f"{resultado.get('consumos', 0)} consumos, {resultado.get('guardias', 0)} guardias arqueadas, "
-                f"{resultado.get('registrados', 0)} clientes perdidos registrados."
+                f"{resultado.get('registrados', 0)} clientes perdidos registrados, {opiniones} opiniones."
             )
     finally:
         await engine.dispose()

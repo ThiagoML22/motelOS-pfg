@@ -30,13 +30,16 @@ from app.models.operador import ROL_ADMINISTRADOR, Operador
 from app.models.pedido import PENDIENTE, PedidoReposicion
 from app.models.tarifa import Tarifa
 from app.models.turno import Turno
-from app.services import conocimiento, rotacion
+from app.services import acciones, conocimiento, franjas, rotacion
 from app.services import inteligencia as ia
 from app.services.asistente import INTENCIONES, _intencion, normalizar
 from app.services.asistente import responder as responder_analisis
 from app.services.caja import guardia_abierta
 from app.services.liquidacion import con_zona, liquidar_turno
 
+ESPECIALES = re.compile(r"tarifas? especial(es)?")
+CUANDO_CAMBIA = re.compile(r"cuando (cambia|sube|baja) (la tarifa|el precio)")
+RIGE = re.compile(r"\b(rige|corre|vigente|actual|ahora)\b")
 # Frases que piden instrucciones: con ellas, un tema de ayuda gana sobre el análisis de datos.
 COMO = re.compile(
     r"\b(como|donde|que hago|que tengo que|puedo|se puede|hay que|pasos|ayuda|explica|para que sirve|no puedo"
@@ -290,7 +293,7 @@ TEMAS: tuple[Tema, ...] = (
             "Ctrl+K o «/» (o la lupa del encabezado) abre el buscador.",
             "Escribí una sección, el número de una habitación («7») o una acción («novedad», «oscuro»).",
             "Con las flechas elegís y con Enter vas.",
-            "Fuera de los campos: «A» abre el asistente, «N» deja una novedad, «L» cambia entre grilla y línea de "
+            "Fuera de los campos: «A» abre a Mot, «N» deja una novedad, «L» cambia entre grilla y línea de "
             "tiempo y los números 1, 2, 3… van a cada sección.",
             "«?» muestra todos los atajos.",
         ),
@@ -327,6 +330,52 @@ TEMAS: tuple[Tema, ...] = (
             "Al confirmar se suma al stock y queda en Actividad a tu nombre.",
         ),
         "inventario",
+    ),
+    Tema(
+        "imprimir_ticket",
+        "Darle el ticket con QR al cliente",
+        (r"ticket", r"\bqr\b.*\bcliente\b", r"\bcliente\b.*\bqr\b"),
+        (
+            "Abrí la habitación ocupada y tocá «Ticket con QR».",
+            "Imprimilo y dáselo al cliente: con el QR ve su tiempo y su cuenta y pide sin llamar.",
+            "Vale mientras dure el turno; no pidas ni guardes ningún dato.",
+        ),
+        "dashboard",
+    ),
+    Tema(
+        "atender_pedido",
+        "Atender un pedido del cliente",
+        (r"(atend|entreg|rechaz)\w* .*pedido", r"pedido .*(cliente|habitacion)"),
+        (
+            "Cuando el cliente pide algo, suena un aviso y su tarjeta muestra el pedido.",
+            "Abrí la habitación: en «Pedidos del cliente» tocá «Lo llevo» y el cliente lo ve en camino.",
+            "Al dárselo tocá «Entregado», o «No hay» si falta algo. Recién ahí se carga a la cuenta y se descuenta "
+            "del stock.",
+        ),
+        "dashboard",
+    ),
+    Tema(
+        "cliente_avisa",
+        "El cliente pide la cuenta o se queda más tiempo",
+        (r"(pide|pidio|pidieron) la cuenta", r"(cliente|habitacion) .*(se queda|quedarse) .*(mas|tiempo)"),
+        (
+            "Con el QR, el cliente puede avisar que se va y cómo paga, o que se queda más. Lo ves en su tarjeta.",
+            "Si pidió la cuenta, al tocar «Cobrar» ya está elegido el medio que dijo. Podés cambiarlo.",
+            "El aviso no cobra nada: la cuenta sale del tiempo real. También mejora la estimación de la próxima libre.",
+        ),
+        "dashboard",
+    ),
+    Tema(
+        "ver_opiniones",
+        "Ver qué opinan los clientes",
+        (r"(ver|mirar|donde) .*(opinion|calificacion|queja)", r"que opinan los clientes"),
+        (
+            "En Inteligencia, en «Lo que dicen los clientes».",
+            "Ves el promedio, lo que más marcan y cómo está cada habitación.",
+            "Son anónimas: solo hay totales, nunca una opinión suelta con su hora.",
+        ),
+        "inteligencia",
+        GERENCIA,
     ),
     Tema(
         "cliente_perdido",
@@ -439,6 +488,25 @@ TEMAS: tuple[Tema, ...] = (
         GERENCIA,
     ),
     Tema(
+        "config_franjas",
+        "Crear una tarifa especial por día y hora",
+        (
+            r"tarifas? especial",
+            r"(cre|agreg|pon|carg|arm)\w* .{0,20}tarifa .{0,12}(noche|fin de semana|feriado|domingo|sabado|viernes)",
+            r"(cobrar|precios?|tarifas?) (mas |menos |distinto |diferente )?(de noche|el fin de semana|los fines de "
+            r"semana|por (dia|hora|horario))",
+        ),
+        (
+            "Configuración → «Categorías y tarifas» → «Tarifas especiales» de la categoría.",
+            "Arrastrá sobre el mapa de la semana o usá un atajo, y completá nombre, días, horario y precio.",
+            "Los días son los de comienzo: la noche del viernes sigue el sábado de madrugada. Dos tarifas especiales "
+            "de una categoría no pueden pisarse.",
+            "Al abrirse, el turno toma la que rige en ese momento y la conserva hasta el cobro.",
+        ),
+        "configuracion",
+        GERENCIA,
+    ),
+    Tema(
         "config_tarifas",
         "Cambiar tarifas y categorías",
         (
@@ -507,6 +575,37 @@ TEMAS: tuple[Tema, ...] = (
         GERENCIA,
     ),
     Tema(
+        "verificar_comprobante",
+        "Verificar un comprobante",
+        (
+            r"\bverific",
+            r"verific\w* (un |el |los |este )?(comprobante|arqueo)",
+            r"\bintegridad\b",
+            r"(alteraron|cambiaron|tocaron) .*arqueo",
+        ),
+        (
+            "En «Control de caja», en «Integridad de los comprobantes».",
+            "«Verificar ahora» recalcula la huella de todos los arqueos y marca los que ya no coinciden.",
+            "Para uno solo, escribí el código impreso en el papel o escaneá su QR.",
+            "Si el papel y el sistema no coinciden, el arqueo cambió después de firmarse.",
+        ),
+        "gerencia",
+        GERENCIA,
+    ),
+    Tema(
+        "usar_gemelo",
+        "Probar un cambio en el gemelo del motel",
+        (r"(uso|usar|abro|abrir|pruebo|probar)\w* (el )?(gemelo|simulador)", r"probar un cambio"),
+        (
+            "En «Inteligencia», en «Gemelo del motel».",
+            "Mové la limpieza, las habitaciones o el precio, o tocá uno de los ejemplos.",
+            "Compara las condiciones de hoy con las nuevas: turnos, clientes perdidos e ingresos por mes.",
+            "No cambia nada del sistema; también me lo podés preguntar: «¿qué pasa si agrego una VIP?».",
+        ),
+        "inteligencia",
+        GERENCIA,
+    ),
+    Tema(
         "control_caja",
         "Revisar arqueos y faltantes",
         (r"control de caja", r"historial de (caja|arqueos)", r"ver (los )?arqueos"),
@@ -549,6 +648,8 @@ class Respuesta:
     sugerencias: list[str] = field(default_factory=list)
     detalle: str | None = None
     tabla: dict | None = None
+    # Una orden lista para confirmar (services/acciones.py): el asistente nunca la ejecuta por su cuenta.
+    confirmacion: dict | None = None
 
     def como_dict(self) -> dict:
         return {
@@ -560,6 +661,7 @@ class Respuesta:
             "sugerencias": self.sugerencias,
             "pasos": self.pasos,
             "acciones": self.acciones,
+            "confirmacion": self.confirmacion,
         }
 
 
@@ -603,6 +705,7 @@ PANTALLAS = {
             "Arriba filtrás por estado o categoría y ordenás por número o por vencimiento.",
             "«Línea de tiempo» muestra las últimas 24 horas de cada habitación.",
             "Con dos disponibles o menos aparece cuándo se libera la próxima; si alguien se va, «Se fue un cliente».",
+            "Los pedidos que hace el cliente con su QR aparecen en su tarjeta.",
             "Las novedades de la guardia están sobre la grilla; «Dejar novedad» agrega una.",
         ),
         (
@@ -654,13 +757,14 @@ PANTALLAS = {
             "Si un conserje se fue sin cerrar, arriba aparece su guardia con «Cierre supervisado».",
             "Abrí un mes para ver sus días; tocá un arqueo para ver sus cobros y descargar el PDF.",
             "Cada mes se exporta en PDF (informe) o Excel (planilla); el filtro por conserje se respeta.",
+            "«Integridad de los comprobantes» verifica que ningún arqueo haya cambiado después de firmarse.",
         ),
         (),
         (
             "¿Cómo exporto los arqueos del mes?",
             "¿Quién tuvo más faltantes en los últimos 30 días?",
             "¿Qué es la TDC?",
-            "¿Cómo hago un cierre supervisado?",
+            "¿Cómo verifico un comprobante?",
         ),
         GERENCIA,
     ),
@@ -669,7 +773,8 @@ PANTALLAS = {
         "Es donde la gerencia ajusta el motel: categorías y tarifas, habitaciones, artículos, conserjes, fondo de "
         "cambio y apariencia. Cada cambio queda en Actividad.",
         (
-            "«Categorías y tarifas»: la tarifa de cada categoría, con el simulador de lo que paga el cliente.",
+            "«Categorías y tarifas»: la tarifa de cada categoría, con el simulador de lo que paga el cliente, y sus "
+            "tarifas especiales por día y hora en un mapa de la semana.",
             "«Habitaciones» y «Artículos»: altas, bajas, números, categorías y precios.",
             "«Conserjes»: altas, bajas y clave restablecida.",
             "«Fondo de cambio» y «Apariencia y avisos»: el fondo de cada guardia, el color, el eslogan y las alertas.",
@@ -677,9 +782,9 @@ PANTALLAS = {
         (),
         (
             "¿Cómo cambio una tarifa?",
+            "¿Cómo creo una tarifa especial?",
             "¿Cómo agrego una habitación?",
             "¿Cómo doy de alta un conserje?",
-            "¿Cómo cambio el fondo de cambio?",
         ),
         GERENCIA,
     ),
@@ -698,20 +803,21 @@ PANTALLAS = {
     "inteligencia": Pantalla(
         "Inteligencia",
         "Es el análisis del motel calculado en su propio servidor, sin internet: resumen, alertas, pronóstico de "
-        "turnos, demanda por hora, clientes que se fueron, limpieza, sugerencias de tarifa y reposición sugerida. "
-        "Solo usa lo ya arqueado.",
+        "turnos, demanda por hora, clientes que se fueron, limpieza, el gemelo del motel, sugerencias de tarifa y "
+        "reposición sugerida. Solo usa lo ya arqueado.",
         (
             "Los gráficos muestran cada valor al pasar el mouse.",
+            "En el gemelo del motel probás un cambio de limpieza, habitaciones o precio antes de hacerlo.",
             "«Ver y aplicar» en una sugerencia de tarifa muestra el efecto estimado antes de confirmar.",
             "«Armar pedido con esto» convierte la reposición sugerida en un pedido al proveedor.",
-            "A la derecha está el asistente: preguntale por los datos con tus palabras.",
+            "A la derecha estoy yo, Mot: preguntame por los datos con tus palabras.",
         ),
         (),
         (
             "¿Cuántos turnos esperamos mañana?",
+            "¿Qué pasa si la limpieza tarda 20 minutos?",
             "¿Cuántos clientes perdimos?",
-            "¿Cuánto tarda la limpieza?",
-            "¿Cómo aplico una sugerencia de tarifa?",
+            "¿Qué es el gemelo del motel?",
         ),
         GERENCIA,
     ),
@@ -782,9 +888,12 @@ class Ventanilla:
             ).scalars()
         )
         self.categorias = {c.id: c for c in (await self.db.execute(select(CategoriaHabitacion))).scalars()}
-        self.tarifas = {
-            t.categoria_id: t for t in (await self.db.execute(select(Tarifa).where(Tarifa.vigente.is_(True)))).scalars()
+        self.tarifario = await franjas.tarifario(self.db)
+        # Lo que tomaría un turno abierto ahora: la tarifa especial de esta hora o la general.
+        self.vigentes = {
+            c.id: v for c in self.categorias.values() if (v := self.tarifario.en(c.id, self.ahora)) is not None
         }
+        self.tarifas = {categoria_id: v.tarifa for categoria_id, v in self.vigentes.items()}
         self.turnos = {
             t.habitacion_id: t
             for t in (await self.db.execute(select(Turno).where(Turno.estado == "En Curso"))).scalars()
@@ -945,7 +1054,9 @@ class Ventanilla:
             detalle="Calculado ahora con la tarifa del turno (RN-DER-01).",
         )
 
-    def tarifas_texto(self, categoria: CategoriaHabitacion | None) -> Respuesta:
+    def tarifas_texto(
+        self, categoria: CategoriaHabitacion | None, momento: datetime | None = None, cuando: str | None = None
+    ) -> Respuesta:
         elegidas = (
             [categoria]
             if categoria
@@ -955,11 +1066,13 @@ class Ventanilla:
         )
         partes = []
         for c in elegidas:
-            t = self.tarifas.get(c.id)
-            if t is None:
+            vigente = self.tarifario.en(c.id, momento or self.ahora)
+            if vigente is None:
                 continue
+            t = vigente.tarifa
+            nombre = f"{c.nombre} ({vigente.franja.nombre})" if vigente.franja else c.nombre
             texto = (
-                f"{c.nombre}: {ia.pesos(float(t.tarifa_base))} por {ia.minutos_texto(t.estadia_base_min)}; después "
+                f"{nombre}: {ia.pesos(float(t.tarifa_base))} por {ia.minutos_texto(t.estadia_base_min)}; después "
                 f"{ia.pesos(float(t.tarifa_fraccion))} cada {t.fraccion_min} min"
             )
             extras = []
@@ -970,8 +1083,60 @@ class Ventanilla:
             partes.append(texto + (f" ({', '.join(extras)})" if extras else ""))
         if not partes:
             return Respuesta("No encuentro tarifas vigentes.", "tarifas")
+        cierre = ""
+        if categoria is not None and momento is None:
+            vigente = self.vigentes.get(categoria.id)
+            if vigente is not None and vigente.cambia_en and vigente.siguiente:
+                proxima = vigente.siguiente_franja.nombre if vigente.siguiente_franja else "tarifa general"
+                cuando_cambia = franjas.cuando_texto(franjas.local(vigente.cambia_en), franjas.local(self.ahora))
+                precio = ia.pesos(float(vigente.siguiente.tarifa_base))
+                cierre = f" {cuando_cambia.capitalize()} pasa a {precio} ({proxima})."
         return Respuesta(
-            ". ".join(partes) + ".", "tarifas", detalle="Tarifas vigentes para los turnos que se abran ahora."
+            ". ".join(partes) + "." + cierre,
+            "tarifas",
+            detalle=(
+                f"Para un turno que se abra {cuando}: lo conserva hasta el cobro."
+                if cuando
+                else "Tarifas vigentes para los turnos que se abran ahora."
+            ),
+        )
+
+    def cambios_texto(self) -> Respuesta:
+        """Cuándo cambia lo que rige en cada categoría."""
+        ahora = franjas.local(self.ahora)
+        partes = []
+        for c in sorted((c for c in self.categorias.values() if c.activa), key=lambda c: c.orden):
+            vigente = self.vigentes.get(c.id)
+            if vigente is not None and vigente.cambia_en and vigente.siguiente:
+                proxima = vigente.siguiente_franja.nombre if vigente.siguiente_franja else "tarifa general"
+                cuando = franjas.cuando_texto(franjas.local(vigente.cambia_en), ahora)
+                precio = ia.pesos(float(vigente.siguiente.tarifa_base))
+                partes.append(f"{c.nombre}: {cuando} pasa a {precio} ({proxima})")
+        if not partes:
+            return Respuesta("No hay cambios por delante: rige la tarifa general toda la semana.", "tarifas")
+        return Respuesta(". ".join(partes) + ".", "tarifas", detalle="Los turnos abiertos conservan su tarifa.")
+
+    def especiales_texto(self, categoria: CategoriaHabitacion | None) -> Respuesta:
+        """Las tarifas especiales de una categoría, o las de todas."""
+        activas = sorted((c for c in self.categorias.values() if c.activa), key=lambda c: c.orden)
+        elegidas = [categoria] if categoria else activas
+        filas = []
+        for c in elegidas:
+            for f in self.tarifario.franjas.get(c.id, []):
+                t = self.tarifario.de_franja.get(f.id)
+                if t is not None:
+                    filas.append(
+                        f"{'' if categoria else f'{c.nombre}: '}{f.nombre}, "
+                        f"{franjas.regla_texto(f.dias, f.desde, f.hasta)}, {ia.pesos(float(t.tarifa_base))} por "
+                        f"{ia.minutos_texto(t.estadia_base_min)}"
+                    )
+        if not filas:
+            sujeto = f"{categoria.nombre} no tiene" if categoria else "No hay"
+            return Respuesta(f"{sujeto} tarifas especiales: rige la tarifa general toda la semana.", "tarifas")
+        return Respuesta(
+            "Tarifas especiales: " + "; ".join(filas) + ".",
+            "tarifas",
+            detalle="Fuera de esos horarios rige la general. El turno conserva la tarifa con la que se abrió.",
         )
 
     async def stock(self, texto: str) -> Respuesta | None:
@@ -998,6 +1163,7 @@ class Ventanilla:
         """Palabras del motel (categorías, artículos, personal) que el corrector no debe tocar."""
         textos = [c.nombre for c in self.categorias.values()] + [a.descripcion for a in self.articulos]
         textos += list(self.nombres.values())
+        textos += [f.nombre for lista in self.tarifario.franjas.values() for f in lista]
         return {p for t in textos for p in normalizar(t).split() if len(p) >= 4}
 
     def estado_general(self) -> Respuesta:
@@ -1113,7 +1279,7 @@ ENTRADAS = TEMAS + conocimiento.DEFINICIONES
 # Lo que un conserje puede preguntar del análisis: no muestra dinero (RN-RES-03 y datos de la gerencia).
 ANALISIS_CONSERJE = {"horas", "pronostico", "estadia", "ocupacion"}
 # Lo que es dinero o caja: al conserje se le dice que es de la gerencia sin buscar otra respuesta.
-DINERO = {"ingresos", "caja", "ticket", "medios", "sobreturno", "resumen", "perdidos"}
+DINERO = {"ingresos", "caja", "ticket", "medios", "sobreturno", "resumen", "perdidos", "gemelo", "opiniones"}
 INTENCIONES_ANALISIS = {nombre for nombre, _ in INTENCIONES}
 
 
@@ -1139,6 +1305,16 @@ def _como_pregunta(entrada) -> str:
     return f"¿{entrada.titulo}?" if entrada.titulo.lower().startswith(("cómo", "qué", "por qué")) else entrada.titulo
 
 
+# Le hablan por su nombre: «Mot, pasá la 7 a limpieza», «hola Mot», «gracias, Mot». «Moto» es otra palabra.
+NOMBRE_AL_INICIO = re.compile(r"^[\s¿¡]*(?:(?:hola|che|ey|eh|dale)[\s,]+)?mot\b[\s,:;.!?]*", re.IGNORECASE)
+NOMBRE_AL_FINAL = re.compile(r"[\s,]+mot[\s.!?]*$", re.IGNORECASE)
+SOBRE_MOT = re.compile(r"\b(quien|que) es mot\b|\bsos mot\b|\bcomo te llamas\b|\bcual es tu nombre\b|\btu nombre\b")
+
+
+def sin_nombre(pregunta: str) -> str:
+    return NOMBRE_AL_FINAL.sub("", NOMBRE_AL_INICIO.sub("", pregunta, count=1))
+
+
 CHARLA = (
     (re.compile(r"^(hola|buen(os|as)? (dia|dias|tarde|tardes|noche|noches)|que tal|buenas)\b"), "saludo"),
     (re.compile(r"^(gracias|muchas gracias|genial|perfecto|joya|barbaro|listo)\b"), "gracias"),
@@ -1158,10 +1334,11 @@ def _charla(tipo: str, es_gerencia: bool) -> dict:
             "¡De nada! Si necesitás algo más, preguntame.", "charla", sugerencias=sugerencias[:3]
         ).como_dict()
     texto = (
-        "Soy el asistente de MotelOS y funciono acá mismo, sin internet. Te explico cómo usar cualquier parte del "
-        "sistema y qué significa cada cosa («¿qué es la tolerancia?»), y te digo cómo está la ventanilla ahora "
-        "(libres, ocupadas, vencimientos, la cuenta de una habitación, stock, novedades, pedidos). Si me preguntás "
-        "«¿qué hago acá?», te explico la pantalla en la que estás."
+        "Soy Mot, el asistente de MotelOS, y funciono acá mismo, sin internet. Hago lo que me pidas, con tu "
+        "confirmación («pasá la 7 a mantenimiento», «cargale dos aguas a la 5»). Te explico cómo usar cualquier "
+        "parte del sistema y qué significa cada cosa («¿qué es la tolerancia?»), y te digo cómo está la ventanilla "
+        "ahora (libres, ocupadas, vencimientos, la cuenta de una habitación, stock, novedades, pedidos). Si me "
+        "preguntás «¿qué hago acá?», te explico la pantalla en la que estás."
     )
     if es_gerencia:
         texto += (
@@ -1199,9 +1376,14 @@ async def responder(
     es_gerencia = operador.rol == ROL_ADMINISTRADOR
     ventanilla = Ventanilla(db)
     await ventanilla.cargar()
+    completa = normalizar(pregunta)
+    if SOBRE_MOT.search(completa):
+        return _charla("capacidades", es_gerencia), completa
+    pregunta = sin_nombre(pregunta)
     original = normalizar(pregunta)
     if not original:
-        return _charla("capacidades", es_gerencia), original
+        # Solo lo llamaron («Mot», «hola Mot»): saluda. Sin nada escrito, cuenta qué puede hacer.
+        return _charla("saludo" if completa else "capacidades", es_gerencia), original
 
     # 0. Saludos, agradecimientos y «¿qué podés hacer?» (antes de corregir: son palabras de conversación).
     for patron, tipo in CHARLA:
@@ -1213,8 +1395,29 @@ async def responder(
         return sobre_pantalla.como_dict(), original
     texto = conocimiento.corregir(original, ENTRADAS, ventanilla.palabras_propias())
 
+    # Una orden («pasá la 7 a mantenimiento»): se propone para que quien atiende la confirme.
+    guardia = await guardia_abierta(db)
+    propuesta = acciones.interpretar(
+        pregunta, texto, ventanilla, guardia is not None and guardia.operador_id == operador.id
+    )
+    if propuesta is not None:
+        return (
+            Respuesta(
+                propuesta.texto,
+                propuesta.intencion,
+                acciones=propuesta.acciones,
+                detalle=propuesta.detalle,
+                confirmacion=propuesta.confirmacion,
+            ).como_dict(),
+            texto,
+        )
+
+    # «¿Cuándo cambia la tarifa?» va antes que todo lo demás: la guardia también «cambia».
+    if CUANDO_CAMBIA.search(texto):
+        return ventanilla.cambios_texto().como_dict(), texto
+
     # 1. Situaciones conocidas («me equivoqué en el arqueo») y «¿qué es…?», «¿para qué sirve…?»: el glosario.
-    definicion = conocimiento.situacion(texto, es_gerencia) or conocimiento.definicion(texto, es_gerencia)
+    definicion = conocimiento.definicion(texto, es_gerencia) or conocimiento.situacion(texto, es_gerencia)
     if definicion is not None:
         return _respuesta_de(definicion, es_gerencia), texto
 
@@ -1229,7 +1432,10 @@ async def responder(
         return _respuesta_de(tema, es_gerencia), texto
 
     # 3. La ventanilla ahora (lo que el conserje ya ve en su pantalla).
-    vivo = await _ventanilla_ahora(ventanilla, texto, es_gerencia, anterior_intencion)
+    # «¿Qué pasa si la limpieza tarda 20 minutos?» es una simulación, no una pregunta por la limpieza de ahora.
+    vivo = None
+    if intencion_datos != "gemelo":
+        vivo = await _ventanilla_ahora(ventanilla, texto, es_gerencia, anterior_intencion)
     if vivo is not None:
         return vivo.como_dict(), texto
 
@@ -1247,7 +1453,7 @@ async def responder(
     )
     intencion_efectiva = intencion_datos or (anterior_intencion if seguimiento else None)
     fuera_de_alcance = Respuesta(
-        "Eso lo responde el asistente de la gerencia (ingresos, caja y análisis del motel). Yo te ayudo a usar el "
+        "Eso lo ve solo la gerencia (ingresos, caja y análisis del motel). Yo te ayudo a usar el "
         "sistema, te explico cómo funciona y te digo cómo está la ventanilla ahora.",
         "fuera_de_alcance",
         sugerencias=SUGERENCIAS_CONSERJE,
@@ -1326,7 +1532,13 @@ async def _ventanilla_ahora(
     ):
         return await ventanilla.cuenta(numero)
     categoria = ventanilla.categoria_mencionada(texto)
-    if (re.search(r"\b(cuanto (sale|cuesta|vale)|precios?|tarifas?)\b", texto) and (categoria or not es_gerencia)) or (
+    if ESPECIALES.search(texto):
+        return ventanilla.especiales_texto(categoria)
+    pide_precio = re.search(r"\b(cuanto (sale|cuesta|vale)|precios?|tarifas?)\b", texto)
+    momento = franjas.momento_mencionado(texto, franjas.local(ventanilla.ahora)) if pide_precio else None
+    if momento is not None:
+        return ventanilla.tarifas_texto(categoria, *momento)
+    if (pide_precio and (categoria or not es_gerencia or RIGE.search(texto))) or (
         anterior == "tarifas" and categoria is not None
     ):
         return ventanilla.tarifas_texto(categoria)

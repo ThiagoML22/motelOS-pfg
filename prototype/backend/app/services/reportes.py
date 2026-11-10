@@ -17,6 +17,7 @@ from app.models.guardia import Guardia
 from app.models.habitacion import Habitacion
 from app.models.operador import Operador
 from app.models.pago import Pago
+from app.models.sello_arqueo import SelloArqueo
 from app.models.tarifa import Tarifa
 from app.models.turno import Turno
 from app.schemas.caja import (
@@ -30,6 +31,7 @@ from app.schemas.caja import (
 )
 from app.services.caja import FALTANTE, SOBRANTE
 from app.services.liquidacion import con_zona
+from app.services.sellos import codigo_de
 
 
 def limites_del_dia(desde: date | None, hasta: date | None) -> tuple[datetime | None, datetime | None]:
@@ -106,7 +108,14 @@ async def detalle_de_arqueo(db: AsyncSession, arqueo: ArqueoCaja) -> ArqueoDetal
         for pago, numero in filas
     ]
     resumen = await resultado_de_arqueo(db, arqueo)
-    return ArqueoDetalle(**resumen.model_dump(), pagos=pagos)
+    sello = (await db.execute(select(SelloArqueo).where(SelloArqueo.arqueo_id == arqueo.id))).scalars().first()
+    return ArqueoDetalle(
+        **resumen.model_dump(),
+        pagos=pagos,
+        huella=sello.huella if sello else None,
+        codigo=codigo_de(sello.huella) if sello else None,
+        secuencia=sello.secuencia if sello else None,
+    )
 
 
 async def por_categoria(db: AsyncSession, desde: date | None, hasta: date | None) -> list[ResumenCategoria]:

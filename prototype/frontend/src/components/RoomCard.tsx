@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Bike, Car, CheckCircle2, Footprints, MoreVertical, Sparkles, Wrench } from 'lucide-react';
-import { Categoria, HabitacionConDetalles, RoomStatus } from '../types';
+import { BellRing, Bike, Car, CheckCircle2, Footprints, MoreVertical, Sparkles, Wrench } from 'lucide-react';
+import { Categoria, HabitacionConDetalles, PedidoVentanilla, RoomStatus } from '../types';
 import { formatDuration, formatMoney, formatRoomNumber } from '../utils/format';
 import { ESTADIA_BASE_MIN, elapsedMs, faseEstadia, formatMinutos, minutosExcedidos, minutosRestantes } from '../utils/turno';
 import { ChipCategoria } from './CategoriasConfig';
@@ -15,6 +15,7 @@ interface RoomCardProps {
   onClick: (room: HabitacionConDetalles) => void;
   onAddConsumo: (room: HabitacionConDetalles) => void;
   onChangeEstado: (room: HabitacionConDetalles, newState: RoomStatus) => void;
+  pedidos?: PedidoVentanilla[];
 }
 
 const CAMBIOS_ESTADO: { estado: RoomStatus; label: string; icon: React.ElementType }[] = [
@@ -26,7 +27,7 @@ const CAMBIOS_ESTADO: { estado: RoomStatus; label: string; icon: React.ElementTy
 const TIPO_ICON: Record<string, React.ElementType> = { Auto: Car, Moto: Bike, Peaton: Footprints };
 const TIPO_LABEL: Record<string, string> = { Auto: 'Auto', Moto: 'Moto', Peaton: 'Peatón' };
 
-const RoomCard: React.FC<RoomCardProps> = ({ room, categoria, now, onClick, onAddConsumo, onChangeEstado }) => {
+const RoomCard: React.FC<RoomCardProps> = ({ room, categoria, now, onClick, onAddConsumo, onChangeEstado, pedidos = [] }) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const meta = ESTADO_META[room.estado];
@@ -54,7 +55,8 @@ const RoomCard: React.FC<RoomCardProps> = ({ room, categoria, now, onClick, onAd
 
   const transcurrido = turno ? elapsedMs(turno, now) : 0;
   // El exceso se mide con la estadía base de la tarifa del turno (cada categoría tiene la suya).
-  const baseMin = turno?.estadia_base_min ?? categoria?.tarifa?.estadia_base_min ?? undefined;
+  const tarifa = categoria?.tarifa_ahora ?? categoria?.tarifa;
+  const baseMin = turno?.estadia_base_min ?? tarifa?.estadia_base_min ?? undefined;
   const fase = faseEstadia(transcurrido, baseMin);
   const faseMeta = FASE_META[fase];
   const barClass = turno && faseMeta.bar ? faseMeta.bar : meta.bar;
@@ -113,9 +115,12 @@ const RoomCard: React.FC<RoomCardProps> = ({ room, categoria, now, onClick, onAd
         ) : (
           <>
             <p className="text-sm text-muted">{meta.hint}</p>
-            {room.estado === 'Libre' && categoria?.tarifa && (
-              <p className="mt-1 text-xs tabular-nums text-subtle">
-                {formatMinutos(categoria.tarifa.estadia_base_min)} · {formatMoney(categoria.tarifa.tarifa_base)}
+            {room.estado === 'Libre' && tarifa && (
+              <p className="mt-1 flex min-w-0 items-baseline gap-1.5 text-xs tabular-nums text-subtle">
+                <span className="shrink-0">
+                  {formatMinutos(tarifa.estadia_base_min)} · {formatMoney(tarifa.tarifa_base)}
+                </span>
+                {tarifa.franja && <span className="truncate font-medium text-accent">{tarifa.franja}</span>}
               </p>
             )}
           </>
@@ -136,6 +141,22 @@ const RoomCard: React.FC<RoomCardProps> = ({ room, categoria, now, onClick, onAd
           </Button>
         ) : (
           <span />
+        )}
+
+        {/* Lo que pidió el cliente con su QR: se atiende abriendo la habitación. */}
+        {pedidos.length > 0 && (
+          <span title={pedidos.map((p) => (p.cantidad ? `${p.cantidad} × ${p.descripcion}` : p.descripcion)).join(' · ')} className="flex min-w-0 animate-pop-in items-center gap-1 rounded-full bg-warn-soft px-2 py-1 text-xs font-medium text-warn">
+            <BellRing className="h-3.5 w-3.5 shrink-0 animate-latido" aria-hidden="true" />
+            {/* Un carrito cuenta como un pedido. El cliente que pidió la cuenta se ve de lejos. */}
+            {pedidos.some((p) => p.tipo === 'SALIDA') ? (
+              <span>Se va</span>
+            ) : (
+              <>
+                <span className="tabular-nums">{new Set(pedidos.map((p) => p.lote ?? p.id)).size}</span>
+                <span className="sr-only">con pedidos del cliente</span>
+              </>
+            )}
+          </span>
         )}
 
         {room.estado !== 'Ocupada' && (

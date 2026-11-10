@@ -28,6 +28,7 @@ from app.models.arqueo import ArqueoCaja
 from app.models.guardia import Guardia
 from app.models.operador import Operador
 from app.models.pago import Pago
+from app.services import sellos
 from app.services.configuracion import fondo_de_cambio
 from app.services.liquidacion import con_zona
 
@@ -221,6 +222,9 @@ async def _registrar_arqueo(
     db.add(arqueo)
     # El arqueo se inserta antes de cerrar la guardia: en la base, una guardia no se cierra sin su arqueo.
     await db.flush()
+    # La huella se calcula con lo que quedó guardado (la base recalcula los totales y pone la hora).
+    await db.refresh(arqueo)
+    await sellos.sellar(db, arqueo)
     guardia.estado = "Cerrada"
     guardia.cerrada_en = datetime.now(UTC)
     await db.commit()

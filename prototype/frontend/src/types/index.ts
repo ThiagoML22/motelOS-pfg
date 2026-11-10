@@ -29,6 +29,8 @@ export interface TurnoCreate {
   habitacion_id: number;
   identificador_vehicular?: string;
   tipo_cliente: TipoCliente;
+  // La tarifa que se le mostró a quien atiende: si justo cambió, el servidor no abre el turno.
+  tarifa_id?: number;
 }
 
 export interface Consumo {
@@ -53,6 +55,7 @@ export interface Articulo {
 export interface TarifaDelTurno {
   categoria?: string | null;
   color?: string | null;
+  franja?: string | null;
   tarifa_base: number;
   estadia_base_min: number;
   fraccion_min: number;
@@ -209,6 +212,9 @@ export interface PagoDetalle {
 
 export interface ArqueoDetalle extends Arqueo {
   pagos: PagoDetalle[];
+  huella?: string | null;
+  codigo?: string | null;
+  secuencia?: number | null;
 }
 
 export interface MetricaCaja {
@@ -242,9 +248,41 @@ export interface Tarifa extends TarifaDatos {
   categoria_id: number;
   vigente: boolean;
   vigente_desde: string;
+  franja_id?: number | null;
+  franja?: string | null;
 }
 
-// Categoría de habitación (Simple, Especial, VIP...) con su tarifa vigente.
+// Tarifa especial (migración 014): cuándo rige y con qué tarifa. `dias` es una máscara: lunes = 1 ... domingo = 64.
+export interface Franja {
+  id: number;
+  categoria_id: number;
+  nombre: string;
+  dias: number;
+  desde: string;
+  hasta: string;
+  regla: string;
+  tarifa?: Tarifa | null;
+}
+
+export interface FranjaAlta {
+  categoria_id: number;
+  nombre: string;
+  dias: number;
+  desde: string;
+  hasta: string;
+  tarifa: TarifaDatos;
+}
+
+export type FranjaCambio = Partial<Omit<FranjaAlta, 'categoria_id'>>;
+
+// Lo que tomaría un turno abierto ahora y cuándo deja de regir.
+export interface TarifaAhora extends Tarifa {
+  cambia_en?: string | null;
+  cambia_a?: string | null;
+  cambia_a_precio?: number | null;
+}
+
+// Categoría de habitación (Simple, Especial, VIP...) con su tarifa general, la que rige ahora y las especiales.
 export interface Categoria {
   id: number;
   nombre: string;
@@ -254,6 +292,8 @@ export interface Categoria {
   activa: boolean;
   habitaciones: number;
   tarifa?: Tarifa | null;
+  tarifa_ahora?: TarifaAhora | null;
+  franjas?: Franja[];
 }
 
 export interface CategoriaDatos {
@@ -340,6 +380,9 @@ export interface Establecimiento extends EstablecimientoPublico {
   domicilio?: string | null;
   telefono?: string | null;
   leyenda_comprobante?: string | null;
+  wifi_nombre?: string | null;
+  wifi_clave?: string | null;
+  bienvenida?: string | null;
   activo: boolean;
   creado_en: string;
 }
@@ -353,6 +396,9 @@ export interface EstablecimientoDatos {
   eslogan?: string | null;
   aviso_por_vencer_min?: number;
   alertas_sonoras?: boolean;
+  wifi_nombre?: string | null;
+  wifi_clave?: string | null;
+  bienvenida?: string | null;
 }
 
 export interface EstablecimientoResumen extends Establecimiento {
@@ -495,6 +541,11 @@ export interface SugerenciaTarifa {
   supuesto: string | null;
   actual: ParametrosTarifa;
   propuesta: ParametrosTarifa | null;
+  // La propuesta puede ser sobre una tarifa especial que ya existe o una nueva para crear.
+  franja_id: number | null;
+  franja_nombre: string | null;
+  franja_nueva: { nombre: string; dias: number; desde: string; hasta: string; regla: string } | null;
+  rendimiento: { franja: string; turnos: number; ingresos: number }[];
 }
 
 export interface Reposicion {
@@ -539,6 +590,79 @@ export interface Tablero {
   mas_vendidos: { articulo_id: number; descripcion: string; unidades: number; importe: number }[];
   clientes_perdidos: ClientesPerdidos;
   rotacion: Rotacion;
+  opiniones: Opiniones;
+}
+
+// Lo que dicen los clientes (migración 015): solo totales, nunca una opinión suelta.
+export interface Opiniones {
+  dias: number;
+  cantidad: number;
+  promedio: number | null;
+  parte: number;
+  puntajes: { puntaje: number; cantidad: number }[];
+  problemas: { problema: string; cantidad: number }[];
+  habitaciones: { habitacion_id: number; numero: number; promedio: number; cantidad: number; problema: string | null; problema_veces: number }[];
+}
+
+// Gemelo del motel: repetir las llegadas reales con otras condiciones. No cambia nada.
+export interface EscenarioGemelo {
+  limpieza_min?: number | null;
+  habitaciones?: Record<number, number>;
+  precio_pct?: number;
+  precio_cuando?: 'siempre' | 'pico' | 'floja';
+}
+
+export interface FotoGemelo {
+  turnos: number;
+  perdidos: number;
+  ingresos: number;
+  ocupacion: number;
+}
+
+export interface ResultadoGemelo {
+  disponible: boolean;
+  dias: number;
+  limpieza_actual: number;
+  categorias: { categoria_id: number; nombre: string; color: string; actuales: number; cambio: number }[];
+  base?: FotoGemelo;
+  escenario?: FotoGemelo;
+  diferencia?: { turnos: number; perdidos: number; ingresos: number; ingresos_por_mes: number };
+  por_hora?: { hora: number; etiqueta: string; base: number; escenario: number }[];
+  calibracion?: { turnos_reales: number; turnos_modelo: number; coincidencia: number | null; ticket: number };
+  conclusion: string;
+  supuestos?: string[];
+}
+
+// Comprobantes verificables (migración 012).
+export interface IntegridadComprobantes {
+  total: number;
+  integros: number;
+  alterados: {
+    secuencia: number;
+    arqueo_id: number;
+    codigo: string;
+    motivo: string;
+    operador_nombre: string;
+    confirmado_en: string | null;
+  }[];
+  sin_sello: number;
+  ultimo_codigo: string | null;
+  verificado_en: string;
+}
+
+export interface VerificacionComprobante {
+  encontrado: boolean;
+  coincide: boolean;
+  detalle: string;
+  arqueo_id?: number;
+  secuencia?: number;
+  codigo?: string;
+  operador_nombre?: string;
+  franja?: string | null;
+  confirmado_en?: string;
+  total_declarado?: number;
+  diferencia?: number;
+  categoria?: string;
 }
 
 // Clientes que se fueron sin quedarse (migración 011).
@@ -635,6 +759,88 @@ export interface RespuestaAsistente {
   // Ayuda para usar el sistema (services/ayuda.py): pasos a seguir y botones para ir.
   pasos?: string[];
   acciones?: AccionAsistente[];
+  // Una orden lista para confirmar: el asistente nunca la ejecuta por su cuenta.
+  confirmacion?: ConfirmacionAsistente | null;
+}
+
+export interface ConfirmacionAsistente {
+  tipo: 'estado' | 'abrir_turno' | 'consumo' | 'novedad' | 'cliente_perdido';
+  titulo: string;
+  hecho: string;
+  habitacion_id?: number | null;
+  estado?: string;
+  tipo_cliente?: TipoCliente;
+  patente?: string | null;
+  turno_id?: string;
+  articulo_id?: number;
+  cantidad?: number;
+  texto?: string;
+  importante?: boolean;
+  motivo?: MotivoPerdida;
+  categoria_id?: number | null;
+  tarifa_id?: number | null;
+}
+
+// Un pedido o aviso, como lo ve el cliente. Las líneas de un carrito comparten `lote` (migración 015).
+export interface PedidoEstadia {
+  id: number;
+  tipo: string;
+  descripcion: string;
+  cantidad: number | null;
+  estado: string;
+  lote: string | null;
+}
+
+// El cliente en su habitación (migraciones 013 y 015): lo que ve con el QR de su ticket.
+export interface EstadiaCliente {
+  activa: boolean;
+  motel: string;
+  color_marca: string | null;
+  numero?: number;
+  categoria?: string | null;
+  franja?: string | null;
+  bienvenida?: string | null;
+  hora_inicio?: string;
+  ahora?: string;
+  estadia_base_min?: number;
+  tarifa_base?: number;
+  total_sobreturno?: number;
+  total_consumos?: number;
+  total?: number;
+  proximo_cargo?: { minutos: number; monto: number } | null;
+  opciones_tiempo?: { minutos: number; etiqueta: string; suma: number; hasta: string }[];
+  medios_pago?: { medio: string; etiqueta: string }[];
+  mot?: { id: string; pregunta: string; respuesta: string }[];
+  calificada?: boolean;
+  puede_calificar?: boolean;
+  problemas?: { valor: number; etiqueta: string }[];
+  consumos?: { descripcion: string; cantidad: number; subtotal: number }[];
+  articulos?: { id: number; descripcion: string; precio: number; categoria: string | null }[];
+  avisos?: { tipo: string; descripcion: string }[];
+  pedidos?: PedidoEstadia[];
+}
+
+// Un pedido del cliente que espera en la ventanilla.
+export interface PedidoVentanilla {
+  id: number;
+  turno_id: string;
+  habitacion_id: number;
+  numero: number;
+  tipo: string;
+  descripcion: string;
+  cantidad: number | null;
+  estado: string;
+  lote: string | null;
+  medio_pago: MedioPago | null;
+  subtotal: number | null;
+  creado_en: string;
+}
+
+export interface TicketCliente {
+  direccion: string;
+  qr: string;
+  numero: number;
+  hora_inicio: string;
 }
 
 // Pedidos de reposición a proveedores (migración 010).

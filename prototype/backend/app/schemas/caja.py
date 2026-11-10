@@ -73,6 +73,10 @@ class PagoDetalle(BaseModel):
 
 class ArqueoDetalle(ArqueoResultado):
     pagos: list[PagoDetalle]
+    # Comprobante verificable (migración 012): nulos en los arqueos anteriores a la cadena.
+    huella: str | None = None
+    codigo: str | None = None
+    secuencia: int | None = None
 
 
 class MetricaCaja(BaseModel):

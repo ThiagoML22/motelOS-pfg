@@ -16,7 +16,7 @@ Uso (Docker): docker compose run --rm admin
 import asyncio
 import os
 import secrets
-from datetime import UTC, datetime
+from datetime import UTC, datetime, time
 from decimal import Decimal
 
 from sqlalchemy import select
@@ -28,10 +28,12 @@ from app.models.articulo import Articulo
 from app.models.categoria import CategoriaHabitacion
 from app.models.configuracion import ConfiguracionCaja
 from app.models.establecimiento import Establecimiento
+from app.models.franja_tarifa import FranjaTarifa
 from app.models.habitacion import Habitacion
 from app.models.operador import ROL_ADMINISTRADOR, ROL_OPERADOR, ROL_PLATAFORMA, Operador
 from app.models.tarifa import Tarifa
 from app.schemas.configuracion import ParametrosTarifa
+from app.services import franjas
 from app.services.configuracion import nueva_tarifa_de
 from scripts.crear_operador import alta_operador
 
@@ -166,6 +168,60 @@ CATEGORIAS_DEMO = {
 }
 
 
+# Tarifas especiales de demostración (migración 014): Especial sube todas las noches y VIP baja de día en la semana.
+# Simple queda sin ninguna: es la que muestra la sugerencia de crear una para el pico del fin de semana.
+FRANJAS_DEMO = {
+    "motelcc": {
+        "Especial": [
+            (
+                "Noche",
+                franjas.TODOS_LOS_DIAS,
+                time(20),
+                time(6),
+                ParametrosTarifa(tarifa_base=13500, estadia_base_min=120, fraccion_min=30, tarifa_fraccion=4000),
+            ),
+        ],
+        "VIP": [
+            (
+                "De día en la semana",
+                franjas.mascara(0, 1, 2, 3, 4),
+                time(8),
+                time(20),
+                ParametrosTarifa(
+                    tarifa_base=13500,
+                    estadia_base_min=180,
+                    fraccion_min=60,
+                    tarifa_fraccion=5000,
+                    tolerancia_min=10,
+                    tope=34000,
+                ),
+            ),
+        ],
+    },
+}
+
+
+async def _franjas(db: AsyncSession, codigo: str) -> None:
+    for categoria_nombre, lista in FRANJAS_DEMO.get(codigo, {}).items():
+        consulta = select(CategoriaHabitacion).where(CategoriaHabitacion.nombre == categoria_nombre)
+        categoria = (await db.execute(consulta)).scalars().first()
+        if categoria is None:
+            continue
+        for nombre, dias, desde, hasta, tarifa in lista:
+            consulta = select(FranjaTarifa).where(
+                FranjaTarifa.categoria_id == categoria.id, FranjaTarifa.nombre == nombre
+            )
+            if (await db.execute(consulta)).first():
+                continue
+            franja = FranjaTarifa(categoria_id=categoria.id, nombre=nombre, dias=dias, desde=desde, hasta=hasta)
+            db.add(franja)
+            await db.flush()
+            db.add(nueva_tarifa_de(categoria, tarifa, None, franja.id))
+            await db.commit()
+            regla = franjas.regla_texto(dias, desde, hasta)
+            print(f"{codigo} · {categoria_nombre}: tarifa especial «{nombre}», {regla}.")
+
+
 async def _categorias(db: AsyncSession, codigo: str) -> None:
     for nombre, descripcion, color, orden, tarifa, numeros in CATEGORIAS_DEMO.get(codigo, []):
         if (await db.execute(select(CategoriaHabitacion).where(CategoriaHabitacion.nombre == nombre))).first():
@@ -192,10 +248,16 @@ async def cargar() -> None:
             if not principal.eslogan:
                 principal.eslogan = ESLOGAN_MOTELCC
                 await db.commit()
+            # Lo que ve el cliente con su QR; si la gerencia ya lo cargó, no se toca.
+            if not principal.wifi_nombre:
+                principal.wifi_nombre, principal.wifi_clave = "MotelCC-Huespedes", "descanso2026"
+                principal.bienvenida = "¡Bienvenidos! Cualquier cosa, nos avisás desde acá sin llamar."
+                await db.commit()
             luna_id = await _luna(db)
         async with sesiones(info={CLAVE: principal.id}) as db:
             await _usuarios(db, USUARIOS, claves, principal.nombre)
             await _categorias(db, principal.codigo)
+            await _franjas(db, principal.codigo)
         async with sesiones(info={CLAVE: luna_id}) as db:
             await _usuarios(db, LUNA_USUARIOS, claves, "Motel Luna")
             await _categorias(db, "luna")

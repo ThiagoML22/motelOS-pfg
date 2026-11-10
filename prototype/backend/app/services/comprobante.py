@@ -6,7 +6,10 @@ genera a pedido desde el arqueo guardado, que no cambia (RN-RES-02): dos descarg
 """
 
 from datetime import UTC, datetime
+from urllib.parse import quote
 from zoneinfo import ZoneInfo
+
+import segno
 
 from app.core.config import settings
 from app.models.establecimiento import Establecimiento
@@ -110,7 +113,7 @@ def comprobante_arqueo(arqueo: ArqueoDetalle, establecimiento: Establecimiento) 
         hoja.texto(MARGEN + 8, y, "La guardia no registró cobros.", 9)
         y -= 14
     for pago in arqueo.pagos:
-        if y < 170:
+        if y < 240:
             hoja.texto(MARGEN + 8, y, "(continúa en el panel de la gerencia)", 9)
             y -= 14
             break
@@ -123,6 +126,9 @@ def comprobante_arqueo(arqueo: ArqueoDetalle, establecimiento: Establecimiento) 
         hoja.texto_derecha(DERECHA - 8, y, pesos(pago.monto), 9)
         y -= 13
 
+    if arqueo.huella:
+        _sello(hoja, arqueo)
+
     # Firmas y pie.
     y_firmas = 120
     for x, quien in ((MARGEN, "Conserje"), (ANCHO_A4 / 2 + 20, "Gerencia")):
@@ -133,6 +139,25 @@ def comprobante_arqueo(arqueo: ArqueoDetalle, establecimiento: Establecimiento) 
     generado = _local(datetime.now(UTC))
     hoja.texto(MARGEN, 40, f"Generado por MotelOS el {generado}. El arqueo confirmado no se modifica.", 7)
     return documento.generar()
+
+
+def _direccion_para_verificar(codigo: str) -> str:
+    return f"{settings.url_aplicacion}/?verificar={quote(codigo)}"
+
+
+def _sello(hoja: Pagina, arqueo: ArqueoDetalle) -> None:
+    """La huella del comprobante (migración 012): el código para verificarlo y un QR que lleva a esa verificación."""
+    alto, y = 74, 146
+    hoja.rectangulo(MARGEN, y, DERECHA - MARGEN, alto)
+    hoja.texto(MARGEN + 10, y + alto - 16, "Comprobante verificable", 10, negrita=True)
+    hoja.texto(MARGEN + 10, y + alto - 33, arqueo.codigo, 13, negrita=True)
+    hoja.texto(MARGEN + 200, y + alto - 33, f"Eslabón {arqueo.secuencia} de la cadena", 8)
+    hoja.texto(MARGEN + 10, y + 19, f"Huella: {arqueo.huella}", 6.5)
+    aviso = "Si este papel y el sistema no coinciden, el arqueo cambió después de firmarse."
+    hoja.texto(MARGEN + 10, y + 8, aviso, 7.5)
+    qr = segno.make(_direccion_para_verificar(arqueo.codigo), error="m", boost_error=False)
+    celdas = [[bool(modulo) for modulo in fila] for fila in qr.matrix]
+    hoja.matriz(DERECHA - 68, y + 5, 64, celdas)
 
 
 def _parrafo(hoja: Pagina, x: float, y: float, texto: str, tamano: float, caracteres: int) -> float:

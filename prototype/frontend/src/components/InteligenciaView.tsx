@@ -9,14 +9,16 @@ import {
   Package,
   RefreshCw,
   Sparkles,
+  Star,
   Timer,
   TrendingDown,
   TrendingUp,
   UserRoundX,
   Wallet,
 } from 'lucide-react';
-import { AlertaIA, ClientesPerdidos, Rotacion, Severidad, SugerenciaTarifa, Tablero } from '../types';
+import { AlertaIA, ClientesPerdidos, Opiniones, Rotacion, Severidad, SugerenciaTarifa, Tablero } from '../types';
 import { ChatAsistente } from './Asistente';
+import GemeloMotel from './GemeloMotel';
 import { BotonNuevoPedido } from './PedidosReposicion';
 import { Cifra, EsqueletoTablero } from './ui/Carga';
 import { api, EVENTO_RECONECTADO, getErrorMessage } from '../services/api';
@@ -149,6 +151,8 @@ const InteligenciaView: React.FC = () => {
               <ClientesPerdidosCard datos={tablero.clientes_perdidos} />
               <RotacionCard datos={tablero.rotacion} />
             </div>
+            <OpinionesCard datos={tablero.opiniones} />
+            <GemeloMotel />
             <div className="grid gap-5 2xl:grid-cols-2">
               <SerieCard tablero={tablero} />
               <DemandaCard tablero={tablero} />
@@ -345,6 +349,63 @@ const ClientesPerdidosCard: React.FC<{ datos: ClientesPerdidos }> = ({ datos }) 
       <div className="mt-3">
         <BarraPartes partes={datos.motivos.map((m) => ({ clave: m.motivo, etiqueta: m.etiqueta, parte: m.parte, valor: String(m.cantidad) }))} />
       </div>
+    </Tarjeta>
+  );
+};
+
+// Lo que marcan los clientes al irse. Son anónimas: solo totales, nunca una opinión suelta con su hora.
+const OpinionesCard: React.FC<{ datos: Opiniones }> = ({ datos }) => {
+  const titulo = 'Lo que dicen los clientes';
+  if (!datos.cantidad) {
+    return (
+      <Tarjeta titulo={titulo} icono={Star} extra={`últimos ${datos.dias} días`}>
+        <p className="text-sm text-muted">Todavía nadie calificó su estadía. Se hace desde el QR del ticket, de forma anónima.</p>
+      </Tarjeta>
+    );
+  }
+  const masMarcado = datos.problemas[0];
+  // Tres grupos alcanzan para leer de un vistazo, y cada uno conserva su color propio en la barra.
+  const contar = (desde: number, hasta: number) =>
+    datos.puntajes.filter((p) => p.puntaje >= desde && p.puntaje <= hasta).reduce((suma, p) => suma + p.cantidad, 0);
+  const grupos = [
+    { clave: 'bien', etiqueta: 'Bien (4 y 5)', cantidad: contar(4, 5) },
+    { clave: 'regular', etiqueta: 'Regular (3)', cantidad: contar(3, 3) },
+    { clave: 'mal', etiqueta: 'Mal (1 y 2)', cantidad: contar(1, 2) },
+  ];
+  return (
+    <Tarjeta titulo={titulo} icono={Star} extra={`últimos ${datos.dias} días · anónimas`}>
+      <div className="grid grid-cols-3 gap-3">
+        <Mini etiqueta="Promedio" valor={`${decimal(datos.promedio ?? 0)} de 5`} nota={`${datos.cantidad} opiniones`} />
+        <Mini etiqueta="Califican" valor={porcentaje(datos.parte)} nota="de los turnos" />
+        <Mini etiqueta="Lo que más marcan" valor={masMarcado?.problema ?? '—'} nota={masMarcado ? `${masMarcado.cantidad} veces` : 'nada por ahora'} />
+      </div>
+      <div className="mt-3">
+        <BarraPartes partes={grupos.map((g) => ({ clave: g.clave, etiqueta: g.etiqueta, parte: g.cantidad / datos.cantidad, valor: String(g.cantidad) }))} />
+      </div>
+      {datos.habitaciones.length > 0 && (
+        <div className="mt-3 overflow-x-auto">
+          <table className="w-full min-w-[26rem] text-left text-sm">
+            <thead>
+              <tr className="border-b border-line text-xs font-medium uppercase tracking-wide text-subtle">
+                <th className="py-2 pr-3">Habitación</th>
+                <th className="py-2 pr-3 text-right">Promedio</th>
+                <th className="py-2 pr-3 text-right">Opiniones</th>
+                <th className="py-2">Lo que más marcan</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-line">
+              {datos.habitaciones.slice(0, 5).map((h) => (
+                <tr key={h.habitacion_id}>
+                  <td className="py-2 pr-3 text-ink">{h.numero}</td>
+                  <td className="py-2 pr-3 text-right tabular-nums">{decimal(h.promedio)}</td>
+                  <td className="py-2 pr-3 text-right tabular-nums">{h.cantidad}</td>
+                  <td className="py-2 text-muted">{h.problema ?? '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </Tarjeta>
   );
 };
@@ -581,6 +642,15 @@ const Sugerencias: React.FC<{ sugerencias: SugerenciaTarifa[]; onAplicar: (s: Su
                 <dd className="font-medium text-ink">{porcentaje(s.con_sobreturno)}</dd>
               </div>
             </dl>
+            {s.rendimiento.length > 0 && (
+              <ul className="mt-2 space-y-0.5 text-xs text-muted">
+                {s.rendimiento.map((r) => (
+                  <li key={r.franja}>
+                    {r.franja}: {r.turnos} turnos, {formatMoney(r.ingresos)} en estadías
+                  </li>
+                ))}
+              </ul>
+            )}
             {s.propuesta && (
               <div className="mt-auto pt-3">
                 {s.impacto_mensual !== null && (
@@ -620,11 +690,21 @@ const AplicarTarifa: React.FC<{ sugerencia: SugerenciaTarifa; onClose: () => voi
     ['Tolerancia', `${actual.tolerancia_min} min`, `${propuesta.tolerancia_min} min`],
     ['Tope', actual.tope ? formatMoney(actual.tope) : 'Sin tope', propuesta.tope ? formatMoney(propuesta.tope) : 'Sin tope'],
   ];
+  const nueva = sugerencia.franja_nueva;
   const aplicar = async () => {
     setEnviando(true);
     try {
-      await api.nuevaTarifa({ ...propuesta, categoria_id: sugerencia.categoria_id });
-      toast(`Nueva tarifa de ${sugerencia.categoria} vigente desde ahora. Los turnos en curso conservan la suya.`, 'success');
+      if (nueva) {
+        const { nombre, dias, desde, hasta } = nueva;
+        await api.altaFranja({ categoria_id: sugerencia.categoria_id, nombre, dias, desde, hasta, tarifa: propuesta });
+        toast(`Tarifa especial ${nombre} creada en ${sugerencia.categoria}. El resto de la semana sigue la general.`, 'success');
+      } else if (sugerencia.franja_id) {
+        await api.cambiarFranja(sugerencia.franja_id, { tarifa: propuesta });
+        toast(`${sugerencia.franja_nombre} actualizada. Los turnos en curso conservan la suya.`, 'success');
+      } else {
+        await api.nuevaTarifa({ ...propuesta, categoria_id: sugerencia.categoria_id });
+        toast(`Nueva tarifa de ${sugerencia.categoria} vigente desde ahora. Los turnos en curso conservan la suya.`, 'success');
+      }
       onAplicada();
     } catch (err) {
       toast(getErrorMessage(err, 'No se pudo aplicar la tarifa.'), 'error');
@@ -642,11 +722,16 @@ const AplicarTarifa: React.FC<{ sugerencia: SugerenciaTarifa; onClose: () => voi
             Cancelar
           </Button>
           <Button onClick={() => void aplicar()} disabled={enviando}>
-            {enviando ? 'Aplicando…' : 'Aplicar nueva tarifa'}
+            {enviando ? 'Aplicando…' : nueva ? 'Crear tarifa especial' : 'Aplicar nueva tarifa'}
           </Button>
         </div>
       }
     >
+      {nueva && (
+        <p className="mb-3 rounded-md bg-accent-soft px-3 py-2 text-sm text-ink">
+          Tarifa especial «{nueva.nombre}»: rige {nueva.regla}. El resto de la semana sigue la general.
+        </p>
+      )}
       <table className="w-full text-left text-sm">
         <thead>
           <tr className="border-b border-line text-xs uppercase tracking-wide text-subtle">

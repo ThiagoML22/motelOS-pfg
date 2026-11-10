@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { BarChart3, DoorOpen, FileDown, RefreshCw, Tags } from 'lucide-react';
+import { BarChart3, DoorOpen, FileDown, RefreshCw, ShieldCheck, Tags } from 'lucide-react';
 import { ArqueoDetalle, Guardia, MetricasCaja, ResumenCategoria } from '../types';
 import { api, getErrorMessage } from '../services/api';
 import { formatDateTime, formatMoney, formatRoomNumber } from '../utils/format';
@@ -10,6 +10,7 @@ import Modal from './ui/Modal';
 import { useToast } from './ui/Toast';
 import CierreSupervisadoModal from './CierreSupervisadoModal';
 import HistorialArqueos from './HistorialArqueos';
+import IntegridadCaja from './IntegridadCaja';
 import { EsqueletoTabla } from './ui/Carga';
 
 // Línea de base de la AE1: 1 de cada 10 recambios con faltante o sobrante.
@@ -33,9 +34,11 @@ const MEDIO: Record<string, string> = { EFECTIVO: 'Efectivo', POSNET: 'POSNET', 
 // por el sistema. Solo muestra arqueos confirmados: el total de una guardia abierta no se ve (RN-RES-03).
 interface PanelGerenciaProps {
   onCambioGuardia: () => Promise<void>;
+  // El código de un comprobante que llegó por su QR.
+  codigoInicial?: string | null;
 }
 
-const PanelGerencia: React.FC<PanelGerenciaProps> = ({ onCambioGuardia }) => {
+const PanelGerencia: React.FC<PanelGerenciaProps> = ({ onCambioGuardia, codigoInicial }) => {
   const { toast } = useToast();
   const [rango, setRango] = useState<Rango>('30');
   const [operadorId, setOperadorId] = useState<number | ''>('');
@@ -278,6 +281,8 @@ const PanelGerencia: React.FC<PanelGerenciaProps> = ({ onCambioGuardia }) => {
             </section>
           )}
 
+          <IntegridadCaja codigoInicial={codigoInicial} version={version} onAbrir={(id) => void abrirDetalle(id)} />
+
           {/* Historial segmentado por mes y por día (independiente del período de arriba; respeta el conserje). */}
           <HistorialArqueos operadorId={operadorId} version={version} onAbrir={(id) => void abrirDetalle(id)} />
         </>
@@ -342,6 +347,13 @@ const PanelGerencia: React.FC<PanelGerenciaProps> = ({ onCambioGuardia }) => {
           {detalle.fondo_inicial > 0 && (
             <p className="mt-3 text-xs text-subtle">
               El efectivo del sistema incluye el fondo de cambio de {formatMoney(detalle.fondo_inicial)}.
+            </p>
+          )}
+          {detalle.codigo && (
+            <p className="mt-3 flex flex-wrap items-center gap-x-2 text-xs text-muted">
+              <ShieldCheck className="h-3.5 w-3.5 text-libre" aria-hidden="true" />
+              Comprobante verificable
+              <span className="font-mono font-medium text-ink">{detalle.codigo}</span>· eslabón {detalle.secuencia}
             </p>
           )}
           <div className="mt-4 flex justify-end">

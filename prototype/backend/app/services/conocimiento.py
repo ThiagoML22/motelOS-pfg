@@ -119,6 +119,20 @@ DEFINICIONES: tuple[Definicion, ...] = (
         extra="precio cobro",
     ),
     Definicion(
+        "tarifa_especial",
+        "Tarifa especial",
+        (r"tarifas? especial(es)?", r"franjas? (de tarifa|de precio|horaria)"),
+        "Es un precio distinto para ciertos días y horas de una categoría, por ejemplo las noches de fin de semana. "
+        "El turno toma la que rige cuando se abre y la conserva hasta el cobro; fuera de esos horarios rige la tarifa "
+        "general. La noche del viernes sigue el sábado de madrugada.",
+        "configuracion",
+        extra="noche fin semana horario dia hora franja",
+        situaciones=(
+            r"por que .{0,30}(mas caro|mas barato|cobra mas|cobro mas|sale mas|cambio el precio|otro precio)",
+            r"(precio|tarifa) (distint|diferent|cambi)\w* .{0,20}(noche|hora|dia)",
+        ),
+    ),
+    Definicion(
         "arqueo",
         "Arqueo",
         (r"\barqueos?\b",),
@@ -132,7 +146,7 @@ DEFINICIONES: tuple[Definicion, ...] = (
         "cierre_ciego",
         "Cierre ciego",
         (r"cierre ciego", r"\bciego\b", r"rn ?res ?03"),
-        "Mientras la guardia está abierta, nadie (ni el conserje ni la gerencia ni este asistente) ve el total "
+        "Mientras la guardia está abierta, nadie (ni el conserje ni la gerencia ni yo) ve el total "
         "que espera el sistema. El conserje cuenta la gaveta sin saber cuánto «debería» haber, y recién al "
         "confirmar ve la diferencia. Así el recuento es honesto (RN-RES-03).",
         "caja",
@@ -402,8 +416,8 @@ DEFINICIONES: tuple[Definicion, ...] = (
         "Descuentos y promociones",
         (r"\bdescuentos?\b", r"\bpromo(cion)?(es)?\b"),
         "El cobro tiene que cubrir exactamente el saldo (RN-EXI-03): no hay descuentos manuales en la ventanilla. "
-        "Una promoción se hace cambiando la tarifa de la categoría (lo hace la gerencia); la inteligencia sugiere "
-        "cuándo conviene.",
+        "Una promoción se hace con una tarifa especial para ciertos días y horas (lo hace la gerencia); la "
+        "inteligencia sugiere cuándo conviene.",
         extra="rebaja oferta cortesia gratis",
         situaciones=(r"\b(descuento|rebaja|cortesia|gratis|regalar)",),
     ),
@@ -426,6 +440,56 @@ DEFINICIONES: tuple[Definicion, ...] = (
         "ve la demanda que no se atendió, que de otro modo no queda en ninguna parte.",
         "dashboard",
         extra="demanda perdida rechazado lleno completo",
+    ),
+    Definicion(
+        "gemelo",
+        "El gemelo del motel",
+        (r"\bgemelo\b", r"simulador del motel"),
+        "Es un simulador que repite lo que pasó de verdad: cada llegada de los últimos 30 días, con su duración y lo "
+        "que pagó, más los clientes que se fueron. Le cambiás la limpieza, las habitaciones o el precio y te dice "
+        "cuántos turnos, clientes perdidos e ingresos daría, sin tocar nada del sistema. Compara dos corridas del "
+        "mismo modelo y dice cuánto del pasado real reproduce. No descuenta costos, y el efecto del precio es un "
+        "supuesto.",
+        "inteligencia",
+        GERENCIA,
+        extra="simular probar escenario que pasaria cambio",
+    ),
+    Definicion(
+        "huella",
+        "La huella de un comprobante",
+        (
+            r"\bhuellas?( de un comprobante)?\b",
+            r"comprobantes? verificables?",
+            r"cadena de (comprobantes|arqueos|huellas)",
+        ),
+        "Es un código que sale de los datos del arqueo, de sus cobros y de la huella del arqueo anterior. Si alguien "
+        "cambia un importe directamente en la base, la huella deja de coincidir; y si la recalcula, se corta la cadena "
+        "con el siguiente. Va impresa en el comprobante firmado, así el papel también sirve de testigo. Se verifica en "
+        "Control de caja.",
+        "gerencia",
+        GERENCIA,
+        extra="integridad alterado sello hash",
+    ),
+    Definicion(
+        "ticket_cliente",
+        "El ticket con QR del cliente",
+        (r"ticket (con qr|del cliente|para el cliente)", r"\bqr del cliente\b", r"pedidos? del cliente"),
+        "Es un ticket que se le da al cliente al entrar. Con el QR ve en su celular su tiempo y su cuenta, pide del "
+        "minibar, avisa que se queda más o pide la cuenta, sin llamar y sin dar datos personales. Lo que pide llega a "
+        "la ventanilla: quien atiende lo entrega y recién ahí se carga a la cuenta. El enlace vale mientras dura el "
+        "turno.",
+        "dashboard",
+        extra="celular escanear codigo pedir habitacion",
+    ),
+    Definicion(
+        "calificacion",
+        "La calificación del cliente",
+        (r"calificacion(es)? (del|de los) clientes?", r"\bque es (la|una) calificacion\b", r"\bopiniones?\b"),
+        "Al irse, el cliente puede poner de 1 a 5 y marcar lo que falló, desde el QR y hasta una hora después del "
+        "cobro. Es anónima: no guarda datos de la persona ni texto libre, y la gerencia solo ve totales por "
+        "habitación.",
+        "inteligencia",
+        extra="puntaje estrellas queja cliente anonima",
     ),
     Definicion(
         "limpieza_sin_turno",
@@ -469,7 +533,6 @@ SINONIMOS = {
     "debito": "posnet",
     "credito": "posnet",
     "mp": "mercado pago",
-    "qr": "mercado pago",
     "heladera": "minibar",
     "frigobar": "minibar",
     "tele": "tv",
@@ -494,7 +557,10 @@ VOCABULARIO_BASE = set(
     "comprobante tolerancia fraccion pernocte cuanto cuantos cuantas cuales vence vencimiento excedidas sabados "
     "domingos viernes lunes martes miercoles jueves facturo cobramos vendimos cerveza agua gaseosa chocolate "
     # Palabras de conversación que no hay que «corregir» hacia términos del sistema.
-    "libera libere liberan liberen liberar liberara desocupa esperar espera "
+    "libera libere liberan liberen liberar liberara desocupa esperar espera habilita registra escribi "
+    "cargale cargame agregale agregame sumale sumame anotame anotale poneme pasame dejame liberame abrime ocupame "
+    "cobrale cerrale cliente perdido mot "
+    "especial especiales franja franjas noche noches tarde madrugada mediodia siesta sabado domingo miercoles rige "
     "gracias hola buenas buenos genial perfecto listo barbaro necesito quiero podes puedes sabes ayuda ayudame favor "
     "porfa tardes noches dias entonces bueno claro cliente clientes quejo quedarse momento ahora mismo pagar pagan "
     "cobrar abrir cerrar dejar poner sacar cambiar agregar quiere quieren puede tiene tienen hacer llego llegaron "
