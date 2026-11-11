@@ -119,6 +119,12 @@ async def eventos_de(db: AsyncSession, estado: str, desde: datetime) -> list[Eve
     return list((await db.execute(consulta)).scalars())
 
 
+def reloj() -> datetime:
+    """Hora del servidor de la aplicación. Las pruebas la adelantan: los eventos toman siempre la hora de la base
+    (trigger de la migración 011), así que no se puede fabricar una limpieza que empezó hace 31 minutos."""
+    return datetime.now(UTC)
+
+
 @dataclass(frozen=True)
 class EstadoLimpieza:
     """Cuánto lleva En Limpieza una habitación y si ya demora (RF-12)."""
@@ -137,7 +143,7 @@ async def limpiezas_en_curso(
     ids = [h.id for h in habitaciones if h.estado == LIMPIEZA]
     if not ids:
         return {}
-    ahora = ahora or datetime.now(UTC)
+    ahora = ahora or reloj()
     consulta = (
         select(EventoHabitacion.habitacion_id, func.max(EventoHabitacion.creado_en))
         .where(EventoHabitacion.habitacion_id.in_(ids), EventoHabitacion.estado_nuevo == LIMPIEZA)
