@@ -200,7 +200,7 @@ docker compose run --rm --no-deps backend sh -c "pip install -q -r requirements-
 
 Instala las herramientas de prueba (`requirements-dev.txt`) en un contenedor descartable y corre las pruebas sobre SQLite en memoria.
 
-- **Resultado esperado:** `624 passed, 2 skipped`. Las 2 omitidas son carreras de concurrencia que solo corren sobre PostgreSQL, en el canal.
+- **Resultado esperado:** `631 passed, 2 skipped`. Las 2 omitidas son carreras de concurrencia que solo corren sobre PostgreSQL, en el canal.
 - **Duración:** en Windows con Docker Desktop, unos 11 minutos.
 - **Falla esporádica:** en SQLite, alguna prueba puede fallar muy de vez en cuando porque SQLite lee como número un identificador al azar. Al repetir el comando, pasa.
 
@@ -214,7 +214,7 @@ Aplica las 17 migraciones y corre las 16 verificaciones SQL con el rol `motel_ap
 
 **Canal de integración continua (`.github/workflows/ci.yml`):** en cada cambio corre:
 - Ruff y `pip-audit`.
-- Las pruebas sobre PostgreSQL 16 (626 en la v3, con cobertura de liquidación y caja de 96 % y un corte en 70 %).
+- Las pruebas sobre PostgreSQL 16 (633 en la v3, con cobertura de liquidación y caja de 96 % y un corte en 70 %).
 - Las 16 verificaciones SQL y la migración desde una base v1.2 con datos.
 - Seis recorridos de punta a punta con la API conectada como `motel_app`, y la medición de latencia de RNF-02 (P95 de unos 50 ms contra un umbral de 800 ms).
 - `npm audit`, la verificación de tipos y la compilación de la interfaz.

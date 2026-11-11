@@ -151,7 +151,7 @@ docker compose exec db psql -U postgres -d motel_db -c "UPDATE arqueos_caja SET 
 
 * **Backend (Python 3.12 y PostgreSQL 16):**
   * Ruff y `pip-audit` (falla si hay vulnerabilidades publicadas).
-  * Pruebas sobre PostgreSQL con corte de cobertura en 70 % (RNF-07): 626 en el v3, con 96,7 % de cobertura de liquidación y caja.
+  * Pruebas sobre PostgreSQL con corte de cobertura en 70 % (RNF-07): 633 en el v3, con 96,7 % de cobertura de liquidación y caja.
   * Las migraciones 001 a 017 y 16 verificaciones SQL con el rol `motel_app` (inmutabilidad, permisos, cierre de caja, panel, aislamiento entre establecimientos, sellos, tarifas especiales, operación y recuento de ropa, entre otras), más la migración desde una base v1.2 con datos.
   * Seis recorridos de punta a punta con la API corriendo como `motel_app` sobre el esquema migrado, y la medición de latencia de RNF-02, que se guarda como artefacto de la corrida.
 * **Frontend (Node 20):** `npm audit` de las dependencias de producción, verificación de tipos y compilación.
@@ -193,7 +193,7 @@ Conforme al Protocolo de Uso Autorizado de Inteligencia Artificial:
   * Las funciones de operación pedidas por el autor a partir del relevamiento.
 * **Decisiones del autor:** el cierre ciego por guardia, la imputación del cobro a la guardia que atiende, los roles, la separación entre el dueño de las tablas y el rol de la aplicación y las preguntas abiertas para la gerencia.
 * **Verificación:**
-  * 626 pruebas automáticas en PostgreSQL 16 (624 en SQLite).
+  * 633 pruebas automáticas en PostgreSQL 16 (631 en SQLite).
   * 16 verificaciones SQL con el rol de la aplicación.
   * Seis recorridos de punta a punta contra la API.
   * La medición de latencia.
