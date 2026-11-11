@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { BellRing, Bike, Car, CheckCircle2, Footprints, MoreVertical, Sparkles, Wrench } from 'lucide-react';
+import { BellRing, Bike, Car, CheckCircle2, Clock, Footprints, MoreVertical, Sparkles, Wrench } from 'lucide-react';
 import { Categoria, HabitacionConDetalles, PedidoVentanilla, RoomStatus } from '../types';
 import { formatDuration, formatMoney, formatRoomNumber } from '../utils/format';
 import { ESTADIA_BASE_MIN, elapsedMs, faseEstadia, formatMinutos, minutosExcedidos, minutosRestantes } from '../utils/turno';
@@ -123,6 +123,17 @@ const RoomCard: React.FC<RoomCardProps> = ({ room, categoria, now, onClick, onAd
         ) : (
           <>
             <p className="text-sm text-muted">{meta.hint}</p>
+            {/* RF-12: los minutos los calcula el servidor en cada refresco de la grilla; pasados los 30, la marca. */}
+            {room.estado === 'En Limpieza' && room.minutos_en_limpieza != null && (
+              room.demora_limpieza ? (
+                <p className="mt-1.5 inline-flex animate-pop-in items-center gap-1 rounded-full bg-warn-soft px-2 py-0.5 text-xs font-medium text-warn">
+                  <Clock className="h-3.5 w-3.5" aria-hidden="true" />
+                  Demora de limpieza · {formatMinutos(room.minutos_en_limpieza)}
+                </p>
+              ) : (
+                <p className="mt-1 text-xs tabular-nums text-subtle">En limpieza hace {formatMinutos(room.minutos_en_limpieza)}</p>
+              )
+            )}
             {room.estado === 'Libre' && tarifa && (
               <p className="mt-1 flex min-w-0 items-baseline gap-1.5 text-xs tabular-nums text-subtle">
                 <span className="shrink-0">

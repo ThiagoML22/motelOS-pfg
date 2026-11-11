@@ -9,7 +9,8 @@ async def test_listar_habitaciones_ordenadas_e_incluye_turno_activo(client: Asyn
     assert resp.status_code == 200
     data = resp.json()
     assert [h["numero"] for h in data] == [1, 2, 3]
-    assert set(data[0]) == {"id", "numero", "estado", "categoria_id", "turno_activo", "arreglos_abiertos"}
+    assert set(data[0]) == {"id", "numero", "estado", "categoria_id", "turno_activo", "arreglos_abiertos",
+                            "en_limpieza_desde", "minutos_en_limpieza", "demora_limpieza"}
     assert data[0]["turno_activo"] is None
     assert data[1]["estado"] == "Ocupada"
     assert data[1]["turno_activo"]["estado"] == "En Curso"
