@@ -16,7 +16,7 @@
 
 ## 2. Qué hace este prototipo
 
-### Lo que agrega el v3 (Sprint 4, migraciones 005 a 017)
+### Lo que agrega el v3 (Sprint 4, migraciones 005 a 017; todo validado con la gerencia en las actas del 27/10 y del 11/11/2026)
 
 | Requisito o función | Qué hace el v3 |
 | :--- | :--- |
@@ -29,8 +29,9 @@
 | Inteligencia local y Mot | Pronóstico, alertas, sugerencias de tarifa, reposición, gemelo del motel y un asistente en español que responde y propone acciones (la interfaz las confirma). Todo corre en el servidor del motel, sin servicios externos |
 | Página del cliente | Ticket con QR de enlace firmado, sin cuenta ni datos personales: estadía, pedidos al minibar, pedir la cuenta, calificación anónima |
 | Operación diaria | Traslado de turno, arreglos por habitación, traspaso de guardia y recuento de toallas y sábanas, a ciegas y obligatorio al cerrar |
+| RF-12 | La grilla marca «Demora de limpieza» con los minutos en las habitaciones que pasan más de 30 min En Limpieza. Los minutos los calcula el servidor con el historial de estados (`DEMORA_LIMPIEZA_MIN`) |
 
-El RF-12 (marca de demora de limpieza) no se entrega en el v3, y RNF-06 y el despliegue en la nube quedan en la hoja de ruta. El detalle está en el informe (Capítulos IX, XI y XIII).
+RNF-06 y el despliegue en la nube quedan en la hoja de ruta. El detalle está en el informe (Capítulos IX, XI y XIII).
 
 ### Lo que viene del v2
 El v2 se construye sobre el esqueleto del v1 (apertura de turno, consumos con descuento atómico de stock, liquidación por tiempo, cobro desglosado y cierre inmutable) y agrega el control que da sentido al sistema: **el cierre de caja ciego por guardia**.
@@ -166,7 +167,7 @@ docker compose exec db psql -U postgres -d motel_db -c "UPDATE arqueos_caja SET 
 * **Dependencias de compilación del frontend:** `npm audit` informa vulnerabilidades en Vite 5 y Tailwind 3, que solo corren en la máquina de desarrollo y no llegan al navegador. Su corrección exige cambiar de versión mayor (Vite 8, Tailwind 4) y queda en la hoja de ruta, junto con el despliegue de la versión compilada.
 * **Servidor de desarrollo:** el v3 se ejecuta con los servidores de desarrollo de Uvicorn y Vite (recarga automática). Para producción falta la imagen compilada detrás de un proxy con HTTPS; queda en la hoja de ruta, con RNF-06 (disponibilidad) y el despliegue en la nube.
 * **Claves de demostración:** `.env.example` trae claves de prueba para que el manual de despliegue se pueda seguir sin asistencia. No son credenciales reales; se cambian antes de cargar datos reales.
-* **Fuera del v3:** marca de demora de limpieza (RF-12), disponibilidad medida (RNF-06) y despliegue en la nube.
+* **Fuera del v3:** disponibilidad medida (RNF-06) y despliegue en la nube.
 
 ---
 
