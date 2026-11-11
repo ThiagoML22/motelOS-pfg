@@ -41,6 +41,8 @@ class Settings(BaseSettings):
     # Sin el recuento de toallas y sábanas no se abre ni se cierra una guardia (migración 016).
     EXIGIR_RECUENTO_ROPA: bool = True
     GUARDIA_ANTICIPACION_MIN: int = 120
+    # RF-12: una habitación que pasa más de estos minutos En Limpieza se marca en la grilla (catálogo: 30 min).
+    DEMORA_LIMPIEZA_MIN: int = 30
     # Fondo de cambio que recibe cada guardia en la gaveta: $25.000, aprobado por la gerencia en el acta de
     # validación del 19/10/2026 (punto 5). Se suma al efectivo que el sistema espera en el arqueo.
     FONDO_INICIAL_CAJA: Decimal = Decimal("25000")

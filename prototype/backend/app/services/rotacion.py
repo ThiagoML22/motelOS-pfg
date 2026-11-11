@@ -119,6 +119,38 @@ async def eventos_de(db: AsyncSession, estado: str, desde: datetime) -> list[Eve
     return list((await db.execute(consulta)).scalars())
 
 
+@dataclass(frozen=True)
+class EstadoLimpieza:
+    """Cuánto lleva En Limpieza una habitación y si ya demora (RF-12)."""
+
+    desde: datetime
+    minutos: int
+    demora: bool
+
+
+async def limpiezas_en_curso(
+    db: AsyncSession, habitaciones: list[Habitacion], ahora: datetime | None = None
+) -> dict[int, EstadoLimpieza]:
+    """Para cada habitación que está En Limpieza: desde cuándo (su último paso a ese estado en el historial) y los
+    minutos enteros que lleva, con el reloj del servidor. Demora si supera DEMORA_LIMPIEZA_MIN; con ese valor exacto,
+    todavía no. Una habitación sin ese paso en el historial (datos anteriores a la migración 011) no se marca."""
+    ids = [h.id for h in habitaciones if h.estado == LIMPIEZA]
+    if not ids:
+        return {}
+    ahora = ahora or datetime.now(UTC)
+    consulta = (
+        select(EventoHabitacion.habitacion_id, func.max(EventoHabitacion.creado_en))
+        .where(EventoHabitacion.habitacion_id.in_(ids), EventoHabitacion.estado_nuevo == LIMPIEZA)
+        .group_by(EventoHabitacion.habitacion_id)
+    )
+    estados = {}
+    for habitacion_id, desde in (await db.execute(consulta)).all():
+        desde = con_zona(desde)
+        minutos = int((ahora - desde).total_seconds() // 60)
+        estados[habitacion_id] = EstadoLimpieza(desde, minutos, minutos > settings.DEMORA_LIMPIEZA_MIN)
+    return estados
+
+
 async def limpieza_tipica(db: AsyncSession, ahora: datetime | None = None) -> float:
     """Minutos de una limpieza típica tras un turno (la mediana de los últimos 30 días)."""
     ahora = ahora or datetime.now(UTC)
