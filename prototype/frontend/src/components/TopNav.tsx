@@ -95,7 +95,7 @@ const TopNav: React.FC<TopNavProps> = ({
       {/* Fila 1: el motel y las herramientas */}
       <div className="mx-auto flex h-14 max-w-[1600px] items-center gap-4 px-4 sm:px-6">
         <div className="flex min-w-0 items-center gap-3">
-          <Logo className="h-6 sm:h-7" />
+          <Logo className="h-5 sm:h-[1.375rem]" />
           {establecimiento && (
             <>
               <span className="hidden h-6 w-px bg-line sm:block" aria-hidden="true" />

@@ -187,7 +187,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onIngreso, aviso }) => {
           <ThemeToggle />
         </div>
         <div className="w-full max-w-sm animate-pop-in">
-          <Logo className="mb-8 h-8 lg:hidden" />
+          <Logo className="mb-8 h-7 lg:hidden" />
           <h1 className="text-2xl font-semibold text-ink">Ingresar</h1>
           <p className="mt-1 text-sm text-muted">Cada operación queda registrada a su nombre.</p>
 

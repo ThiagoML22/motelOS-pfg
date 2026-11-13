@@ -124,7 +124,7 @@ const PlataformaView: React.FC<PlataformaViewProps> = ({ sesion, onRefrescarSesi
     <div className="flex min-h-screen flex-col">
       <header className="sticky top-0 z-30 border-b border-line bg-surface">
         <div className="mx-auto flex h-14 max-w-[1600px] items-center gap-4 px-4 sm:px-6">
-          <Logo className="h-7" />
+          <Logo className="h-[1.375rem]" />
           <span className="rounded-md bg-accent-soft px-2 py-1 text-xs font-semibold uppercase tracking-wide text-accent">
             Plataforma
           </span>
