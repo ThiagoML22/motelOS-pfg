@@ -585,8 +585,8 @@ export const AsistenteFlotante: React.FC<AsistenteFlotanteProps> = ({ abierto, o
   return (
     <div className={`print:hidden ${ocultarEnPantallaAncha ? 'xl:hidden' : ''}`}>
       {abierto && (
-        <div className="fixed inset-x-3 bottom-[6.5rem] z-40 animate-pop-in sm:inset-x-auto sm:right-6 sm:w-[24rem]">
-          <ChatAsistente className="h-[min(70vh,40rem)] shadow-panel" onCerrar={() => onCambiar(false)} />
+        <div className="fixed inset-x-2 bottom-[calc(9.5rem+env(safe-area-inset-bottom))] top-16 z-40 animate-pop-in sm:inset-x-auto sm:bottom-[6.5rem] sm:right-6 sm:top-auto sm:w-[24rem]">
+          <ChatAsistente className="h-full shadow-panel sm:h-[min(70vh,40rem)]" onCerrar={() => onCambiar(false)} />
         </div>
       )}
       <button
@@ -599,7 +599,7 @@ export const AsistenteFlotante: React.FC<AsistenteFlotanteProps> = ({ abierto, o
         aria-expanded={abierto}
         aria-label={abierto ? 'Cerrar a Mot' : 'Abrir a Mot, el asistente'}
         title="Mot"
-        className="mot-boton fixed bottom-2 right-4 z-40 h-[5.75rem] w-[4.5rem] animate-pop-in rounded-2xl"
+        className="mot-boton fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom))] right-2 z-40 h-[4.75rem] w-[3.75rem] animate-pop-in rounded-2xl sm:bottom-2 sm:right-4 sm:h-[5.75rem] sm:w-[4.5rem]"
       >
         <Mot estado={estado} gesto={estado === 'reposo' ? gesto : null} seguirCursor className="mot-flotante h-full w-full" />
         {abierto && (

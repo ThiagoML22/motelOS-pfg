@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { BedDouble, Keyboard, LogOut, MessageSquarePlus, Moon, Rows3, UserRound, WifiOff } from 'lucide-react';
+import { ArrowDownUp, BedDouble, Keyboard, LogOut, MessageSquarePlus, Moon, Rows3, UserRound, WifiOff } from 'lucide-react';
 import { Arqueo, Categoria, HabitacionConDetalles, Novedad, PedidoVentanilla, RoomStatus, Sesion, TipoCliente } from './types';
 import { AsistenteFlotante, AsistenteProvider, useAsistente } from './components/Asistente';
 import AtajosTeclado, { escribiendo } from './components/AtajosTeclado';
@@ -27,6 +27,7 @@ import PlataformaView from './components/PlataformaView';
 import TopNav, { ITEMS, View } from './components/TopNav';
 import RoomsGrid from './components/RoomsGrid';
 import OperacionView from './components/OperacionView';
+import NavInferior from './components/NavInferior';
 import RoomDialog from './components/RoomDialog';
 import InventarioView from './components/InventarioView';
 import LoginView from './components/LoginView';
@@ -471,7 +472,8 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
 
       {/* Cada sección aparece con un fundido corto (la clave reinicia la animación). Solo opacidad: moverla desbordaría
           la página un instante y la barra de desplazamiento correría el encabezado. */}
-      <main key={activeView} className="mx-auto flex w-full max-w-[1600px] flex-1 animate-fade-in flex-col px-4 pb-6 pt-4 sm:px-6">
+      {/* En el celular queda lugar abajo para la barra de secciones y para Mot. */}
+      <main key={activeView} className="mx-auto flex w-full min-w-0 max-w-[1600px] flex-1 animate-fade-in flex-col px-4 pb-32 pt-4 sm:px-6 sm:pb-6">
         {enApertura && (
           <GuardiaView sesion={sesion} onGuardiaAbierta={onRefrescarSesion} onSalir={onSalir} />
         )}
@@ -485,17 +487,22 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
                 <span className="text-sm font-normal tabular-nums text-muted">{habitaciones.length}</span>
               </h1>
               {esGerencia && (
-                <span title="La ventanilla la opera el conserje con su guardia" className="rounded-full bg-surface-2 px-2 py-0.5 text-xs text-muted">
+                <span title="La ventanilla la opera el conserje con su guardia" className="rounded-full bg-surface-2 px-2 py-0.5 text-xs text-muted max-sm:hidden">
                   Solo consulta
                 </span>
               )}
               {vistaHabitaciones === 'grilla' && (
-                <div role="group" aria-label="Filtrar por estado" className="flex flex-wrap items-center gap-1.5">
+                // En el celular, una sola fila que se desliza: las habitaciones quedan arriba.
+                <div
+                  role="group"
+                  aria-label="Filtrar por estado"
+                  className="sin-barra flex flex-wrap items-center gap-1.5 max-sm:order-last max-sm:-mx-4 max-sm:w-[calc(100%+2rem)] max-sm:flex-nowrap max-sm:overflow-x-auto max-sm:px-4"
+                >
                   <button
                     type="button"
                     aria-pressed={filtro === 'Todas'}
                     onClick={() => setFiltro('Todas')}
-                    className={`press hit rounded-md border px-2.5 py-1 text-sm ${
+                    className={`press hit shrink-0 whitespace-nowrap rounded-md border px-2.5 py-1 text-sm ${
                       filtro === 'Todas'
                         ? 'border-accent bg-accent-soft font-medium text-accent'
                         : 'border-line-strong bg-surface text-muted hover:text-ink'
@@ -509,7 +516,7 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
                       type="button"
                       aria-pressed={filtro === estado}
                       onClick={() => setFiltro(estado)}
-                      className={`press hit flex items-center gap-2 rounded-md border px-2.5 py-1 text-sm ${
+                      className={`press hit flex shrink-0 items-center gap-2 whitespace-nowrap rounded-md border px-2.5 py-1 text-sm ${
                         filtro === estado
                           ? 'border-accent bg-accent-soft font-medium text-accent'
                           : 'border-line-strong bg-surface text-muted hover:text-ink'
@@ -527,11 +534,22 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
                     aria-label="Ordenar las habitaciones"
                     value={orden}
                     onChange={(e) => cambiarOrden(e.target.value as OrdenGrilla)}
-                    className="h-8 rounded-md border border-line-strong bg-surface px-2 text-sm text-ink focus:border-accent focus-visible:outline-none"
+                    className="h-8 rounded-md border border-line-strong bg-surface px-2 text-sm text-ink focus:border-accent focus-visible:outline-none max-sm:hidden"
                   >
                     <option value="numero">Por número</option>
                     <option value="vencimiento">Por vencimiento</option>
                   </select>
+                )}
+                {vistaHabitaciones === 'grilla' && (
+                  <button
+                    type="button"
+                    onClick={() => cambiarOrden(orden === 'numero' ? 'vencimiento' : 'numero')}
+                    aria-label={`Ordenadas ${orden === 'numero' ? 'por número' : 'por vencimiento'}. Tocá para cambiar.`}
+                    className="press hit flex h-8 items-center gap-1.5 rounded-md border border-line-strong bg-surface px-2.5 text-sm text-ink sm:hidden"
+                  >
+                    <ArrowDownUp className="h-4 w-4 text-muted" aria-hidden="true" />
+                    {orden === 'numero' ? 'Nº' : 'Vence'}
+                  </button>
                 )}
                 <SelectorVista vista={vistaHabitaciones} onCambiar={cambiarVistaHabitaciones} />
               </div>
@@ -542,12 +560,16 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
             {((vistaHabitaciones === 'grilla' && categoriasConHabitaciones.length > 1) || conPocoLugar || puedeRegistrar) && (
               <div className="mb-2.5 flex flex-wrap items-center gap-x-3 gap-y-2">
                 {vistaHabitaciones === 'grilla' && categoriasConHabitaciones.length > 1 && (
-                  <div role="group" aria-label="Filtrar por categoría" className="flex flex-wrap items-center gap-1.5">
+                  <div
+                    role="group"
+                    aria-label="Filtrar por categoría"
+                    className="sin-barra flex flex-wrap items-center gap-1.5 max-sm:-mx-4 max-sm:w-[calc(100%+2rem)] max-sm:flex-nowrap max-sm:overflow-x-auto max-sm:px-4"
+                  >
                     <button
                       type="button"
                       aria-pressed={filtroCategoria === null}
                       onClick={() => setFiltroCategoria(null)}
-                      className={`press hit rounded-full border px-2.5 py-0.5 text-sm ${
+                      className={`press hit shrink-0 whitespace-nowrap rounded-full border px-2.5 py-0.5 text-sm ${
                         filtroCategoria === null
                           ? 'border-accent bg-accent-soft font-medium text-accent'
                           : 'border-line-strong bg-surface text-muted hover:text-ink'
@@ -566,7 +588,7 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
                           aria-pressed={activa}
                           onClick={() => setFiltroCategoria(activa ? null : c.id)}
                           title={c.descripcion ?? undefined}
-                          className={`press hit flex items-center gap-2 rounded-full border px-2.5 py-0.5 text-sm ${
+                          className={`press hit flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full border px-2.5 py-0.5 text-sm ${
                             activa ? 'font-medium' : 'border-line-strong bg-surface text-muted hover:text-ink'
                           }`}
                           style={activa ? { borderColor: c.color, color: c.color, backgroundColor: `${c.color}14` } : undefined}
@@ -717,6 +739,8 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
           ]}
         />
       )}
+
+      <NavInferior sesion={sesion} activeView={activeView} setActiveView={setActiveView} pendientes={pendientes} />
 
       {/* El asistente está para todo el personal; en Inteligencia, con pantalla ancha, ya está en el costado. */}
       <AsistenteFlotante

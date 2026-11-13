@@ -47,12 +47,13 @@ export const SelectorVista: React.FC<{ vista: VistaHabitaciones; onCambiar: (vis
         type="button"
         aria-pressed={vista === valor}
         onClick={() => onCambiar(valor)}
-        className={`relative flex items-center justify-center gap-1.5 whitespace-nowrap rounded px-3 py-1 text-sm transition-colors ${
+        aria-label={etiqueta}
+        className={`relative flex items-center justify-center gap-1.5 whitespace-nowrap rounded px-2.5 py-1 text-sm transition-colors sm:px-3 ${
           vista === valor ? 'font-medium text-ink' : 'text-muted hover:text-ink'
         }`}
       >
         <Icono className="h-4 w-4" aria-hidden="true" />
-        {etiqueta}
+        <span className="max-sm:hidden">{etiqueta}</span>
       </button>
     ))}
   </div>

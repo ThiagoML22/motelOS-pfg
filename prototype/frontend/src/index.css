@@ -567,6 +567,13 @@
   color: color-mix(in srgb, var(--chip) 45%, white);
 }
 
+/* Los diálogos, en el celular, suben desde abajo como una hoja (ui/Modal.tsx). */
+@media (max-width: 639.98px) {
+  .modal-hoja {
+    animation: hoja-subir 260ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+  }
+}
+
 /* La hoja que sube desde abajo en la página del cliente. */
 .hoja-entrar {
   animation: hoja-subir 260ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards;

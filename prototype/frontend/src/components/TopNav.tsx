@@ -140,8 +140,8 @@ const TopNav: React.FC<TopNavProps> = ({
         </div>
       </div>
 
-      {/* Fila 2: secciones y guardia en curso */}
-      <div className="mx-auto flex h-11 max-w-[1600px] items-stretch gap-4 px-4 sm:px-6">
+      {/* Fila 2: secciones y guardia en curso. En el celular las secciones van en la barra de abajo (NavInferior). */}
+      <div className="mx-auto hidden h-11 max-w-[1600px] items-stretch gap-4 px-4 sm:flex sm:px-6">
         <nav aria-label="Principal" className="sin-barra -mb-px flex min-w-0 flex-1 items-stretch gap-1 overflow-x-auto">
           {items.map(({ view, label, icon: Icon }) => {
             const active = activeView === view;

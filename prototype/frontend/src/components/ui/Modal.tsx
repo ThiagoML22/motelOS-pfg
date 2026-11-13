@@ -18,7 +18,8 @@ const Modal: React.FC<ModalProps> = ({ title, subtitle, onClose, children, foote
   const ref = useDialog<HTMLDivElement>(onClose);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    // En el celular el diálogo es una hoja que sube desde abajo, a todo el ancho y al alcance del pulgar.
+    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4">
       <div className="absolute inset-0 animate-fade-in bg-ink/40 backdrop-blur-[2px]" onClick={onClose} aria-hidden="true" />
       <div
         ref={ref}
@@ -26,9 +27,10 @@ const Modal: React.FC<ModalProps> = ({ title, subtitle, onClose, children, foote
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
-        className={`relative flex max-h-[90vh] w-full animate-pop-in flex-col rounded-lg border border-line bg-surface shadow-panel focus:outline-none ${SIZES[size]}`}
+        className={`modal-hoja relative flex max-h-[92dvh] w-full flex-col rounded-t-2xl border border-b-0 border-line bg-surface shadow-panel focus:outline-none sm:max-h-[90vh] sm:animate-pop-in sm:rounded-lg sm:border-b ${SIZES[size]}`}
       >
-        <div className="flex items-start justify-between gap-4 border-b border-line px-6 py-4">
+        <span aria-hidden="true" className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-line-strong sm:hidden" />
+        <div className="flex items-start justify-between gap-4 border-b border-line px-4 py-3 sm:px-6 sm:py-4">
           <div className="min-w-0">
             <h2 id={titleId} className="text-base font-semibold text-ink">
               {title}
@@ -44,8 +46,14 @@ const Modal: React.FC<ModalProps> = ({ title, subtitle, onClose, children, foote
             <X className="h-5 w-5" aria-hidden="true" />
           </button>
         </div>
-        <div className="overflow-y-auto px-6 py-5">{children}</div>
-        {footer && <div className="border-t border-line px-6 py-4">{footer}</div>}
+        <div
+          className={`overflow-y-auto px-4 py-4 sm:px-6 sm:py-5 ${footer ? '' : 'max-sm:pb-[calc(1.25rem+env(safe-area-inset-bottom))]'}`}
+        >
+          {children}
+        </div>
+        {footer && (
+          <div className="border-t border-line px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 sm:px-6 sm:py-4">{footer}</div>
+        )}
       </div>
     </div>
   );

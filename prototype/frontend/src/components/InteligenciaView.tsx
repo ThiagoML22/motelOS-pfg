@@ -389,7 +389,7 @@ const NavSecciones: React.FC<{ actual: Seccion; alertas: AlertaIA[]; onElegir: (
   <div
     role="tablist"
     aria-label="Secciones de Inteligencia"
-    className="sin-barra -mx-1 flex gap-1 overflow-x-auto px-1 pb-1 sm:flex-wrap sm:overflow-visible"
+    className="sin-barra -mx-4 flex gap-1 overflow-x-auto px-4 pb-1 sm:-mx-1 sm:flex-wrap sm:overflow-visible sm:px-1"
   >
     {SECCIONES.map(({ id, label, icon: Icon }) => {
       const pendientes = id === 'resumen' ? 0 : importantes(alertas.filter((a) => seccionDe(a) === id));

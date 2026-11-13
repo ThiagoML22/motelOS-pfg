@@ -147,12 +147,15 @@ const PanelGerencia: React.FC<PanelGerenciaProps> = ({ onCambioGuardia, codigoIn
 
       {estado === 'ok' && guardiaAbierta && !guardiaAbierta.es_propia && (
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line bg-surface px-4 py-3">
-          <p className="flex items-center gap-2 text-sm text-ink">
-            <DoorOpen className="h-4 w-4 text-accent" aria-hidden="true" />
-            Guardia abierta de <span className="font-medium">{guardiaAbierta.operador_nombre}</span>
-            <span className="text-muted">
-              · {NOMBRE_FRANJA[guardiaAbierta.franja] ?? guardiaAbierta.franja} · desde{' '}
-              {formatDateTime(guardiaAbierta.abierta_en)}
+          <p className="flex min-w-0 items-start gap-2 text-sm text-ink">
+            <DoorOpen className="mt-0.5 h-4 w-4 shrink-0 text-accent" aria-hidden="true" />
+            <span>
+              Guardia abierta de <span className="font-medium">{guardiaAbierta.operador_nombre}</span>
+              <span className="text-muted">
+                {' '}
+                · {NOMBRE_FRANJA[guardiaAbierta.franja] ?? guardiaAbierta.franja} · desde{' '}
+                {formatDateTime(guardiaAbierta.abierta_en)}
+              </span>
             </span>
           </p>
           <Button variant="secondary" size="sm" onClick={() => setSupervisando(true)}>
