@@ -86,6 +86,39 @@
   filter: invert(1) hue-rotate(180deg) brightness(1.15);
 }
 
+/* El logo con el color del motel (ui/Logo.tsx): dos máscaras sacadas de logo.png, pintadas con la tinta y el acento. El
+   color cambia con una transición corta, al elegir otro en Configuración o al pasar de claro a oscuro. */
+.logo-marca {
+  position: relative;
+  display: inline-block;
+  aspect-ratio: 1024 / 341;
+}
+
+.logo-marca > span {
+  position: absolute;
+  inset: 0;
+  -webkit-mask: var(--logo-capa) center / contain no-repeat;
+  mask: var(--logo-capa) center / contain no-repeat;
+  transition: background-color 400ms ease;
+}
+
+.logo-tinta {
+  --logo-capa: url('/logo-tinta.png');
+  background-color: rgb(var(--ink));
+}
+
+.logo-acento {
+  --logo-capa: url('/logo-acento.png');
+  background-color: rgb(var(--accent));
+}
+
+@media (forced-colors: active) {
+  .logo-marca > span {
+    forced-color-adjust: none;
+    background-color: CanvasText;
+  }
+}
+
 /* Cambio de tema: la página nueva aparece en una onda de borde suave que nace del botón (View Transitions). Un resplandor
    viaja con el borde y, al anochecer, se encienden estrellas. El botón va por encima, para verlo cambiar. Donde el
    navegador no lo soporta, los colores se funden en 400 ms. */
