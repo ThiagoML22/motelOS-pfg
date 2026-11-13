@@ -37,7 +37,7 @@ from app.models.arqueo import ArqueoCaja
 from app.models.articulo import Articulo
 from app.models.calificacion import Calificacion
 from app.models.categoria import CategoriaHabitacion
-from app.models.cliente_perdido import ESPERA, PRECIO, SIN_LUGAR, ClientePerdido
+from app.models.cliente_perdido import ESPERA, OTRO, PRECIO, SIN_LUGAR, ClientePerdido
 from app.models.configuracion import ConfiguracionCaja
 from app.models.consumo import Consumo
 from app.models.establecimiento import Establecimiento
@@ -64,7 +64,7 @@ from app.services import franjas, sellos
 from app.services.billing_service import calcular_sobreturno
 from app.services.caja import clasificar_diferencia
 from app.services.liquidacion import con_zona
-from app.services.ropa import cuenta_por_estado
+from app.services.ropa import cuenta_por_estado, tiene_lavanderia_propia
 
 FRANJAS = (6, 14, 22)
 # Llegadas por hora (hora local) en un día promedio: la noche concentra la demanda y la tarde tiene su pico.
@@ -90,6 +90,15 @@ COBERTURA_DIAS = (1.5, 4, 9, 14, 22, 35)
 # precio y se van.
 REGISTRADOS = 0.8
 SE_VAN_POR_PRECIO = 0.012
+# De los que se van, los que lo hacen por otra cosa (motivo «Otro», migración 018), con lo que anotó el conserje.
+OTROS_MOTIVOS = 0.08
+DETALLES_OTRO = (
+    "Buscaba habitación con hidromasaje",
+    "Venía con mascota",
+    "Quería cochera techada",
+    "Quería pagar con transferencia",
+    "Buscaba un turno de media hora",
+)
 # Limpiezas sin turno antes (repasos o estadías sin registrar), la mayoría del conserje más desprolijo.
 LIMPIEZAS_SIN_TURNO = 7
 
@@ -267,9 +276,14 @@ async def generar_historial(
 
     def perdido(momento: datetime, motivo: str, categoria_id: int | None) -> None:
         guardia = guardia_en(momento)
+        # Algunos se van por otra cosa, y el conserje la escribe (migración 018).
+        detalle = None
+        if motivo != PRECIO and rng_extra.random() < OTROS_MOTIVOS:
+            motivo, detalle = OTRO, rng_extra.choice(DETALLES_OTRO)
         db.add(
             ClientePerdido(
                 motivo=motivo,
+                detalle=detalle,
                 categoria_id=categoria_id,
                 operador_id=guardia.operador.id,
                 guardia_id=guardia.modelo.id,
@@ -475,6 +489,19 @@ PUNTAJES = ((5, 0.56), (4, 0.27), (3, 0.1), (2, 0.05), (1, 0.02))
 PUNTAJES_CON_FALLA = ((4, 0.2), (3, 0.34), (2, 0.3), (1, 0.16))
 PROBLEMAS_COMUNES = ((1, 0.28), (2, 0.24), (8, 0.2), (16, 0.16), (32, 0.12))
 AIRE_Y_RUIDO = 4 | 2
+# Con cuatro estrellas también se puede marcar qué falló; y algunos dejan una reseña de hasta seis palabras.
+FALLA_CON_CUATRO = 0.3
+DEJAN_RESENA = 0.3
+RESENAS = {
+    5: ("Excelente, todo impecable", "Muy limpio y cómodo", "Volveremos sin dudas", "Hermosa habitación, todo perfecto",
+        "Súper recomendable", "Muy buena atención"),
+    4: ("Muy bien, faltó algo de aire", "Lindo lugar, la TV fallaba", "Buena atención, algo de ruido",
+        "Todo bien, mejorar el Wi-Fi"),
+    3: ("Regular, el baño no estaba limpio", "Mucho ruido del pasillo", "Cómodo pero tardaron en atender"),
+    2: ("El aire no funcionaba", "Tardaron mucho en atender", "Sábanas manchadas, muy decepcionante"),
+    1: ("El aire no funcionaba", "No volvemos, todo sucio"),
+}
+RESENAS_AIRE = ("El aire no enfriaba nada", "Hacía mucho calor, aire roto")
 
 
 async def agregar_opiniones(db: AsyncSession, semilla: int, habitacion_poco_usada: int | None = None) -> int:
@@ -500,14 +527,18 @@ async def agregar_opiniones(db: AsyncSession, semilla: int, habitacion_poco_usad
         problemas = 0
         if con_falla and puntaje <= 3:
             problemas = AIRE_Y_RUIDO if rng.random() < 0.6 else 4
-        elif puntaje <= 3:
+        elif puntaje <= 3 or (puntaje == 4 and rng.random() < FALLA_CON_CUATRO):
             problemas = _elegir(rng, PROBLEMAS_COMUNES)
+        resena = None
+        if rng.random() < DEJAN_RESENA:
+            resena = rng.choice(RESENAS_AIRE if con_falla and problemas & 4 else RESENAS[puntaje])
         db.add(
             Calificacion(
                 turno_id=turno_id,
                 habitacion_id=habitacion_id,
                 puntaje=puntaje,
                 problemas=problemas,
+                resena=resena,
                 creado_en=hora_fin + timedelta(minutes=rng.randint(1, 30)),
             )
         )
@@ -598,6 +629,8 @@ async def agregar_operacion(db: AsyncSession, semilla: int, habitacion_poco_usad
     lavando = dict.fromkeys(hay, 0)
     # Cada motel cuenta a su manera (migración 017): separado por estado o todo junto.
     por_estado = await cuenta_por_estado(db)
+    # Con lavandería propia la ropa no sale del motel: solo hay compras y bajas (migración 018).
+    propia = await tiene_lavanderia_propia(db)
     cantidades = {"recuentos": 0, "movimientos": 0, "traspasos": 0, "arreglos": 0, "traslados": 0}
     anterior: Guardia | None = None
     ultimo: dict[str, int] = {}
@@ -667,11 +700,19 @@ async def agregar_operacion(db: AsyncSession, semilla: int, habitacion_poco_usad
         )
         cantidades["traspasos"] += 1
 
-        # Lo que pasa durante la guardia: la lavandería retira y devuelve, y alguna toalla se rompe.
+        # Lo que pasa durante la guardia: la lavandería de afuera retira y devuelve, se compra ropa y alguna toalla se
+        # rompe.
         medio = apertura + (con_zona(guardia.cerrada_en) - apertura) / 2
         for prenda in hay:
             cantidad, tipo = 0, None
-            if lavando[prenda]:
+            if propia:
+                if rng.random() < 0.015:
+                    cantidad, tipo = rng.choice((6, 10, 12)), "COMPRA"
+                    hay[prenda] += cantidad
+                elif rng.random() < 0.02:
+                    cantidad, tipo = 1, "BAJA"
+                    hay[prenda] -= 1
+            elif lavando[prenda]:
                 if rng.random() < 0.5:
                     cantidad, tipo, lavando[prenda] = lavando[prenda], "LAVANDERIA_VUELVE", 0
                     hay[prenda] += cantidad
@@ -819,7 +860,7 @@ NOVEDADES_DEMO = {
         (11, "conserje1", "Quedan pocas aguas en el depósito; ya le avisé al proveedor.", False, None),
         (4, "conserje2", "Se rompió el control remoto de la 11, quedó uno de repuesto en recepción.", False, 11),
     ],
-    "luna": [(6, "conserje1", "Cambiar las sábanas del depósito: la lavandería entrega el jueves.", False, None)],
+    "luna": [(6, "conserje1", "Reponer las sábanas del depósito: las nuevas llegan el jueves.", False, None)],
 }
 
 

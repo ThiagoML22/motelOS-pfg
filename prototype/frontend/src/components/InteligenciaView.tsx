@@ -570,10 +570,11 @@ const MapaSecciones: React.FC<{ tablero: Tablero; onIr: (s: Seccion) => void }> 
   );
 };
 
+// Una cifra con su etiqueta. Nunca se monta sobre la de al lado: si no entra, baja de renglón.
 const Mini: React.FC<{ etiqueta: string; valor: React.ReactNode; nota?: string }> = ({ etiqueta, valor, nota }) => (
-  <div>
+  <div className="min-w-0">
     <p className="text-xs text-muted">{etiqueta}</p>
-    <p className="mt-0.5 text-xl font-semibold text-ink">{valor}</p>
+    <p className="mt-0.5 text-lg font-semibold leading-tight text-ink [overflow-wrap:anywhere] sm:text-xl">{valor}</p>
     {nota && <p className="text-xs text-subtle">{nota}</p>}
   </div>
 );
@@ -592,7 +593,8 @@ const ClientesPerdidosCard: React.FC<{ datos: ClientesPerdidos }> = ({ datos }) 
   const { franja } = datos;
   return (
     <Tarjeta titulo="Clientes que se fueron" icono={UserRoundX} extra={`últimos ${datos.dias} días`}>
-      <div className="grid grid-cols-[repeat(3,minmax(0,1fr))] gap-3">
+      {/* En el celular, el valor en pesos necesita su lugar: la tercera cifra baja de renglón. */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-[repeat(3,minmax(0,1fr))]">
         <Mini etiqueta="Clientes" valor={<Cifra valor={datos.total} />} nota={`${porcentaje(datos.parte)} de los que llegaron`} />
         <Mini
           etiqueta="Valor estimado"
@@ -628,15 +630,38 @@ const ClientesPerdidosCard: React.FC<{ datos: ClientesPerdidos }> = ({ datos }) 
         />
       </div>
       <div className="mt-3">
-        <BarraPartes partes={datos.motivos.map((m) => ({ clave: m.motivo, etiqueta: m.etiqueta, parte: m.parte, valor: String(m.cantidad) }))} />
+        <BarraPartes
+          partes={[...datos.motivos.filter((m) => m.motivo !== 'OTRO'), ...datos.motivos.filter((m) => m.motivo === 'OTRO')].map((m) => ({
+            clave: m.motivo,
+            etiqueta: m.etiqueta,
+            parte: m.parte,
+            valor: String(m.cantidad),
+          }))}
+        />
       </div>
+      {datos.otros.length > 0 && (
+        <div className="mt-3 border-t border-line pt-3">
+          <p className="text-xs font-medium text-muted">Lo que anotaron con «Otro motivo»</p>
+          <ul className="mt-1.5 space-y-1 text-sm">
+            {datos.otros.map((o) => (
+              <li key={o.detalle} className="flex items-baseline justify-between gap-3">
+                <span className="min-w-0 text-ink">{o.detalle}</span>
+                <span className="shrink-0 tabular-nums text-muted">{o.cantidad === 1 ? '1 vez' : `${o.cantidad} veces`}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </Tarjeta>
   );
 };
 
-// Lo que marcan los clientes al irse. Son anónimas: solo totales, nunca una opinión suelta con su hora.
+// Lo que marcan los clientes al irse. Son anónimas: totales, y las reseñas de seis palabras sin hora ni habitación.
+const PRIMERAS_RESENAS = 6;
+
 const OpinionesCard: React.FC<{ datos: Opiniones }> = ({ datos }) => {
   const titulo = 'Lo que dicen los clientes';
+  const [todasLasResenas, setTodasLasResenas] = useState(false);
   if (!datos.cantidad) {
     return (
       <Tarjeta titulo={titulo} icono={Star} extra={`últimos ${datos.dias} días`}>
@@ -685,6 +710,36 @@ const OpinionesCard: React.FC<{ datos: Opiniones }> = ({ datos }) => {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+      {datos.resenas.length > 0 && (
+        <div className="mt-3 border-t border-line pt-3">
+          <p className="text-xs font-medium text-muted">Reseñas más nuevas</p>
+          <ul className="mt-2 grid gap-2 sm:grid-cols-2">
+            {datos.resenas.slice(0, todasLasResenas ? undefined : PRIMERAS_RESENAS).map((r, i) => (
+              <li key={i} className="rounded-md bg-surface-2 px-3 py-2">
+                <span className="flex gap-0.5" role="img" aria-label={`${r.puntaje} de 5`}>
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <Star
+                      key={n}
+                      className={`h-3 w-3 ${n <= r.puntaje ? 'fill-amber-400 text-amber-400' : 'text-line-strong'}`}
+                      aria-hidden="true"
+                    />
+                  ))}
+                </span>
+                <q className="mt-1 block text-sm text-ink">{r.texto}</q>
+              </li>
+            ))}
+          </ul>
+          {datos.resenas.length > PRIMERAS_RESENAS && (
+            <button
+              type="button"
+              onClick={() => setTodasLasResenas((v) => !v)}
+              className="press mt-2 h-9 rounded-md px-2 text-sm font-medium text-accent hover:bg-accent-soft"
+            >
+              {todasLasResenas ? 'Ver menos' : `Ver las ${datos.resenas.length}`}
+            </button>
+          )}
         </div>
       )}
     </Tarjeta>

@@ -84,8 +84,8 @@ DEFINICIONES: tuple[Definicion, ...] = (
         (r"recuento de (la )?ropa", r"conteo de (la )?ropa", r"recuento de toallas"),
         "Es contar todas las toallas y sábanas del motel en cada cambio de guardia. Cada motel elige cómo: separadas "
         "en limpias, sucias y en uso (las puestas en las habitaciones), o todo junto. Quien cierra cuenta a ciegas y "
-        "quien entra confirma o corrige. Lo que salió a la lavandería, se compró o se dio de baja se anota aparte, y "
-        "una diferencia sin explicar la ve la gerencia.",
+        "quien entra confirma o corrige. Lo que se compró o se dio de baja se anota aparte (y, si la lavandería es de "
+        "afuera, lo que salió y lo que volvió), y una diferencia sin explicar la ve la gerencia.",
         "caja",
         extra="toallas sabanas contar lavanderia faltante",
     ),
@@ -475,9 +475,10 @@ DEFINICIONES: tuple[Definicion, ...] = (
         "cliente_perdido",
         "Un cliente perdido",
         (r"clientes? perdidos?",),
-        "Es el cliente que llegó y se fue sin quedarse: no había lugar, no quiso esperar o le pareció caro. El "
-        "conserje lo registra con «Se fue un cliente» en Habitaciones, sin ningún dato de la persona. Así la gerencia "
-        "ve la demanda que no se atendió, que de otro modo no queda en ninguna parte.",
+        "Es el cliente que llegó y se fue sin quedarse: no había lugar, no quiso esperar, le pareció caro u otro "
+        "motivo, que se escribe en pocas palabras. El conserje lo registra con «Se fue un cliente» en Habitaciones, "
+        "sin ningún dato de la persona. Así la gerencia ve la demanda que no se atendió, que de otro modo no queda en "
+        "ninguna parte.",
         "dashboard",
         extra="demanda perdida rechazado lleno completo",
     ),
@@ -525,9 +526,10 @@ DEFINICIONES: tuple[Definicion, ...] = (
         "calificacion",
         "La calificación del cliente",
         (r"calificacion(es)? (del|de los) clientes?", r"\bque es (la|una) calificacion\b", r"\bopiniones?\b"),
-        "Al irse, el cliente puede poner de 1 a 5 y marcar lo que falló, desde el QR y hasta una hora después del "
-        "cobro. Es anónima: no guarda datos de la persona ni texto libre, y la gerencia solo ve totales por "
-        "habitación.",
+        "Al irse, el cliente puede poner de 1 a 5, marcar lo que falló y dejar una reseña de hasta seis palabras, "
+        "desde el QR y hasta una hora después del cobro. La reseña pasa por un filtro: no entran insultos, groserías "
+        "ni datos de contacto. Es anónima: no guarda datos de la persona, y la gerencia ve totales por habitación y "
+        "las reseñas sin hora ni habitación.",
         "inteligencia",
         extra="puntaje estrellas queja cliente anonima",
     ),

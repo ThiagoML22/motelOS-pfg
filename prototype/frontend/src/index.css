@@ -39,6 +39,8 @@
   --viz-1: 42 120 214;
   --viz-2: 235 104 52;
   --viz-3: 27 175 122;
+  /* Neutro, para lo que sobra: «Otro» va al final y en gris. */
+  --viz-4: 150 154 166;
   --viz-grid: 225 224 217;
   --viz-axis: 195 194 183;
 }
@@ -77,6 +79,7 @@
   --viz-1: 57 135 229;
   --viz-2: 217 89 38;
   --viz-3: 25 158 112;
+  --viz-4: 112 120 140;
   --viz-grid: 44 50 66;
   --viz-axis: 60 70 92;
 }

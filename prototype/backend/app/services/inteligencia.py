@@ -25,7 +25,7 @@ from app.models.arqueo import ArqueoCaja
 from app.models.articulo import Articulo
 from app.models.calificacion import PROBLEMAS, Calificacion
 from app.models.categoria import CategoriaHabitacion
-from app.models.cliente_perdido import MOTIVOS, SIN_LUGAR, ClientePerdido
+from app.models.cliente_perdido import MOTIVOS, OTRO, SIN_LUGAR, ClientePerdido
 from app.models.consumo import Consumo
 from app.models.franja_tarifa import FranjaTarifa
 from app.models.guardia import Guardia
@@ -159,6 +159,8 @@ class Perdido:
     motivo: str
     categoria_id: int | None
     operador_id: int
+    # Con «Otro»: por qué se fue (migración 018).
+    detalle: str | None = None
 
 
 @dataclass(frozen=True)
@@ -167,6 +169,8 @@ class Opinion:
     habitacion_id: int
     puntaje: int
     problemas: int
+    # La reseña de hasta seis palabras (migración 018).
+    resena: str | None = None
 
 
 @dataclass(frozen=True)
@@ -316,25 +320,30 @@ async def contexto(db: AsyncSession, ahora: datetime | None = None) -> Contexto:
     )
     nombres = {i: n for i, n in (await db.execute(select(Operador.id, Operador.nombre_visible))).all()}
     perdidos = [
-        Perdido(local(m), motivo, categoria_id, operador_id)
-        for m, motivo, categoria_id, operador_id in (
+        Perdido(local(m), motivo, categoria_id, operador_id, detalle)
+        for m, motivo, categoria_id, operador_id, detalle in (
             await db.execute(
                 select(
                     ClientePerdido.creado_en,
                     ClientePerdido.motivo,
                     ClientePerdido.categoria_id,
                     ClientePerdido.operador_id,
+                    ClientePerdido.detalle,
                 ).where(ClientePerdido.creado_en >= desde_utc, ClientePerdido.creado_en < corte_utc)
             )
         ).all()
     ]
     # Las opiniones no dicen nada de la caja: no esperan al arqueo.
     opiniones = [
-        Opinion(local(m), h, p, problemas)
-        for m, h, p, problemas in (
+        Opinion(local(m), h, p, problemas, resena)
+        for m, h, p, problemas, resena in (
             await db.execute(
                 select(
-                    Calificacion.creado_en, Calificacion.habitacion_id, Calificacion.puntaje, Calificacion.problemas
+                    Calificacion.creado_en,
+                    Calificacion.habitacion_id,
+                    Calificacion.puntaje,
+                    Calificacion.problemas,
+                    Calificacion.resena,
                 ).where(Calificacion.creado_en >= desde_utc)
             )
         ).all()
@@ -469,6 +478,8 @@ def mapa_demanda(ctx: Contexto, semanas: int = SEMANAS_ESTACIONALES) -> dict:
 
 # Una habitación se compara con las demás recién con esta cantidad de opiniones: con menos, una sola la movería mucho.
 MINIMO_OPINIONES = 3
+# Las reseñas más nuevas y los «Otro» más repetidos que se muestran.
+MAXIMO_RESENAS = 12
 
 
 def problemas_de(mascara: int) -> list[str]:
@@ -477,7 +488,7 @@ def problemas_de(mascara: int) -> list[str]:
 
 def opiniones(ctx: Contexto, dias: int = 30) -> dict:
     """Promedio, lo que más falla y cómo está cada habitación. Solo totales: una opinión suelta con su hora dejaría de
-    ser anónima."""
+    ser anónima. Las reseñas (seis palabras como máximo) van con sus estrellas, sin hora ni habitación."""
     desde = ctx.ahora - timedelta(days=dias)
     propias = [o for o in ctx.opiniones if o.momento >= desde]
     if not propias:
@@ -489,6 +500,7 @@ def opiniones(ctx: Contexto, dias: int = 30) -> dict:
             "puntajes": [],
             "problemas": [],
             "habitaciones": [],
+            "resenas": [],
         }
     por_habitacion: dict[int, list[Opinion]] = defaultdict(list)
     problemas: Counter[str] = Counter()
@@ -525,6 +537,11 @@ def opiniones(ctx: Contexto, dias: int = 30) -> dict:
         "puntajes": [{"puntaje": p, "cantidad": puntajes[p]} for p in range(5, 0, -1)],
         "problemas": [{"problema": p, "cantidad": c} for p, c in problemas.most_common()],
         "habitaciones": filas,
+        "resenas": [
+            {"puntaje": o.puntaje, "texto": o.resena}
+            for o in sorted(propias, key=lambda o: o.momento, reverse=True)
+            if o.resena
+        ][:MAXIMO_RESENAS],
     }
 
 
@@ -556,6 +573,7 @@ def clientes_perdidos(ctx: Contexto, dias: int = 30) -> dict:
             "horas": horas,
             "franja": None,
             "esperados_24h": 0.0,
+            "otros": [],
         }
     general = mean(t.total for t in atendidos) if atendidos else 0.0
     tickets: dict[int, list[float]] = defaultdict(list)
@@ -596,7 +614,20 @@ def clientes_perdidos(ctx: Contexto, dias: int = 30) -> dict:
             "parte": round(suma / len(perdidos), 4),
         },
         "esperados_24h": round(sum(estacional(por_fecha, primero, m.date(), m.hour) or 0.0 for m in momentos), 1),
+        "otros": _otros_motivos(perdidos),
     }
+
+
+def _otros_motivos(perdidos: list[Perdido]) -> list[dict]:
+    """Lo que escribieron los conserjes con «Otro», agrupado: lo que más se repite primero."""
+    veces: Counter[str] = Counter()
+    texto: dict[str, str] = {}
+    for p in sorted(perdidos, key=lambda p: p.momento, reverse=True):
+        if p.motivo == OTRO and p.detalle:
+            clave = " ".join(p.detalle.lower().split())
+            veces[clave] += 1
+            texto.setdefault(clave, p.detalle)
+    return [{"detalle": texto[c], "cantidad": n} for c, n in veces.most_common(MAXIMO_RESENAS)]
 
 
 FRANJAS_DEL_DIA = (("Mañana", 6, 14), ("Tarde", 14, 22), ("Noche", 22, 6))

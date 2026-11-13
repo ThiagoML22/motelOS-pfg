@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Check, Hourglass, UserRoundX } from 'lucide-react';
+import { Check, Hourglass, PenLine, UserRoundX } from 'lucide-react';
 import { Categoria, MotivoPerdida, ProximaLibre } from '../types';
 import { api, getErrorMessage } from '../services/api';
 import { formatRoomNumber } from '../utils/format';
+import { inputClass } from './ui/Field';
 import { useToast } from './ui/Toast';
 
 const MOTIVOS: { motivo: MotivoPerdida; etiqueta: string }[] = [
@@ -10,13 +11,16 @@ const MOTIVOS: { motivo: MotivoPerdida; etiqueta: string }[] = [
   { motivo: 'ESPERA', etiqueta: 'No quiso esperar' },
   { motivo: 'PRECIO', etiqueta: 'Le pareció caro' },
 ];
+const LARGO_DETALLE = 80;
 
-// «Se fue un cliente»: dos toques (por qué se fue y, si se sabe, qué buscaba) y no guarda ningún dato de la persona.
+// «Se fue un cliente»: dos toques (por qué se fue y, si se sabe, qué buscaba) y no guarda ningún dato de la persona. Con
+// «Otro» se escriben unas palabras; el servidor las pasa por el filtro de groserías.
 export const BotonClientePerdido: React.FC<{ categorias: Categoria[]; destacado?: boolean }> = ({ categorias, destacado = false }) => {
   const { toast } = useToast();
   const [abierto, setAbierto] = useState(false);
   const [categoria, setCategoria] = useState<number | null>(null);
   const [enviando, setEnviando] = useState(false);
+  const [otro, setOtro] = useState<string | null>(null);
   const contenedor = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -33,13 +37,18 @@ export const BotonClientePerdido: React.FC<{ categorias: Categoria[]; destacado?
     };
   }, [abierto]);
 
-  const registrar = async (motivo: MotivoPerdida) => {
+  useEffect(() => {
+    if (!abierto) setOtro(null);
+  }, [abierto]);
+
+  const registrar = async (motivo: MotivoPerdida, detalle?: string) => {
     setEnviando(true);
     try {
-      const { en_la_guardia: cantidad } = await api.registrarClientePerdido(motivo, categoria);
+      const { en_la_guardia: cantidad } = await api.registrarClientePerdido(motivo, categoria, detalle);
       toast(`Registrado. ${cantidad === 1 ? 'Es el primero' : `Van ${cantidad}`} en esta guardia.`, 'success');
       setAbierto(false);
       setCategoria(null);
+      setOtro(null);
     } catch (err) {
       toast(getErrorMessage(err, 'No se pudo registrar.'), 'error');
     } finally {
@@ -67,7 +76,7 @@ export const BotonClientePerdido: React.FC<{ categorias: Categoria[]; destacado?
         <div
           role="dialog"
           aria-label="Registrar un cliente que se fue"
-          className="absolute right-0 top-full z-30 mt-2 w-72 max-w-[calc(100vw-2rem)] origin-top-right animate-pop-in rounded-lg border border-line bg-surface p-3 shadow-panel"
+          className="fixed inset-x-2 top-[3.75rem] z-30 origin-top-right animate-pop-in rounded-lg border border-line bg-surface p-3 shadow-panel sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-2 sm:w-72"
         >
           {categorias.length > 1 && (
             <>
@@ -102,12 +111,66 @@ export const BotonClientePerdido: React.FC<{ categorias: Categoria[]; destacado?
                 type="button"
                 disabled={enviando}
                 onClick={() => void registrar(motivo)}
-                className="press group flex w-full items-center justify-between rounded-md border border-line px-3 py-2 text-left text-sm text-ink hover:border-accent hover:bg-accent-soft disabled:opacity-50"
+                className="press group flex w-full items-center justify-between rounded-md border border-line px-3 py-2 text-left text-sm text-ink hover:border-accent hover:bg-accent-soft disabled:opacity-50 max-sm:h-11"
               >
                 {etiqueta}
                 <Check className="h-4 w-4 text-accent opacity-0 transition-opacity group-hover:opacity-100" aria-hidden="true" />
               </button>
             ))}
+            {otro === null ? (
+              <button
+                type="button"
+                disabled={enviando}
+                onClick={() => setOtro('')}
+                className="press flex w-full items-center gap-2 rounded-md border border-dashed border-line-strong px-3 py-2 text-left text-sm text-muted hover:border-accent hover:text-ink disabled:opacity-50 max-sm:h-11"
+              >
+                <PenLine className="h-4 w-4" aria-hidden="true" />
+                Otro motivo…
+              </button>
+            ) : (
+              <form
+                className="rounded-md border border-accent/60 p-2"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (otro.trim()) void registrar('OTRO', otro.trim());
+                }}
+              >
+                <label htmlFor="detalle-perdido" className="text-xs font-medium text-muted">
+                  Otro motivo: ¿por qué se fue?
+                </label>
+                <input
+                  id="detalle-perdido"
+                  autoFocus
+                  autoComplete="off"
+                  maxLength={LARGO_DETALLE}
+                  placeholder="Ej.: venía con mascota"
+                  className={`${inputClass} mt-1 h-10 w-full text-sm`}
+                  value={otro}
+                  onChange={(e) => setOtro(e.target.value)}
+                />
+                <div className="mt-2 flex items-center justify-between gap-2">
+                  <span className="text-[11px] tabular-nums text-subtle">
+                    {otro.length}/{LARGO_DETALLE}
+                  </span>
+                  <div className="flex gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setOtro(null)}
+                      className="press h-8 rounded-md px-2.5 text-sm text-muted hover:text-ink"
+                    >
+                      Volver
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={enviando || !otro.trim()}
+                      className="press h-8 rounded-md bg-accent px-3 text-sm font-medium text-accent-fg hover:bg-accent-hover disabled:opacity-40"
+                    >
+                      Registrar
+                    </button>
+                  </div>
+                </div>
+              </form>
+            )}
           </div>
           <p className="mt-2 text-[11px] text-subtle">No se guarda ningún dato del cliente.</p>
         </div>

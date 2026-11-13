@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.inquilino import fijar_establecimiento
-from app.models.calificacion import TODOS_LOS_PROBLEMAS
+from app.models.calificacion import LARGO_RESENA, TODOS_LOS_PROBLEMAS
 from app.models.establecimiento import Establecimiento
 from app.models.turno import Turno
 from app.services import acceso_cliente
@@ -53,6 +53,8 @@ class CarritoAlta(BaseModel):
 class CalificacionAlta(BaseModel):
     puntaje: int = Field(ge=1, le=5)
     problemas: int = Field(default=0, ge=0, le=TODOS_LOS_PROBLEMAS)
+    # Opcional: hasta seis palabras, que pasan por el filtro de app/services/moderacion.py.
+    resena: str | None = Field(default=None, max_length=LARGO_RESENA)
 
 
 @router.get("/{token}")
@@ -80,4 +82,4 @@ async def pedir_carrito(
 async def calificar(
     datos: CalificacionAlta, turno: Turno = Depends(turno_del_enlace), db: AsyncSession = Depends(get_db)
 ) -> dict:
-    return await acceso_cliente.calificar(db, turno, datos.puntaje, datos.problemas)
+    return await acceso_cliente.calificar(db, turno, datos.puntaje, datos.problemas, datos.resena)

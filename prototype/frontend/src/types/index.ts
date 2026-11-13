@@ -596,7 +596,7 @@ export interface Tablero {
   opiniones: Opiniones;
 }
 
-// Lo que dicen los clientes (migración 015): solo totales, nunca una opinión suelta.
+// Lo que dicen los clientes (migración 015): totales, y las reseñas cortas (018) sin hora ni habitación.
 export interface Opiniones {
   dias: number;
   cantidad: number;
@@ -605,6 +605,7 @@ export interface Opiniones {
   puntajes: { puntaje: number; cantidad: number }[];
   problemas: { problema: string; cantidad: number }[];
   habitaciones: { habitacion_id: number; numero: number; promedio: number; cantidad: number; problema: string | null; problema_veces: number }[];
+  resenas: { puntaje: number; texto: string }[];
 }
 
 // Gemelo del motel: repetir las llegadas reales con otras condiciones. No cambia nada.
@@ -668,8 +669,8 @@ export interface VerificacionComprobante {
   categoria?: string;
 }
 
-// Clientes que se fueron sin quedarse (migración 011).
-export type MotivoPerdida = 'SIN_LUGAR' | 'ESPERA' | 'PRECIO';
+// Clientes que se fueron sin quedarse (migraciones 011 y 018: «Otro» con unas palabras).
+export type MotivoPerdida = 'SIN_LUGAR' | 'ESPERA' | 'PRECIO' | 'OTRO';
 
 export interface ClientesPerdidos {
   dias: number;
@@ -681,6 +682,8 @@ export interface ClientesPerdidos {
   horas: { hora: number; etiqueta: string; cantidad: number }[];
   franja: { dia: string; desde: number; hasta: number; cantidad: number; parte: number } | null;
   esperados_24h: number;
+  // Lo que escribieron con «Otro», agrupado.
+  otros: { detalle: string; cantidad: number }[];
 }
 
 export interface Rotacion {
@@ -1040,6 +1043,8 @@ export interface TableroOperacion {
   };
   ropa: {
     por_estado: boolean;
+    // Lavandería propia (no sale ropa del motel) o de afuera (migración 018).
+    lavanderia_propia: boolean;
     resumen: {
       prenda: Prenda;
       etiqueta: string;

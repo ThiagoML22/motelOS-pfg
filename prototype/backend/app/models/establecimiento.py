@@ -35,3 +35,6 @@ class Establecimiento(Base):
     bienvenida = Column(String(200), nullable=True)
     # Cómo se cuenta la ropa (migración 017): separada en limpias, sucias y en uso, o todo junto.
     ropa_por_estado = Column(Boolean, nullable=False, default=True, server_default=true())
+    # Quién lava la ropa (migración 018): el motel (no sale nada) o una lavandería de afuera (se anota lo que sale y
+    # lo que vuelve).
+    lavanderia_propia = Column(Boolean, nullable=False, default=True, server_default=true())

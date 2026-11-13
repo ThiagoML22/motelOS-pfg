@@ -261,7 +261,7 @@ export const MapaCalor: React.FC<MapaCalorProps> = ({ filas, valores, maximo, de
   );
 };
 
-const CLASE_SERIE = ['bg-viz-1', 'bg-viz-2', 'bg-viz-3'];
+const CLASE_SERIE = ['bg-viz-1', 'bg-viz-2', 'bg-viz-3', 'bg-viz-4'];
 
 // Parte de un total en una sola barra (hasta tres segmentos, color fijo por entidad) con leyenda y valores.
 export const BarraPartes: React.FC<{ partes: { clave: string; etiqueta: string; parte: number; valor: string }[] }> = ({
@@ -270,13 +270,13 @@ export const BarraPartes: React.FC<{ partes: { clave: string; etiqueta: string; 
   <div>
     <div className="flex h-3 gap-[2px] overflow-hidden rounded-full" role="img" aria-label={partes.map((p) => `${p.etiqueta} ${Math.round(p.parte * 100)}%`).join(', ')}>
       {partes.map((p, i) => (
-        <div key={p.clave} className={`${CLASE_SERIE[i % 3]} h-full first:rounded-l-full last:rounded-r-full`} style={{ width: `${p.parte * 100}%` }} />
+        <div key={p.clave} className={`${CLASE_SERIE[i % CLASE_SERIE.length]} h-full first:rounded-l-full last:rounded-r-full`} style={{ width: `${p.parte * 100}%` }} />
       ))}
     </div>
     <ul className="mt-3 space-y-1.5 text-sm">
       {partes.map((p, i) => (
         <li key={p.clave} className="flex items-center gap-2">
-          <span className={`h-2.5 w-2.5 rounded-sm ${CLASE_SERIE[i % 3]}`} aria-hidden="true" />
+          <span className={`h-2.5 w-2.5 rounded-sm ${CLASE_SERIE[i % CLASE_SERIE.length]}`} aria-hidden="true" />
           <span className="text-ink">{p.etiqueta}</span>
           <span className="ml-auto tabular-nums text-muted">{p.valor}</span>
           <span className="w-10 text-right font-medium tabular-nums text-ink">{Math.round(p.parte * 100)}%</span>

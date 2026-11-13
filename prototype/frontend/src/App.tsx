@@ -473,7 +473,7 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
       {/* Cada sección aparece con un fundido corto (la clave reinicia la animación). Solo opacidad: moverla desbordaría
           la página un instante y la barra de desplazamiento correría el encabezado. */}
       {/* En el celular queda lugar abajo para la barra de secciones y para Mot. */}
-      <main key={activeView} className="mx-auto flex w-full min-w-0 max-w-[1600px] flex-1 animate-fade-in flex-col px-4 pb-32 pt-4 sm:px-6 sm:pb-6">
+      <main key={activeView} className="mx-auto flex w-full min-w-0 max-w-[1600px] flex-1 animate-fade-in flex-col px-4 pb-40 pt-4 sm:px-6 sm:pb-6">
         {enApertura && (
           <GuardiaView sesion={sesion} onGuardiaAbierta={onRefrescarSesion} onSalir={onSalir} />
         )}

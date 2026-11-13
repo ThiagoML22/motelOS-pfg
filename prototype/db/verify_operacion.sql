@@ -161,9 +161,9 @@ BEGIN
     EXCEPTION WHEN insufficient_privilege THEN bloqueado := true; END;
     IF NOT bloqueado THEN RAISE EXCEPTION 'Se borro un recuento'; END IF;
 
-    -- 9. Los movimientos de ropa, igual.
+    -- 9. Los movimientos de ropa, igual (con lavanderia propia, la de fabrica desde la 018, se anotan compras y bajas).
     INSERT INTO ropa_movimientos (guardia_id, operador_id, prenda, tipo, cantidad)
-    VALUES (guardia, conserje, 'SABANAS', 'LAVANDERIA_SALE', 12);
+    VALUES (guardia, conserje, 'SABANAS', 'COMPRA', 12);
     bloqueado := false;
     BEGIN INSERT INTO ropa_movimientos (guardia_id, operador_id, prenda, tipo, cantidad)
     VALUES (guardia, conserje, 'SABANAS', 'COMPRA', 0);

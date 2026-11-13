@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Eye, EyeOff, KeyRound, LogOut, Monitor, Moon, Palette, Sun, UserRound } from 'lucide-react';
+import { Building2, CalendarDays, Eye, EyeOff, KeyRound, LogIn, LogOut, Monitor, Moon, Palette, Sun, UserRound } from 'lucide-react';
 import { Perfil } from '../types';
 import { api, getErrorMessage } from '../services/api';
-import { formatDateTime } from '../utils/format';
+import { parseUtc } from '../utils/format';
 import { alCambiarTema, elegirTema, leerPreferencia, Preferencia } from '../utils/tema';
 import Button from './ui/Button';
 import Field, { inputClass } from './ui/Field';
@@ -10,6 +10,10 @@ import { useToast } from './ui/Toast';
 import { Avatar } from './TopNav';
 
 const campo = `${inputClass} h-11`;
+// En el celular los botones de cada tarjeta van a lo ancho, como en una app.
+const boton = 'h-11 max-sm:w-full';
+const soloFecha = new Intl.DateTimeFormat('es-AR', { dateStyle: 'short' });
+const fechaYHora = new Intl.DateTimeFormat('es-AR', { dateStyle: 'short', timeStyle: 'short', hourCycle: 'h23' });
 const LARGO_MINIMO = 10;
 
 const ROL: Record<string, string> = { OPERADOR: 'Conserje', ADMINISTRADOR: 'Gerencia', PLATAFORMA: 'Plataforma' };
@@ -103,37 +107,52 @@ const PerfilView: React.FC<PerfilViewProps> = ({ onPerfilActualizado, onSalir })
 
   return (
     <div className="mx-auto w-full max-w-5xl animate-fade-in">
-      <section className="mb-5 flex flex-wrap items-center gap-5 rounded-lg border border-line bg-surface p-6">
-        <Avatar nombre={perfil.nombre_visible} grande />
-        <div className="min-w-0 flex-1">
-          <h1 className="truncate text-xl font-semibold text-ink">{perfil.nombre_visible}</h1>
-          <p className="mt-0.5 text-sm text-muted">
-            <span className="font-mono">@{perfil.usuario}</span> ·{' '}
-            <span className="rounded-full bg-accent-soft px-2 py-0.5 text-xs font-medium text-accent">{ROL[perfil.rol]}</span>
-            {perfil.establecimiento_nombre && (
-              <>
-                {' '}
-                · {perfil.establecimiento_nombre} <span className="font-mono text-subtle">({perfil.establecimiento_codigo})</span>
-              </>
-            )}
-          </p>
-          <p className="mt-1 text-xs text-subtle">
-            En el sistema desde {formatDateTime(perfil.creado_en)}
-            {perfil.ultimo_acceso && <> · último ingreso {formatDateTime(perfil.ultimo_acceso)}</>}
-          </p>
+      {/* En el celular, una cabecera centrada como la de una app; en pantallas grandes, en fila. */}
+      <section className="mb-4 rounded-lg border border-line bg-surface p-4 sm:mb-5 sm:p-6">
+        <div className="flex flex-col items-center gap-3 text-center sm:flex-row sm:items-center sm:gap-5 sm:text-left">
+          <Avatar nombre={perfil.nombre_visible} grande />
+          <div className="min-w-0 max-w-full flex-1">
+            <h1 className="break-words text-lg font-semibold leading-tight text-ink sm:text-xl">{perfil.nombre_visible}</h1>
+            <div className="mt-1.5 flex flex-wrap items-center justify-center gap-1.5 text-xs sm:justify-start">
+              <span className="rounded-full bg-accent-soft px-2 py-0.5 font-medium text-accent">{ROL[perfil.rol]}</span>
+              <span className="rounded-full bg-surface-2 px-2 py-0.5 font-mono text-muted">@{perfil.usuario}</span>
+              {perfil.establecimiento_nombre && (
+                <span className="flex min-w-0 max-w-full items-center gap-1 rounded-full bg-surface-2 px-2 py-0.5 text-muted">
+                  <Building2 className="h-3 w-3 shrink-0" aria-hidden="true" />
+                  <span className="truncate">{perfil.establecimiento_nombre}</span>
+                </span>
+              )}
+            </div>
+            <dl className="mt-2 flex flex-wrap justify-center gap-x-3 gap-y-0.5 text-xs text-subtle sm:justify-start">
+              <div className="flex items-center gap-1">
+                <CalendarDays className="h-3 w-3" aria-hidden="true" />
+                <dt>Desde</dt>
+                <dd className="tabular-nums">{soloFecha.format(parseUtc(perfil.creado_en))}</dd>
+              </div>
+              {perfil.ultimo_acceso && (
+                <div className="flex items-center gap-1">
+                  <LogIn className="h-3 w-3" aria-hidden="true" />
+                  <dt>Último ingreso</dt>
+                  <dd className="tabular-nums">{fechaYHora.format(parseUtc(perfil.ultimo_acceso))}</dd>
+                </div>
+              )}
+            </dl>
+          </div>
         </div>
         {perfil.rol === 'OPERADOR' && (
-          <dl className="grid grid-cols-3 gap-4 text-center">
-            <Cifra titulo="Guardias" valor={perfil.guardias_30_dias} />
-            <Cifra titulo="Turnos abiertos" valor={perfil.turnos_30_dias} />
-            <Cifra titulo="Arqueos" valor={perfil.arqueos_30_dias} />
-            <p className="col-span-3 -mt-2 text-xs text-subtle">Últimos 30 días</p>
-          </dl>
+          <div className="mt-4 border-t border-line pt-3">
+            <dl className="grid grid-cols-3 divide-x divide-line text-center">
+              <Cifra titulo="Guardias" valor={perfil.guardias_30_dias} />
+              <Cifra titulo="Turnos" valor={perfil.turnos_30_dias} />
+              <Cifra titulo="Arqueos" valor={perfil.arqueos_30_dias} />
+            </dl>
+            <p className="mt-2 text-center text-[11px] text-subtle">Últimos 30 días</p>
+          </div>
         )}
       </section>
 
-      <div className="grid gap-5 lg:grid-cols-2">
-        <form onSubmit={guardarNombre} className="space-y-4 rounded-lg border border-line bg-surface p-5">
+      <div className="grid gap-4 sm:gap-5 lg:grid-cols-2">
+        <form onSubmit={guardarNombre} className="space-y-4 rounded-lg border border-line bg-surface p-4 sm:p-5">
           <Titulo icon={UserRound}>Datos de la cuenta</Titulo>
           <Field label="Nombre visible" htmlFor="perfil_nombre" hint="Es el nombre que figura en turnos, cobros, arqueos y en el registro.">
             <input id="perfil_nombre" required maxLength={60} className={campo} value={nombre} onChange={(e) => setNombre(e.target.value)} />
@@ -141,13 +160,13 @@ const PerfilView: React.FC<PerfilViewProps> = ({ onPerfilActualizado, onSalir })
           <Field label="Usuario" htmlFor="perfil_usuario" hint="El usuario no cambia: identifica a la persona en toda la historia.">
             <input id="perfil_usuario" disabled className={`${campo} font-mono opacity-70`} value={perfil.usuario} />
           </Field>
-          <Button type="submit" className="h-11" disabled={ocupado || !nombre.trim() || nombre.trim() === perfil.nombre_visible}>
+          <Button type="submit" className={boton} disabled={ocupado || !nombre.trim() || nombre.trim() === perfil.nombre_visible}>
             Guardar nombre
           </Button>
         </form>
 
-        <form onSubmit={cambiarClave} className="space-y-4 rounded-lg border border-line bg-surface p-5">
-          <div className="flex items-center justify-between">
+        <form onSubmit={cambiarClave} className="space-y-4 rounded-lg border border-line bg-surface p-4 sm:p-5">
+          <div className="flex items-center justify-between gap-2">
             <Titulo icon={KeyRound}>Cambiar la clave</Titulo>
             <button
               type="button"
@@ -182,21 +201,21 @@ const PerfilView: React.FC<PerfilViewProps> = ({ onPerfilActualizado, onSalir })
           >
             <input id="clave_repetir" type={tipoClave} autoComplete="new-password" required className={campo} value={clave.repetir} onChange={setCampoClave('repetir')} />
           </Field>
-          <Button type="submit" className="h-11" disabled={ocupado || !claveValida}>
+          <Button type="submit" className={boton} disabled={ocupado || !claveValida}>
             Cambiar clave
           </Button>
         </form>
 
-        <section className="space-y-4 rounded-lg border border-line bg-surface p-5">
+        <section className="space-y-4 rounded-lg border border-line bg-surface p-4 sm:p-5">
           <Titulo icon={Palette}>Apariencia de este puesto</Titulo>
           <div role="radiogroup" aria-label="Tema" className="grid grid-cols-3 gap-2">
             {(
               [
                 { id: 'claro', label: 'Claro', icon: Sun },
                 { id: 'oscuro', label: 'Oscuro', icon: Moon },
-                { id: 'sistema', label: 'Según el sistema', icon: Monitor },
-              ] as { id: Preferencia; label: string; icon: React.ElementType }[]
-            ).map(({ id, label, icon: Icon }) => (
+                { id: 'sistema', label: 'Según el sistema', corta: 'Sistema', icon: Monitor },
+              ] as { id: Preferencia; label: string; corta?: string; icon: React.ElementType }[]
+            ).map(({ id, label, corta, icon: Icon }) => (
               <button
                 key={id}
                 type="button"
@@ -207,12 +226,20 @@ const PerfilView: React.FC<PerfilViewProps> = ({ onPerfilActualizado, onSalir })
                   elegirTema(id, { x: caja.left + caja.width / 2, y: caja.top + caja.height / 2 });
                   setTema(id);
                 }}
-                className={`press flex h-20 flex-col items-center justify-center gap-1.5 rounded-md border text-sm ${
+                aria-label={label}
+                className={`press flex h-16 flex-col items-center justify-center gap-1 rounded-md border text-sm sm:h-20 sm:gap-1.5 ${
                   tema === id ? 'border-accent bg-accent-soft font-medium text-accent' : 'border-line-strong bg-surface text-muted hover:text-ink'
                 }`}
               >
                 <Icon className="h-5 w-5" aria-hidden="true" />
-                {label}
+                {corta ? (
+                  <>
+                    <span className="sm:hidden">{corta}</span>
+                    <span className="max-sm:hidden">{label}</span>
+                  </>
+                ) : (
+                  label
+                )}
               </button>
             ))}
           </div>
@@ -221,13 +248,13 @@ const PerfilView: React.FC<PerfilViewProps> = ({ onPerfilActualizado, onSalir })
           </p>
         </section>
 
-        <section className="space-y-4 rounded-lg border border-line bg-surface p-5">
+        <section className="space-y-4 rounded-lg border border-line bg-surface p-4 sm:p-5">
           <Titulo icon={LogOut}>Sesión</Titulo>
           <p className="text-sm text-muted">
             La sesión dura una guardia (8 h) más una hora de margen y se cierra al salir. Si la gerencia da de baja la cuenta,
             la sesión se corta en el acto.
           </p>
-          <Button variant="secondary" className="h-11" onClick={onSalir}>
+          <Button variant="secondary" className={boton} onClick={onSalir}>
             <LogOut className="h-4 w-4" aria-hidden="true" />
             Cerrar sesión
           </Button>
@@ -245,9 +272,9 @@ const Titulo: React.FC<{ icon: React.ElementType; children: React.ReactNode }> =
 );
 
 const Cifra: React.FC<{ titulo: string; valor: number }> = ({ titulo, valor }) => (
-  <div>
-    <dd className="text-2xl font-semibold tabular-nums text-ink">{valor}</dd>
-    <dt className="text-xs text-muted">{titulo}</dt>
+  <div className="flex flex-col-reverse px-1">
+    <dt className="truncate text-xs text-muted">{titulo}</dt>
+    <dd className="text-xl font-semibold tabular-nums text-ink sm:text-2xl">{valor}</dd>
   </div>
 );
 

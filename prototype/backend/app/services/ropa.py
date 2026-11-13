@@ -1,10 +1,13 @@
-"""Recuento de toallas y sábanas: cuánta ropa hay en el motel en cada cambio de guardia (migraciones 016 y 017).
+"""Recuento de toallas y sábanas: cuánta ropa hay en el motel en cada cambio de guardia (migraciones 016 a 018).
 
 Se cuenta toda la ropa del motel. Cada establecimiento elige cómo: separada en limpias, sucias y en uso (puestas en las
 habitaciones), o todo junto. Quien cierra cuenta a ciegas, como en la caja, y quien entra ve lo que le dejaron y lo
 confirma o corrige con su propia cuenta. Lo que entra o sale del motel es un movimiento (lavandería, compra, baja): lo
 que debería haber es el recuento anterior más esos movimientos, y una diferencia sin explicar le llega a la gerencia con
 los nombres de quienes contaron. Se compara siempre el total: cambiar la forma de contar no corta el historial.
+
+La mayoría de los moteles lava su propia ropa: entonces nada sale del motel y solo se anota lo que se compra y lo que
+se tira. Con una lavandería de afuera, además, lo que se llevan y lo que traen. También lo elige la gerencia.
 """
 
 from collections import defaultdict
@@ -25,6 +28,7 @@ from app.services.caja import guardia_abierta, guardia_del_operador, nombre_de
 from app.services.liquidacion import con_zona
 
 PARTES = ("limpias", "sucias", "en_habitaciones")
+DE_LAVANDERIA = ("LAVANDERIA_SALE", "LAVANDERIA_VUELVE")
 # Las diferencias que se resumen por persona: las del último mes.
 DIAS_DE_DIFERENCIAS = 30
 
@@ -33,6 +37,38 @@ async def cuenta_por_estado(db: AsyncSession) -> bool:
     """Cómo cuenta este establecimiento: separado en limpias, sucias y en uso (True) o todo junto (False)."""
     establecimiento = await db.get(Establecimiento, db.info.get(CLAVE))
     return True if establecimiento is None else bool(establecimiento.ropa_por_estado)
+
+
+async def tiene_lavanderia_propia(db: AsyncSession) -> bool:
+    """Si el motel lava su ropa (True) o la manda a una lavandería de afuera (False)."""
+    establecimiento = await db.get(Establecimiento, db.info.get(CLAVE))
+    return True if establecimiento is None else bool(establecimiento.lavanderia_propia)
+
+
+async def ajustes(db: AsyncSession) -> dict:
+    """Lo que necesita la pantalla del conserje para mostrarle solo las opciones que corresponden."""
+    return {"por_estado": await cuenta_por_estado(db), "lavanderia_propia": await tiene_lavanderia_propia(db)}
+
+
+async def cambiar_lavanderia(db: AsyncSession, operador: Operador, propia: bool) -> dict:
+    """La gerencia dice quién lava. Lo ya anotado no cambia; desde ahora el conserje ve las opciones que van."""
+    establecimiento = await db.get(Establecimiento, db.info.get(CLAVE))
+    if establecimiento is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Establecimiento no encontrado")
+    if bool(establecimiento.lavanderia_propia) != propia:
+        nombres = {True: "Lavandería propia", False: "Lavandería de afuera"}
+        establecimiento.lavanderia_propia = propia
+        await registrar(
+            db,
+            operador,
+            OPERACION,
+            "ROPA_LAVANDERIA",
+            f"La ropa se lava {'en el motel' if propia else 'en una lavandería de afuera'}",
+            valor_anterior=nombres[not propia],
+            valor_nuevo=nombres[propia],
+        )
+        await db.commit()
+    return {"lavanderia_propia": propia}
 
 
 async def cambiar_forma(db: AsyncSession, operador: Operador, por_estado: bool) -> dict:
@@ -185,6 +221,11 @@ def _movimiento(movimiento: RopaMovimiento, nombres: dict[int, str]) -> dict:
 
 
 async def registrar_movimiento(db: AsyncSession, operador: Operador, prenda: str, tipo: str, cantidad: int) -> dict:
+    if tipo in DE_LAVANDERIA and await tiene_lavanderia_propia(db):
+        raise HTTPException(
+            status_code=422,
+            detail="En este motel la ropa se lava acá: no se anota lo que va a la lavandería, solo compras y bajas.",
+        )
     guardia = await guardia_del_operador(db, operador)
     db.add(RopaMovimiento(guardia_id=guardia.id, operador_id=operador.id, prenda=prenda, tipo=tipo, cantidad=cantidad))
     nombre = MOVIMIENTOS_ROPA[tipo][0]
@@ -347,7 +388,7 @@ async def historial(db: AsyncSession, limite: int = 60) -> dict:
         en_lavanderia = sum(
             m.cantidad * (1 if m.tipo == "LAVANDERIA_SALE" else -1)
             for m in movidos
-            if m.tipo in ("LAVANDERIA_SALE", "LAVANDERIA_VUELVE")
+            if m.tipo in DE_LAVANDERIA
         )
         resumen.append(
             {
@@ -368,6 +409,7 @@ async def historial(db: AsyncSession, limite: int = 60) -> dict:
     recientes = sorted(movimientos, key=lambda m: (con_zona(m.creado_en), m.id), reverse=True)[:30]
     return {
         "por_estado": await cuenta_por_estado(db),
+        "lavanderia_propia": await tiene_lavanderia_propia(db),
         "resumen": resumen,
         "conteos": filas[:limite],
         "recuentos": _agrupados(filas, 40),
@@ -380,7 +422,9 @@ async def historial(db: AsyncSession, limite: int = 60) -> dict:
 __all__ = [
     "APERTURA",
     "CIERRE",
+    "ajustes",
     "cambiar_forma",
+    "cambiar_lavanderia",
     "cuenta_por_estado",
     "guardar_conteo",
     "hizo_el_recuento",
@@ -389,4 +433,5 @@ __all__ = [
     "para_recibir",
     "recuento_de_cierre",
     "registrar_movimiento",
+    "tiene_lavanderia_propia",
 ]
