@@ -183,7 +183,7 @@ const InventarioView: React.FC<InventarioViewProps> = ({ esConserje }) => {
           <h1 className="text-xl font-semibold text-ink">Inventario</h1>
           <p className="mt-0.5 text-sm text-muted">Minibar y productos de venta</p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap [&>button]:max-sm:w-full [&>button]:max-sm:px-2">
           {esConserje && <MovimientoRopa />}
           {!esConserje && <BotonNuevoPedido onCreado={() => setVersionPedidos((v) => v + 1)} />}
           <Button onClick={abrirModal}>

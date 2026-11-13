@@ -389,7 +389,7 @@ const NavSecciones: React.FC<{ actual: Seccion; alertas: AlertaIA[]; onElegir: (
   <div
     role="tablist"
     aria-label="Secciones de Inteligencia"
-    className="sin-barra -mx-4 flex gap-1 overflow-x-auto px-4 pb-1 sm:-mx-1 sm:flex-wrap sm:overflow-visible sm:px-1"
+    className="sin-barra -mx-4 flex gap-1.5 overflow-x-auto px-4 pb-1 sm:-mx-1 sm:gap-1 sm:flex-wrap sm:overflow-visible sm:px-1"
   >
     {SECCIONES.map(({ id, label, icon: Icon }) => {
       const pendientes = id === 'resumen' ? 0 : importantes(alertas.filter((a) => seccionDe(a) === id));
@@ -665,7 +665,7 @@ const OpinionesCard: React.FC<{ datos: Opiniones }> = ({ datos }) => {
       </div>
       {datos.habitaciones.length > 0 && (
         <div className="mt-3 overflow-x-auto">
-          <table className="w-full min-w-[26rem] text-left text-sm">
+          <table className="tabla-movil sin-margen w-full min-w-[26rem] text-left text-sm">
             <thead>
               <tr className="border-b border-line text-xs font-medium uppercase tracking-wide text-subtle">
                 <th className="py-2 pr-3">Habitación</th>
@@ -677,10 +677,10 @@ const OpinionesCard: React.FC<{ datos: Opiniones }> = ({ datos }) => {
             <tbody className="divide-y divide-line">
               {datos.habitaciones.slice(0, 5).map((h) => (
                 <tr key={h.habitacion_id}>
-                  <td className="py-2 pr-3 text-ink">{h.numero}</td>
-                  <td className="py-2 pr-3 text-right tabular-nums">{decimal(h.promedio)}</td>
-                  <td className="py-2 pr-3 text-right tabular-nums">{h.cantidad}</td>
-                  <td className="py-2 text-muted">{h.problema ?? '—'}</td>
+                  <td className="principal py-2 pr-3 text-ink">Habitación {h.numero}</td>
+                  <td className="py-2 pr-3 text-right tabular-nums" data-etiqueta="Promedio">{decimal(h.promedio)}</td>
+                  <td className="py-2 pr-3 text-right tabular-nums" data-etiqueta="Opiniones">{h.cantidad}</td>
+                  <td className="ancha py-2 text-muted" data-etiqueta="Lo que más marcan:">{h.problema ?? '—'}</td>
                 </tr>
               ))}
             </tbody>
@@ -1047,7 +1047,7 @@ const ReposicionCard: React.FC<{ tablero: Tablero }> = ({ tablero }) => {
   return (
     <Tarjeta titulo="Reposición sugerida" icono={Package} extra={`${aPedir.length} artículos para pedir · cubre 14 días`}>
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[36rem] text-left text-sm">
+        <table className="tabla-movil sin-margen w-full min-w-[36rem] text-left text-sm">
           <thead>
             <tr className="border-b border-line text-xs font-medium uppercase tracking-wide text-subtle">
               <th className="py-2 pr-3">Artículo</th>
@@ -1061,11 +1061,11 @@ const ReposicionCard: React.FC<{ tablero: Tablero }> = ({ tablero }) => {
           <tbody className="divide-y divide-line">
             {filas.map((r) => (
               <tr key={r.articulo_id}>
-                <td className="py-2 pr-3 text-ink">{r.descripcion}</td>
-                <td className="py-2 pr-3 text-right tabular-nums">{r.stock}</td>
-                <td className="py-2 pr-3 text-right tabular-nums">{decimal(r.por_dia)}</td>
-                <td className="py-2 pr-3 text-right tabular-nums">{r.dias_restantes === null ? '—' : `${decimal(r.dias_restantes)} días`}</td>
-                <td className="py-2 pr-3 text-right font-medium tabular-nums text-ink">{r.sugerido || '—'}</td>
+                <td className="principal py-2 pr-3 text-ink">{r.descripcion}</td>
+                <td className="py-2 pr-3 text-right tabular-nums" data-etiqueta="Stock">{r.stock}</td>
+                <td className="py-2 pr-3 text-right tabular-nums" data-etiqueta="Por día">{decimal(r.por_dia)}</td>
+                <td className="py-2 pr-3 text-right tabular-nums" data-etiqueta="Alcanza">{r.dias_restantes === null ? '—' : `${decimal(r.dias_restantes)} días`}</td>
+                <td className="py-2 pr-3 text-right font-medium tabular-nums text-ink" data-etiqueta="Pedir">{r.sugerido || '—'}</td>
                 <td className="py-2">
                   <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${URGENCIA[r.urgencia].clase}`}>
                     {URGENCIA[r.urgencia].etiqueta}

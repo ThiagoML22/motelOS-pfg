@@ -91,7 +91,7 @@
 .logo-marca {
   position: relative;
   display: inline-block;
-  aspect-ratio: 1024 / 341;
+  aspect-ratio: 900 / 181;
 }
 
 .logo-marca > span {
@@ -598,6 +598,72 @@
 
 [data-theme='dark'] .chip-categoria {
   color: color-mix(in srgb, var(--chip) 45%, white);
+}
+
+/* Tablas en el celular: cada fila es una tarjeta, sin deslizar de costado. La celda «principal» va arriba y a lo ancho;
+   las que tienen data-etiqueta muestran su nombre antes del valor; las «acciones» van abajo, con botones grandes. */
+@media (max-width: 639.98px) {
+  .tabla-movil {
+    display: block;
+    width: 100%;
+    min-width: 0 !important;
+  }
+  .tabla-movil thead {
+    display: none;
+  }
+  .tabla-movil tbody {
+    display: block;
+  }
+  .tabla-movil tr {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    column-gap: 0.875rem;
+    row-gap: 0.25rem;
+    padding: 0.875rem 1rem;
+  }
+  .tabla-movil.sin-margen tr {
+    padding-left: 0;
+    padding-right: 0;
+  }
+  .tabla-movil td {
+    display: block;
+    padding: 0 !important;
+    text-align: left !important;
+    white-space: normal !important;
+  }
+  .tabla-movil td[data-etiqueta]::before {
+    content: attr(data-etiqueta);
+    margin-right: 0.375rem;
+    font-size: 0.75rem;
+    font-weight: 400;
+    color: rgb(var(--muted));
+  }
+  .tabla-movil td.principal {
+    order: -1;
+    flex-basis: 100%;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: rgb(var(--ink));
+  }
+  .tabla-movil td.ancha,
+  .tabla-movil td.vacia {
+    flex-basis: 100%;
+  }
+  .tabla-movil td.vacia {
+    text-align: center !important;
+  }
+  .tabla-movil td.acciones {
+    flex-basis: 100%;
+    margin-top: 0.5rem;
+  }
+  .tabla-movil td.acciones > div {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+  .tabla-movil td.acciones button {
+    flex: 1 1 auto;
+  }
 }
 
 /* Los diálogos, en el celular, suben desde abajo como una hoja (ui/Modal.tsx). */

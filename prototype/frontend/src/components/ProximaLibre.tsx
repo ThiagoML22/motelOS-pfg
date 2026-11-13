@@ -67,7 +67,7 @@ export const BotonClientePerdido: React.FC<{ categorias: Categoria[]; destacado?
         <div
           role="dialog"
           aria-label="Registrar un cliente que se fue"
-          className="absolute right-0 top-full z-30 mt-2 w-72 origin-top-right animate-pop-in rounded-lg border border-line bg-surface p-3 shadow-panel"
+          className="absolute right-0 top-full z-30 mt-2 w-72 max-w-[calc(100vw-2rem)] origin-top-right animate-pop-in rounded-lg border border-line bg-surface p-3 shadow-panel"
         >
           {categorias.length > 1 && (
             <>

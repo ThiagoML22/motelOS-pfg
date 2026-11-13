@@ -502,7 +502,7 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
                     type="button"
                     aria-pressed={filtro === 'Todas'}
                     onClick={() => setFiltro('Todas')}
-                    className={`press hit shrink-0 whitespace-nowrap rounded-md border px-2.5 py-1 text-sm ${
+                    className={`press hit shrink-0 whitespace-nowrap rounded-md border px-2.5 py-1 text-sm max-sm:h-9 ${
                       filtro === 'Todas'
                         ? 'border-accent bg-accent-soft font-medium text-accent'
                         : 'border-line-strong bg-surface text-muted hover:text-ink'
@@ -516,7 +516,7 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
                       type="button"
                       aria-pressed={filtro === estado}
                       onClick={() => setFiltro(estado)}
-                      className={`press hit flex shrink-0 items-center gap-2 whitespace-nowrap rounded-md border px-2.5 py-1 text-sm ${
+                      className={`press hit flex shrink-0 items-center gap-2 whitespace-nowrap rounded-md border px-2.5 py-1 text-sm max-sm:h-9 ${
                         filtro === estado
                           ? 'border-accent bg-accent-soft font-medium text-accent'
                           : 'border-line-strong bg-surface text-muted hover:text-ink'
@@ -545,7 +545,7 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
                     type="button"
                     onClick={() => cambiarOrden(orden === 'numero' ? 'vencimiento' : 'numero')}
                     aria-label={`Ordenadas ${orden === 'numero' ? 'por número' : 'por vencimiento'}. Tocá para cambiar.`}
-                    className="press hit flex h-8 items-center gap-1.5 rounded-md border border-line-strong bg-surface px-2.5 text-sm text-ink sm:hidden"
+                    className="press hit flex h-9 items-center gap-1.5 rounded-md border border-line-strong bg-surface px-2.5 text-sm text-ink sm:hidden"
                   >
                     <ArrowDownUp className="h-4 w-4 text-muted" aria-hidden="true" />
                     {orden === 'numero' ? 'Nº' : 'Vence'}
@@ -569,7 +569,7 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
                       type="button"
                       aria-pressed={filtroCategoria === null}
                       onClick={() => setFiltroCategoria(null)}
-                      className={`press hit shrink-0 whitespace-nowrap rounded-full border px-2.5 py-0.5 text-sm ${
+                      className={`press hit shrink-0 whitespace-nowrap rounded-full border px-2.5 py-0.5 text-sm max-sm:h-9 max-sm:px-3 ${
                         filtroCategoria === null
                           ? 'border-accent bg-accent-soft font-medium text-accent'
                           : 'border-line-strong bg-surface text-muted hover:text-ink'
@@ -588,7 +588,7 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
                           aria-pressed={activa}
                           onClick={() => setFiltroCategoria(activa ? null : c.id)}
                           title={c.descripcion ?? undefined}
-                          className={`press hit flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full border px-2.5 py-0.5 text-sm ${
+                          className={`press hit flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full border px-2.5 py-0.5 text-sm max-sm:h-9 max-sm:px-3 ${
                             activa ? 'font-medium' : 'border-line-strong bg-surface text-muted hover:text-ink'
                           }`}
                           style={activa ? { borderColor: c.color, color: c.color, backgroundColor: `${c.color}14` } : undefined}

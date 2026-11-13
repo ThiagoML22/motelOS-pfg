@@ -93,7 +93,11 @@ const ActividadView: React.FC<ActividadViewProps> = ({ onCambioPendientes }) => 
         </div>
       </div>
 
-      <div className="mb-4 flex flex-wrap items-center gap-1.5" role="group" aria-label="Filtrar el registro">
+      <div
+        className="sin-barra mb-4 flex flex-wrap items-center gap-1.5 max-sm:-mx-4 max-sm:flex-nowrap max-sm:overflow-x-auto max-sm:px-4"
+        role="group"
+        aria-label="Filtrar el registro"
+      >
         <Filtro activo={soloPendientes} onClick={() => setSoloPendientes((v) => !v)}>
           Por revisar
         </Filtro>
@@ -120,7 +124,7 @@ const ActividadView: React.FC<ActividadViewProps> = ({ onCambioPendientes }) => 
 
       {estado === 'ok' && (
         <div className="overflow-x-auto rounded-lg border border-line bg-surface">
-          <table className="w-full min-w-[56rem] text-left text-sm">
+          <table className="tabla-movil w-full min-w-[56rem] text-left text-sm">
             <thead>
               <tr className="border-b border-line bg-surface-2 text-xs font-medium uppercase tracking-wide text-subtle">
                 <th scope="col" className="px-4 py-2.5">Cuándo</th>
@@ -140,13 +144,13 @@ const ActividadView: React.FC<ActividadViewProps> = ({ onCambioPendientes }) => 
                       <span className="font-medium text-ink">{e.operador_nombre}</span>
                       {e.guardia_id && <span className="block text-xs text-subtle">Guardia N.º {e.guardia_id}</span>}
                     </td>
-                    <td className="px-4 py-2.5">
+                    <td className="ancha px-4 py-2.5">
                       <span className="mr-2 rounded border border-line px-1.5 py-0.5 text-[11px] uppercase tracking-wide text-muted">
                         {ETIQUETA[e.categoria]}
                       </span>
                       <span className="text-ink">{e.descripcion}</span>
                     </td>
-                    <td className="px-4 py-2.5 tabular-nums text-muted">
+                    <td className={`px-4 py-2.5 tabular-nums text-muted ${e.valor_anterior || e.valor_nuevo ? 'ancha' : 'max-sm:hidden'}`}>
                       {e.valor_anterior || e.valor_nuevo ? (
                         <>
                           {e.valor_anterior ?? '—'} → <span className="text-ink">{e.valor_nuevo ?? '—'}</span>
@@ -155,7 +159,7 @@ const ActividadView: React.FC<ActividadViewProps> = ({ onCambioPendientes }) => 
                         '—'
                       )}
                     </td>
-                    <td className="px-4 py-1.5 text-right">
+                    <td className="acciones px-4 py-1.5 text-right">
                       {pendiente ? (
                         <Button variant="secondary" className="h-11" disabled={ocupado} onClick={() => void revisar([e.id])}>
                           <Eye className="h-4 w-4" aria-hidden="true" />
@@ -174,7 +178,7 @@ const ActividadView: React.FC<ActividadViewProps> = ({ onCambioPendientes }) => 
               })}
               {entradas.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-4 py-12 text-center text-muted">
+                  <td colSpan={5} className="vacia px-4 py-12 text-center text-muted">
                     {soloPendientes ? 'No hay nada por revisar.' : 'Todavía no hay actividad registrada.'}
                   </td>
                 </tr>
@@ -225,7 +229,7 @@ const Filtro: React.FC<{ activo: boolean; onClick: () => void; children: React.R
     type="button"
     aria-pressed={activo}
     onClick={onClick}
-    className={`press hit h-11 rounded-md border px-3 text-sm ${
+    className={`press hit h-11 shrink-0 whitespace-nowrap rounded-md border px-3 text-sm ${
       activo ? 'border-accent bg-accent-soft font-medium text-accent' : 'border-line-strong bg-surface text-muted hover:text-ink'
     }`}
   >

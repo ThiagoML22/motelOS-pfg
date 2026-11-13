@@ -94,7 +94,7 @@ const CentroAvisos: React.FC<CentroAvisosProps> = ({
         )}
       </button>
       {abierto && (
-        <div className="absolute right-0 top-full z-40 mt-2 w-[22rem] max-w-[calc(100vw-2rem)] animate-pop-in rounded-lg border border-line bg-surface p-3 shadow-panel">
+        <div className="fixed inset-x-2 top-[3.75rem] z-40 animate-pop-in rounded-lg border border-line bg-surface p-3 shadow-panel sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-2 sm:w-[22rem]">
           <p className="mb-2 text-sm font-semibold text-ink">Avisos</p>
           {esGerencia && pendientes > 0 && (
             <button

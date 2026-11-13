@@ -205,30 +205,30 @@ const PanelGerencia: React.FC<PanelGerenciaProps> = ({ onCambioGuardia, codigoIn
                 Por conserje
               </h2>
               <div className="overflow-x-auto rounded-lg border border-line bg-surface">
-                <table className="w-full min-w-[40rem] text-left text-sm">
+                <table className="tabla-movil w-full min-w-[40rem] text-left text-sm">
                   <thead>
                     <tr className="border-b border-line bg-surface-2 text-xs font-medium uppercase tracking-wide text-subtle">
                       <th scope="col" className="px-4 py-2.5">Conserje</th>
                       <th scope="col" className="px-4 py-2.5 text-right">Arqueos</th>
                       <th scope="col" className="px-4 py-2.5 text-right">Correctos</th>
+                      <th scope="col" className="px-4 py-2.5 text-right">TDC</th>
                       <th scope="col" className="px-4 py-2.5 text-right">Faltantes</th>
                       <th scope="col" className="px-4 py-2.5 text-right">Sobrantes</th>
-                      <th scope="col" className="px-4 py-2.5 text-right">TDC</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-line">
                     {metricas.por_operador.map((m) => (
                       <tr key={m.operador_id ?? 0}>
-                        <td className="px-4 py-2.5 font-medium text-ink">{m.operador_nombre}</td>
-                        <td className="px-4 py-2.5 text-right tabular-nums">{m.arqueos}</td>
-                        <td className="px-4 py-2.5 text-right tabular-nums">{m.correctos}</td>
-                        <td className="px-4 py-2.5 text-right tabular-nums text-danger">
+                        <td className="principal px-4 py-2.5 font-medium text-ink">{m.operador_nombre}</td>
+                        <td className="px-4 py-2.5 text-right tabular-nums" data-etiqueta="Arqueos">{m.arqueos}</td>
+                        <td className="px-4 py-2.5 text-right tabular-nums" data-etiqueta="Correctos">{m.correctos}</td>
+                        <td className="px-4 py-2.5 text-right tabular-nums" data-etiqueta="TDC">{formatPorcentaje(m.tdc)}</td>
+                        <td className="px-4 py-2.5 text-right tabular-nums text-danger max-sm:basis-full" data-etiqueta="Faltantes">
                           {m.faltantes} · {formatMoney(m.total_faltante)}
                         </td>
-                        <td className="px-4 py-2.5 text-right tabular-nums text-warn">
+                        <td className="px-4 py-2.5 text-right tabular-nums text-warn max-sm:basis-full" data-etiqueta="Sobrantes">
                           {m.sobrantes} · {formatMoney(m.total_sobrante)}
                         </td>
-                        <td className="px-4 py-2.5 text-right tabular-nums">{formatPorcentaje(m.tdc)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -239,10 +239,10 @@ const PanelGerencia: React.FC<PanelGerenciaProps> = ({ onCambioGuardia, codigoIn
 
           {porCategoria.length > 0 && (
             <section aria-labelledby="titulo-por-categoria" className="mb-6">
-              <h2 id="titulo-por-categoria" className="mb-2 flex items-center gap-2 text-sm font-semibold text-ink">
+              <h2 id="titulo-por-categoria" className="mb-2 flex flex-wrap items-center gap-x-2 text-sm font-semibold text-ink">
                 <Tags className="h-4 w-4 text-muted" aria-hidden="true" />
                 Por categoría de habitación
-                <span className="font-normal text-subtle">· turnos cobrados en guardias ya arqueadas</span>
+                <span className="font-normal text-subtle max-sm:basis-full">· turnos cobrados en guardias ya arqueadas</span>
               </h2>
               <div className="grid grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-3">
                 {porCategoria.map((c) => {
@@ -318,7 +318,7 @@ const PanelGerencia: React.FC<PanelGerenciaProps> = ({ onCambioGuardia, codigoIn
             </p>
           )}
           <h3 className="mb-2 text-sm font-semibold text-ink">Cobros imputados a la guardia</h3>
-          <table className="w-full text-left text-sm">
+          <table className="tabla-movil sin-margen w-full text-left text-sm">
             <thead>
               <tr className="border-b border-line text-xs uppercase tracking-wide text-subtle">
                 <th scope="col" className="py-2">Hora</th>
@@ -332,15 +332,18 @@ const PanelGerencia: React.FC<PanelGerenciaProps> = ({ onCambioGuardia, codigoIn
               {detalle.pagos.map((p, i) => (
                 <tr key={i}>
                   <td className="py-2 tabular-nums text-muted">{formatDateTime(p.registrado_en)}</td>
-                  <td className="py-2">{formatRoomNumber(p.habitacion_numero)}</td>
+                  <td className="principal py-2">
+                    {formatRoomNumber(p.habitacion_numero)}
+                    <span className="float-right tabular-nums sm:hidden">{formatMoney(p.monto)}</span>
+                  </td>
                   <td className="py-2">{MEDIO[p.medio_pago] ?? p.medio_pago}</td>
                   <td className="py-2 font-mono text-xs text-muted">{p.comprobante_referencia ?? '—'}</td>
-                  <td className="py-2 text-right tabular-nums">{formatMoney(p.monto)}</td>
+                  <td className="py-2 text-right tabular-nums max-sm:hidden">{formatMoney(p.monto)}</td>
                 </tr>
               ))}
               {detalle.pagos.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="py-6 text-center text-muted">
+                  <td colSpan={5} className="vacia py-6 text-center text-muted">
                     La guardia no registró cobros.
                   </td>
                 </tr>

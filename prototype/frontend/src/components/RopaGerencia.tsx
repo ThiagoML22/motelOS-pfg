@@ -227,7 +227,7 @@ const CeldaPrenda: React.FC<{ prenda?: PrendaContada }> = ({ prenda: p }) =>
   !p ? (
     <td className="py-2.5 pl-4 text-subtle">—</td>
   ) : (
-    <td className="py-2.5 pl-4 align-top">
+    <td className="py-2.5 pl-4 align-top max-sm:flex-1" data-etiqueta={p.etiqueta}>
       <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
         <span className="font-semibold tabular-nums text-ink">{p.total}</span>
         <Control valor={p.diferencia} />
@@ -268,7 +268,7 @@ const Recuentos: React.FC<{ recuentos: RecuentoAgrupado[] }> = ({ recuentos }) =
       ) : (
         <>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[36rem] text-sm">
+            <table className="tabla-movil sin-margen w-full min-w-[36rem] text-sm">
               <thead>
                 <tr className="border-b border-line text-left text-xs text-muted">
                   <th scope="col" className="py-2 font-medium">Cuándo</th>
@@ -283,11 +283,14 @@ const Recuentos: React.FC<{ recuentos: RecuentoAgrupado[] }> = ({ recuentos }) =
               <tbody className="divide-y divide-line">
                 {visibles.map((r) => (
                   <tr key={r.clave}>
-                    <td className="py-2.5 align-top">
-                      <span className="block text-ink">{MOMENTO[r.momento]}</span>
-                      <span className="block text-xs text-muted">{formatDateTime(r.creado_en)}</span>
+                    <td className="principal py-2.5 align-top">
+                      <span className="block text-ink">
+                        {MOMENTO[r.momento]}
+                        <span className="font-normal text-muted sm:hidden"> · {r.operador}</span>
+                      </span>
+                      <span className="block text-xs font-normal text-muted">{formatDateTime(r.creado_en)}</span>
                     </td>
-                    <td className="py-2.5 pl-4 align-top text-ink">{r.operador}</td>
+                    <td className="py-2.5 pl-4 align-top text-ink max-sm:hidden">{r.operador}</td>
                     {PRENDAS.map((p) => (
                       <CeldaPrenda key={p.prenda} prenda={r.prendas.find((x) => x.prenda === p.prenda)} />
                     ))}

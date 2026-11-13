@@ -95,7 +95,7 @@ const TopNav: React.FC<TopNavProps> = ({
       {/* Fila 1: el motel y las herramientas */}
       <div className="mx-auto flex h-14 max-w-[1600px] items-center gap-4 px-4 sm:px-6">
         <div className="flex min-w-0 items-center gap-3">
-          <Logo className="h-7" />
+          <Logo className="h-6 sm:h-7" />
           {establecimiento && (
             <>
               <span className="hidden h-6 w-px bg-line sm:block" aria-hidden="true" />
@@ -230,7 +230,7 @@ const MenuUsuario: React.FC<MenuUsuarioProps> = ({ sesion, activeView, setActive
       {abierto && (
         <div
           role="menu"
-          className="absolute right-0 top-full z-40 mt-2 w-72 animate-pop-in overflow-hidden rounded-lg border border-line bg-surface shadow-panel"
+          className="fixed inset-x-2 top-[3.75rem] z-40 animate-pop-in overflow-hidden rounded-lg border border-line bg-surface shadow-panel sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-2 sm:w-72"
         >
           <div className="flex items-center gap-3 border-b border-line px-4 py-3">
             <Avatar nombre={operador.nombre_visible} />
