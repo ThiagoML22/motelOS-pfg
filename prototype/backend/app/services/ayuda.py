@@ -31,9 +31,9 @@ from app.models.operador import ROL_ADMINISTRADOR, Operador
 from app.models.pedido import PENDIENTE, PedidoReposicion
 from app.models.tarifa import Tarifa
 from app.models.turno import Turno
-from app.services import acciones, conocimiento, franjas, rotacion
+from app.services import acciones, comprension, conocimiento, franjas, rotacion
 from app.services import inteligencia as ia
-from app.services.asistente import INTENCIONES, _intencion, normalizar
+from app.services.asistente import INTENCIONES, VALORAR, _intencion, normalizar
 from app.services.asistente import responder as responder_analisis
 from app.services.caja import guardia_abierta
 from app.services.liquidacion import con_zona, liquidar_turno
@@ -45,6 +45,13 @@ RIGE = re.compile(r"\b(rige|corre|vigente|actual|ahora)\b")
 COMO = re.compile(
     r"\b(como|donde|que hago|que tengo que|puedo|se puede|hay que|pasos|ayuda|explica|para que sirve|no puedo"
     r"|no me deja)\b"
+)
+NO_ES_INSTRUCCION = re.compile(
+    r"\bcomo (vienen|viene|venimos|van|va|vamos|estamos|esta|estan|anda|andan|andamos|nos pagan|pagan|nos califican"
+    r"|nos ven|cerrariamos|cerramos|terminamos|puede ser|es posible|estuvo|estuvimos|fue|dio|dieron|cerro)\b"
+    r"|\bhay que (reponer|comprar|pedir)\b|\b(puedo|podemos) (ganar|mejorar|vender|facturar)\b"
+    r"|\b(a )?donde (puedo |lo |la |los )?(meter|poner|ubicar|mandar)\b|\bcuanto hay que cobrar\w*"
+    r"|\bcomo (vamos|estamos|andamos) con\b"
 )
 ROPA_DATOS = re.compile(
     r"\b(cuant\w*|hay|quedan|tenemos|faltan?|falto|faltaron|sobran?)\b.*\b(toallas?|sabanas?|ropa)\b"
@@ -1079,9 +1086,17 @@ class Ventanilla:
     def minutos(self, turno: Turno) -> float:
         return (self.ahora - con_zona(turno.hora_inicio)).total_seconds() / 60
 
-    def libres(self) -> Respuesta:
-        libres = [h for h in self.habitaciones if h.estado == "Libre"]
+    def libres(self, categoria: CategoriaHabitacion | None = None) -> Respuesta:
+        libres = [
+            h
+            for h in self.habitaciones
+            if h.estado == "Libre" and (categoria is None or h.categoria_id == categoria.id)
+        ]
         if not libres:
+            if categoria is not None:
+                otras = sum(1 for h in self.habitaciones if h.estado == "Libre")
+                resto = f" Hay {otras} de otras categorías." if otras else ""
+                return Respuesta(f"No hay ninguna {categoria.nombre} disponible ahora.{resto}", "libres")
             return Respuesta("No hay habitaciones disponibles en este momento.", "libres")
         por_categoria: dict[str, list[int]] = {}
         for h in libres:
@@ -1310,6 +1325,21 @@ class Ventanilla:
                 return Respuesta(
                     f"Quedan {a.stock_actual} de «{a.descripcion}».{aviso}", "stock", acciones=_ir("inventario")
                 )
+        pedido = re.search(
+            r"(?:quedando sin|quedamos sin|queda(?:n)?|hay|tenemos|cuant[ao]s?)\s+(?:algo de |alguna? |unos? |mas )?"
+            r"([a-zñ]{4,}(?: [a-zñ]{4,})?)(?: hay| quedan?| tenemos)?$",
+            texto,
+        )
+        genericas = {
+            "habitacion", "habitaciones", "lugar", "turnos", "turno", "gente", "clientes", "novedades", "pedidos"
+        }
+        ropa = re.search(r"\b(toallas?|sabanas?|ropa)\b", texto)
+        if pedido and not ropa and pedido.group(1).split()[0] not in genericas:
+            return Respuesta(
+                f"No encuentro «{pedido.group(1)}» en el inventario. Los artículos se ven en Inventario.",
+                "stock",
+                acciones=_ir("inventario"),
+            )
         return None
 
     def palabras_propias(self) -> set[str]:
@@ -1466,8 +1496,27 @@ DINERO = {
     "opiniones",
     "ropa",
     "arreglos",
+    "comparar",
+    "proyeccion",
+    "dias",
+    "consejos",
+    "alertas",
+    "tarifas_sugeridas",
 }
-INTENCIONES_ANALISIS = {nombre for nombre, _ in INTENCIONES}
+INTENCIONES_ANALISIS = {nombre for nombre, _ in INTENCIONES} | {"explicacion", "valoracion", "aclaracion"}
+# Lo que la ventanilla sabe responder ahora, por intención (para el clasificador por ejemplos).
+VENTANILLA = {
+    "libres",
+    "ocupadas",
+    "vencimientos",
+    "guardia",
+    "proxima",
+    "novedades",
+    "pedidos",
+    "estado",
+    "tarifas",
+    "cuenta",
+}
 # Temas que no son una pregunta de datos aunque nombren uno: «que las toallas se cuenten juntas» es un ajuste.
 SIN_DATOS = {"forma_recuento"}
 
@@ -1505,8 +1554,24 @@ def sin_nombre(pregunta: str) -> str:
 
 
 CHARLA = (
-    (re.compile(r"^(hola|buen(os|as)? (dia|dias|tarde|tardes|noche|noches)|que tal|buenas)\b"), "saludo"),
-    (re.compile(r"^(gracias|muchas gracias|genial|perfecto|joya|barbaro|listo)\b"), "gracias"),
+    (
+        re.compile(
+            r"^(hola|holis|buen(os|as)? (dia|dias|tarde|tardes|noche|noches)|buenas|que tal|que onda)( mot)?$"
+        ),
+        "saludo",
+    ),
+    (
+        re.compile(r"^(como (estas|andas|te va|va|anda)|todo bien|que haces|como te trata la vida)( mot)?$"),
+        "como_estas",
+    ),
+    (
+        re.compile(
+            r"^(gracias|muchas gracias|genial|perfecto|joya|barbaro|listo|buenisimo|excelente|de diez|ok gracias|dale"
+            r" gracias|te pasaste|bien hecho|muy bien|que (genio|capo|crack|groso|maquina)|sos (un|una|lo|el|re)"
+            r" ?(genio|capo|crack|groso|maquina|idolo|mostro|mejor|lo mas))\b"
+        ),
+        "gracias",
+    ),
     (
         re.compile(
             r"(quien sos|que sos|que (podes|sabes) hacer|en que (me )?(podes|puedes) ayudar|que te puedo preguntar)"
@@ -1521,6 +1586,12 @@ def _charla(tipo: str, es_gerencia: bool) -> dict:
     if tipo == "gracias":
         return Respuesta(
             "¡De nada! Si necesitás algo más, preguntame.", "charla", sugerencias=sugerencias[:3]
+        ).como_dict()
+    if tipo == "como_estas":
+        return Respuesta(
+            "¡Todo bien por acá, con las habitaciones a la vista! ¿En qué te ayudo?",
+            "charla",
+            sugerencias=sugerencias[:4],
         ).como_dict()
     texto = (
         "Soy Mot, el asistente de MotelOS, y funciono acá mismo, sin internet. Hago lo que me pidas, con tu "
@@ -1569,7 +1640,10 @@ async def responder(
     if SOBRE_MOT.search(completa):
         return _charla("capacidades", es_gerencia), completa
     pregunta = sin_nombre(pregunta)
-    original = normalizar(pregunta)
+    original = comprension.preparar(normalizar(pregunta))
+    resto, saludo = comprension.quitar_saludo(original)
+    if saludo:
+        original = resto
     if not original:
         # Solo lo llamaron («Mot», «hola Mot»): saluda. Sin nada escrito, cuenta qué puede hacer.
         return _charla("saludo" if completa else "capacidades", es_gerencia), original
@@ -1606,12 +1680,14 @@ async def responder(
         return ventanilla.cambios_texto().como_dict(), texto
 
     # 1. Situaciones conocidas («me equivoqué en el arqueo») y «¿qué es…?», «¿para qué sirve…?»: el glosario.
-    definicion = conocimiento.definicion(texto, es_gerencia) or conocimiento.situacion(texto, es_gerencia)
+    intencion_datos = _intencion(texto)
+    definicion = conocimiento.definicion(texto, es_gerencia)
+    if definicion is None and not (es_gerencia and intencion_datos not in (None, "ayuda")):
+        definicion = conocimiento.situacion(texto, es_gerencia)
     if definicion is not None:
         return _respuesta_de(definicion, es_gerencia), texto
 
-    pide_instrucciones = bool(COMO.search(texto))
-    intencion_datos = _intencion(texto)
+    pide_instrucciones = bool(COMO.search(NO_ES_INSTRUCCION.sub(" ", texto)))
     if intencion_datos == "ayuda":  # «necesito ayuda con…»: lo resuelven los temas y la búsqueda, no el análisis
         intencion_datos = None
     tema = _tema(texto, es_gerencia)
@@ -1638,7 +1714,7 @@ async def responder(
         intencion_datos is None
         and anterior_intencion in INTENCIONES_ANALISIS
         and not pide_instrucciones
-        and (texto.startswith("y ") or len(texto.split()) <= 4)
+        and (texto.startswith("y ") or len(texto.split()) <= 4 or VALORAR.search(texto) is not None)
     )
     intencion_efectiva = intencion_datos or (anterior_intencion if seguimiento else None)
     fuera_de_alcance = Respuesta(
@@ -1659,10 +1735,40 @@ async def responder(
 
     # 6. Búsqueda por parecido en todo el conocimiento, con «¿quisiste decir?».
     parecidas = conocimiento.buscar(texto, ENTRADAS, es_gerencia, 3)
-    if parecidas and parecidas[0][0] >= 0.6:
+    adivinadas = comprension.clasificar(texto)
+    gana_el_ejemplo = bool(adivinadas) and adivinadas[0][0] >= comprension.SEGURO and not pide_instrucciones
+    if parecidas and parecidas[0][0] >= 0.6 and not gana_el_ejemplo:
         return _respuesta_de(parecidas[0][1], es_gerencia, [e for _, e in parecidas[1:]]), texto
+
+    # 7. Ninguna regla la reconoce: la frase de ejemplo más parecida. Si duda, pregunta.
+    if adivinadas and adivinadas[0][0] >= comprension.SEGURO:
+        adivinada = adivinadas[0][1]
+        if adivinada.startswith("charla:"):
+            return _charla(adivinada.split(":")[1], es_gerencia), texto
+        if adivinada in VENTANILLA:
+            respuesta = await _ventanilla_por_intencion(ventanilla, adivinada, texto)
+            if respuesta is not None:
+                return respuesta.como_dict(), texto
+        elif es_gerencia:
+            return None, texto
+        elif adivinada in ANALISIS_CONSERJE:
+            ctx = await ia.contexto(db)
+            return {**responder_analisis(ctx, texto), "pasos": [], "acciones": []}, texto
+        elif adivinada in DINERO or adivinada in INTENCIONES_ANALISIS:
+            return fuera_de_alcance, texto
     if es_gerencia:
         return None, texto
+    dudosas = [
+        comprension.PREGUNTA_DE[i]
+        for p, i in adivinadas
+        if p >= comprension.DUDOSO and i in comprension.PREGUNTA_DE and i not in DINERO
+    ]
+    if dudosas:
+        return Respuesta(
+            "No estoy seguro de qué me preguntás. ¿Es alguna de estas? Tocala y te respondo.",
+            "aclaracion",
+            sugerencias=dudosas,
+        ).como_dict(), texto
     if intencion_efectiva is not None:
         return fuera_de_alcance, texto
     return Respuesta(
@@ -1671,6 +1777,32 @@ async def responder(
         "desconocida",
         sugerencias=[_como_pregunta(e) for _, e in parecidas] or _sugerencias_de(pantalla, es_gerencia),
     ).como_dict(), texto
+
+
+async def _ventanilla_por_intencion(ventanilla: Ventanilla, intencion: str, texto: str) -> Respuesta | None:
+    """La respuesta de la ventanilla para una intención que adivinó el clasificador."""
+    categoria = ventanilla.categoria_mencionada(texto)
+    if intencion == "libres":
+        return ventanilla.libres(categoria)
+    if intencion == "ocupadas":
+        return ventanilla.ocupadas()
+    if intencion == "vencimientos":
+        return ventanilla.por_vencer()
+    if intencion == "guardia":
+        return await ventanilla.guardia()
+    if intencion == "proxima":
+        return await ventanilla.proxima(texto)
+    if intencion == "novedades":
+        return await ventanilla.novedades()
+    if intencion == "pedidos":
+        return await ventanilla.pedidos()
+    if intencion == "estado":
+        return ventanilla.estado_general()
+    if intencion == "tarifas":
+        return ventanilla.tarifas_texto(categoria)
+    if intencion == "cuenta" and (numero := _numero(texto)) is not None:
+        return await ventanilla.cuenta(numero)
+    return None
 
 
 def _sugerencias_de(pantalla: str | None, es_gerencia: bool) -> list[str]:
@@ -1701,22 +1833,58 @@ async def _ventanilla_ahora(
         texto,
     ):
         return await ventanilla.proxima(texto)
+    if re.search(
+        r"(desocupa|libera)\w* primero|cual (se )?(libera|desocupa)|se (libera|desocupa) (primero|antes)", texto
+    ):
+        return await ventanilla.proxima(texto)
     if re.search(r"cuanto (tarda|demora|lleva)\w* (la |una )?limpieza|tiempo de limpieza", texto):
         return await ventanilla.limpieza()
     if re.search(
         r"como (esta|anda|viene) (la ventanilla|el motel|todo|la cosa)|estado (de la ventanilla|general)"
-        r"|resumen de (la )?ventanilla",
+        r"|resum\w* (de )?(la )?ventanilla|como (viene|va|esta|anda) (la noche|la tarde|la manana|la guardia|el turno)"
+        r"|como (vamos|estamos|andamos|va|viene) con (las habitaciones|la ventanilla|la ocupacion|las piezas)",
         texto,
     ):
         return ventanilla.estado_general()
     if re.search(
+        r"\b(venc|por vencer|excedid|se pasaron|termina primero|sale primero)|pasad[oa]s? de (hora|tiempo)"
+        r"|se (le )?termina (el turno )?primero|a quien se le (termina|vence|acaba)"
+        r"|se (le )?(paso|pasaron) (la hora|el tiempo|de hora)|fuera de hora",
+        texto,
+    ):
+        return ventanilla.por_vencer()
+    if re.search(
+        r"(que|cuales|cuantas) (habitaciones )?(tengo|hay|estan) con (gente|clientes)|\bcon gente\b", texto
+    ):
+        return ventanilla.ocupadas()
+    if re.search(
+        r"(que|me) (paso|hubo|dejaron|me dejaron) (en )?(la )?guardia (anterior|pasada|de antes)|que me dejaron"
+        r"|guardia (anterior|pasada|de antes)",
+        texto,
+    ):
+        return await ventanilla.novedades()
+    if re.search(
+        r"algo (roto|rota|que no ande|fallando)|hay (algo )?rot[ao]|esta (rot[ao]|fallando)|que (anda|esta) mal", texto
+    ):
+        return await ventanilla.arreglos(_numero(texto))
+    if re.search(r"falta(n)? limpiar|sin limpiar|por limpiar|para limpiar|hay que limpiar", texto):
+        return ventanilla.en_estado("En Limpieza", "limpieza")
+    if re.search(
         r"quien (esta|tiene|atiende|abrio)|de guardia\b|guardia (actual|abierta|de ahora)"
-        r"|(cuando|a que hora) (termina|cierra|cambia|sale)|cuanto (le )?falta (a|para)",
+        r"|(cuando|a que hora) (termina|cierra|cambia|sale)|cuanto (le )?falta (a|para)"
+        r"|me falta para (irme|salir|terminar|el cambio)|(a que hora|cuando) (salgo|termino|me voy|me toca|entra el)"
+        r"|hasta que hora (estoy|trabajo|me quedo)",
         texto,
     ):
         return await ventanilla.guardia()
-    if re.search(r"\b(libres?|disponibles?|desocupad|vacias?|hay lugar)\b", texto):
-        return ventanilla.libres()
+    if re.search(r"\b(libres?|disponibles?|desocupad|vacias?|hay lugar)\b", texto) or re.search(
+        r"\b(tenes|tengo|tenemos|queda|quedan|hay) (alguna |una |otra )?(habitacion|habitaciones)\b(?! (ocupad|en limp"
+        r"|en mant|con))|\bpara dar\b|(a )?donde (puedo |lo |la |los )?(meter|poner|ubicar|mandar)\b",
+        texto,
+    ):
+        return ventanilla.libres(ventanilla.categoria_mencionada(texto))
+    if anterior == "libres" and ventanilla.categoria_mencionada(texto) is not None and len(texto.split()) <= 4:
+        return ventanilla.libres(ventanilla.categoria_mencionada(texto))
     if re.search(r"\b(que|cuales|cuantas) (habitaciones )?(estan |hay )?ocupad", texto):
         return ventanilla.ocupadas()
     if re.search(r"\b(venc|por vencer|excedid|se pasaron|termina primero|sale primero)", texto):
@@ -1727,14 +1895,23 @@ async def _ventanilla_ahora(
         return ventanilla.en_estado("Mantenimiento", "mantenimiento")
     numero = _numero(texto)
     if numero is not None and (
-        re.search(r"\b(debe|cuenta|saldo|cuanto (va|lleva|paga|es|debe)|cuanto le cobro)\b", texto)
+        re.search(
+            r"\b(debe|cuenta|saldo|cuanto (va|lleva|paga|es|debe|esta)|cuanto le cobro|le (tengo que )?cobr\w*"
+            r"|hay que cobrar\w*|lleva gastad\w*"
+            r"|tiene que (pagar|abonar))\b",
+            texto,
+        )
         or (anterior == "cuenta" and re.match(r"^(y )?(la |el )?(habitacion )?\d", texto))
     ):
         return await ventanilla.cuenta(numero)
     categoria = ventanilla.categoria_mencionada(texto)
     if ESPECIALES.search(texto):
         return ventanilla.especiales_texto(categoria)
-    pide_precio = re.search(r"\b(cuanto (sale|cuesta|vale)|precios?|tarifas?)\b", texto)
+    pide_precio = re.search(
+        r"\b(cuanto (sale|cuesta|vale)|precios?|tarifas?|cuanto (cobro|cobramos|se cobra)|cuanto (esta|es|sale) el"
+        r" turno|a cuanto (esta|sale|se cobra|cobramos))\b",
+        texto,
+    )
     momento = franjas.momento_mencionado(texto, franjas.local(ventanilla.ahora)) if pide_precio else None
     if momento is not None:
         return ventanilla.tarifas_texto(categoria, *momento)
@@ -1745,7 +1922,10 @@ async def _ventanilla_ahora(
     cambiar_algo = re.search(r"\b(cambiar|modificar|subir|bajar|cambio el|cambia el)\b", texto)
     if re.search(r"\bfondo\b", texto) and not COMO.search(texto) and not cambiar_algo:
         return await ventanilla.fondo()
-    if re.search(r"\bpedidos?\b", texto) and re.search(r"\b(hay|pendiente|llego|llegaron|recibir|falta)", texto):
+    if (re.search(r"\bpedidos?\b", texto) and re.search(r"\b(hay|pendiente|llego|llegaron|recibir|falta)", texto)) or (
+        re.search(r"\b(vino|llego|paso|trajo|viene) (el )?(proveedor|mercaderia|reparto)|\bproveedor"
+        r" (vino|llego|trajo)", texto)
+    ):
         return await ventanilla.pedidos()
     if (
         re.search(r"\bnovedad(es)?\b", texto)
@@ -1755,7 +1935,11 @@ async def _ventanilla_ahora(
         return await ventanilla.novedades()
     if (
         re.search(r"\b(quedan?|hay|stock|tenemos)\b", texto)
-        or re.search(r"(poco|bajo|sin) stock|que (falta|hay que reponer)|se (esta|estan) (acabando|agotando)", texto)
+        or re.search(
+            r"(poco|bajo|sin) stock|que (falta|hay que reponer)|se (esta|estan) (acabando|agotando)"
+            r"|(quedando|quedamos|quedar) sin\b",
+            texto,
+        )
         or anterior == "stock"
     ):
         return await ventanilla.stock(texto)
