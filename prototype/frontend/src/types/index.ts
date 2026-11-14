@@ -816,6 +816,11 @@ export interface EstadiaCliente {
   ahora?: string;
   estadia_base_min?: number;
   tarifa_base?: number;
+  // Lo que se cobra si se pasa de la estadía base, con la misma regla que el cobro.
+  tolerancia_min?: number;
+  fraccion_min?: number;
+  tarifa_fraccion?: number;
+  tope?: number | null;
   total_sobreturno?: number;
   total_consumos?: number;
   total?: number;

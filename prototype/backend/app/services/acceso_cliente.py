@@ -171,14 +171,22 @@ def _respuestas_de_mot(
 ) -> list[dict]:
     """Lo que Mot le contesta al cliente: cada pregunta es un botón y sale de los datos de su estadía."""
     fin_base = inicio + timedelta(minutes=tarifa.estadia_base_min)
-    extra = f"{pesos(tarifa.tarifa_fraccion)} cada {_duracion_texto(tarifa.fraccion_min)}"
+    fin_tolerancia = fin_base + timedelta(minutes=tarifa.tolerancia_min)
+    extra = f"{pesos(tarifa.tarifa_fraccion)} cada {_duracion_texto(tarifa.fraccion_min)} o fracción"
     if minutos <= tarifa.estadia_base_min:
-        salida = (
-            f"Tu estadía incluye {_duracion_texto(tarifa.estadia_base_min)}: llega hasta las {_hora(fin_base)}. "
-            f"Después se suman {extra}."
-        )
+        salida = f"Tu estadía incluye {_duracion_texto(tarifa.estadia_base_min)}: llega hasta las {_hora(fin_base)}. "
     else:
-        salida = f"Tu estadía base terminó a las {_hora(fin_base)}. Ahora se suman {extra}."
+        salida = f"Tu estadía base terminó a las {_hora(fin_base)}. "
+    if tarifa.tolerancia_min and minutos <= tarifa.estadia_base_min + tarifa.tolerancia_min:
+        salida += (
+            f"Tenés {_duracion_texto(tarifa.tolerancia_min)} de tolerancia: si salís antes de las "
+            f"{_hora(fin_tolerancia)} no se cobra extra. Pasada la tolerancia se suman {extra}, contados desde las "
+            f"{_hora(fin_base)}."
+        )
+    elif minutos <= tarifa.estadia_base_min:
+        salida += f"Después se suman {extra}, sin tolerancia."
+    else:
+        salida += f"Ahora se suman {extra}."
     if tarifa.tope is not None:
         salida += f" La estadía nunca pasa de {pesos(tarifa.tope)}."
     gasto = f"Hasta ahora son {pesos(total)}: {pesos(turno.tarifa_base)} de la estadía"
@@ -274,6 +282,11 @@ async def estadia(db: AsyncSession, turno: Turno) -> dict:
         "ahora": ahora.isoformat(),
         "estadia_base_min": tarifa.estadia_base_min,
         "tarifa_base": float(turno.tarifa_base),
+        # Lo que se cobra si se pasa: la misma regla que aplica el cobro (billing_service.calcular_sobreturno).
+        "tolerancia_min": tarifa.tolerancia_min,
+        "fraccion_min": tarifa.fraccion_min,
+        "tarifa_fraccion": float(tarifa.tarifa_fraccion),
+        "tope": float(tarifa.tope) if tarifa.tope is not None else None,
         "total_sobreturno": float(turno.total_sobreturno),
         "total_consumos": float(turno.total_consumos),
         "total": float(liquidacion.saldo_pendiente),
