@@ -2,7 +2,8 @@
 
 from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from fastapi.responses import JSONResponse
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,8 +20,9 @@ from app.core.seguridad import (
     verificar_clave,
 )
 from app.models.establecimiento import Establecimiento
-from app.models.operador import ROL_PLATAFORMA, Operador
+from app.models.operador import ROL_ADMINISTRADOR, ROL_PLATAFORMA, Operador
 from app.schemas.auth import EstablecimientoPublico, LoginRequest, MarcaPublica, OperadorPublico, SesionResponse
+from app.services import equipos
 from app.services.caja import guardia_abierta
 from app.services.liquidacion import con_zona
 
@@ -43,7 +45,7 @@ async def _establecimiento_del_login(db: AsyncSession, codigo: str | None) -> in
 
 
 @router.post("/login", response_model=SesionResponse)
-async def login(datos: LoginRequest, response: Response, db: AsyncSession = Depends(get_db)):
+async def login(datos: LoginRequest, request: Request, response: Response, db: AsyncSession = Depends(get_db)):
     ahora = datetime.now(UTC)
     usuario = datos.usuario.strip().lower()
     establecimiento_id = await _establecimiento_del_login(db, datos.establecimiento)
@@ -54,8 +56,30 @@ async def login(datos: LoginRequest, response: Response, db: AsyncSession = Depe
         operador = (await db.execute(select(Operador).where(Operador.usuario == usuario))).scalars().first()
         if operador is not None and (operador.rol == ROL_PLATAFORMA) != (establecimiento_id == PLATAFORMA):
             operador = None
+    if operador is not None and not operador.activo:
+        operador = None
 
-    if operador is None or not operador.activo:
+    # Equipos autorizados (migración 019): la marca del navegador se renueva en cada intento. Si el motel exige equipos
+    # autorizados, quien no es gerencia entra solo desde uno de ellos; el control va antes de la clave, así desde un
+    # equipo desconocido no se pueden ni probar claves.
+    marca = equipos.marca_de(request) or equipos.nueva_marca()
+    if establecimiento_id not in (None, PLATAFORMA):
+        establecimiento = await db.get(Establecimiento, establecimiento_id)
+        es_gerencia = operador is not None and operador.rol == ROL_ADMINISTRADOR
+        motivo = None if es_gerencia else await equipos.motivo_de_rechazo(
+            db, establecimiento, marca, equipos.ip_de(request)
+        )
+        if motivo:
+            # La clave se revisa igual (y tarda lo mismo) para contarle a la gerencia si era la correcta.
+            correcta = verificar_clave(operador.hash_clave if operador else HASH_FICTICIO, datos.clave)
+            await equipos.registrar_intento(db, request, marca, operador, bool(operador) and correcta, motivo)
+            rechazo = JSONResponse(
+                status_code=status.HTTP_403_FORBIDDEN, content={"detail": equipos.mensaje_de(motivo)}
+            )
+            equipos.poner_cookie(rechazo, marca)
+            return rechazo
+
+    if operador is None:
         verificar_clave(HASH_FICTICIO, datos.clave)  # mismo tiempo de respuesta que un usuario real
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=CREDENCIALES_INVALIDAS)
 
@@ -87,9 +111,13 @@ async def login(datos: LoginRequest, response: Response, db: AsyncSession = Depe
     operador.intentos_fallidos = 0
     operador.bloqueado_hasta = None
     operador.ultimo_acceso = ahora
+    if establecimiento_id != PLATAFORMA:
+        await equipos.anotar_uso(db, request, marca, operador)
     await db.commit()
 
     poner_cookie_sesion(response, crear_token(operador.id, operador.rol, establecimiento_id, ahora))
+    if establecimiento_id != PLATAFORMA:
+        equipos.poner_cookie(response, marca)
     return await _sesion_de(db, operador)
 
 

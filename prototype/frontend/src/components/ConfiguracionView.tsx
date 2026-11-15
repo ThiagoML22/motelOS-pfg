@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { BedDouble, Building2, Coins, KeyRound, Package, Palette, Tags, Users, Volume2 } from 'lucide-react';
+import { BedDouble, Building2, Coins, KeyRound, MonitorSmartphone, Package, Palette, Tags, Users, Volume2 } from 'lucide-react';
 import { COLORES_SUGERIDOS, aplicarMarca, sonarAviso } from '../utils/marca';
 import { Articulo, Categoria, Establecimiento, FondoCambio, HabitacionConfiguracion, OperadorEstado } from '../types';
 import { api, getErrorMessage } from '../services/api';
@@ -10,8 +10,9 @@ import Modal from './ui/Modal';
 import { useToast } from './ui/Toast';
 import { EsqueletoTabla } from './ui/Carga';
 import SeccionCategorias, { ChipCategoria } from './CategoriasConfig';
+import EquiposConfig from './EquiposConfig';
 
-type Seccion = 'tarifa' | 'fondo' | 'articulos' | 'habitaciones' | 'conserjes' | 'establecimiento' | 'apariencia';
+export type Seccion = 'tarifa' | 'fondo' | 'articulos' | 'habitaciones' | 'conserjes' | 'equipos' | 'establecimiento' | 'apariencia';
 
 const SECCIONES: { id: Seccion; label: string; icon: React.ElementType }[] = [
   { id: 'tarifa', label: 'Categorías y tarifas', icon: Tags },
@@ -19,6 +20,7 @@ const SECCIONES: { id: Seccion; label: string; icon: React.ElementType }[] = [
   { id: 'articulos', label: 'Artículos', icon: Package },
   { id: 'habitaciones', label: 'Habitaciones', icon: BedDouble },
   { id: 'conserjes', label: 'Conserjes', icon: Users },
+  { id: 'equipos', label: 'Equipos', icon: MonitorSmartphone },
   { id: 'establecimiento', label: 'Establecimiento', icon: Building2 },
   { id: 'apariencia', label: 'Apariencia y avisos', icon: Palette },
 ];
@@ -36,14 +38,16 @@ interface ConfiguracionViewProps {
   onCambioHabitaciones: () => Promise<void>;
   // La apariencia viaja en la sesión: al guardarla se refresca para aplicarla en toda la interfaz.
   onCambioApariencia: () => Promise<void>;
+  // La sección con la que abre (la campanita lleva directo a «Equipos»).
+  seccionInicial?: Seccion;
 }
 
 // RF-11 ampliado (acta del 27/10/2026): la gerencia cambia la tarifa, el fondo de cambio, los artículos, las
 // habitaciones y los conserjes sin pedírselo al autor. Cada cambio rige hacia adelante (RN-DER-06) y ninguna baja
 // borra historia.
-const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({ onCambioHabitaciones, onCambioApariencia }) => {
+const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({ onCambioHabitaciones, onCambioApariencia, seccionInicial = 'tarifa' }) => {
   const { toast } = useToast();
-  const [seccion, setSeccion] = useState<Seccion>('tarifa');
+  const [seccion, setSeccion] = useState<Seccion>(seccionInicial);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [fondo, setFondo] = useState<FondoCambio | null>(null);
   const [articulos, setArticulos] = useState<Articulo[]>([]);
@@ -171,6 +175,7 @@ const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({ onCambioHabitacio
           {seccion === 'conserjes' && (
             <SeccionConserjes operadores={operadores} ocupado={ocupado} ejecutar={ejecutar} confirmar={setConfirmacion} />
           )}
+          {seccion === 'equipos' && <EquiposConfig />}
           {seccion === 'establecimiento' && establecimiento && (
             <SeccionEstablecimiento key={establecimiento.nombre} establecimiento={establecimiento} ocupado={ocupado} ejecutar={ejecutar} />
           )}

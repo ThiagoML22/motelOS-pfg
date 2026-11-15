@@ -1089,3 +1089,45 @@ export interface TableroOperacion {
     operador: string;
   }[];
 }
+
+// Equipos autorizados (migración 019): desde qué equipos entra el conserje.
+export type EstadoEquipo = 'PENDIENTE' | 'AUTORIZADO' | 'BLOQUEADO';
+
+export interface EquipoVentanilla {
+  id: number;
+  nombre: string | null;
+  estado: EstadoEquipo;
+  // «Chrome en Android (celular)»: lo que dice el navegador, resumido.
+  descripcion: string;
+  ultima_ip: string | null;
+  ultimo_uso: string | null;
+  ultimo_operador: string | null;
+  en_uso: boolean;
+  decidido_por: string | null;
+  decidido_en: string | null;
+  creado_en: string;
+}
+
+export interface IntentoAcceso {
+  id: number;
+  creado_en: string;
+  // Nombre visible y usuario, solo si el usuario existe.
+  operador: string | null;
+  usuario: string | null;
+  clave_correcta: boolean;
+  motivo: 'EQUIPO' | 'RED';
+  ip: string | null;
+  descripcion: string;
+  equipo_id: number | null;
+  equipo_estado: EstadoEquipo | null;
+  equipo_nombre: string | null;
+}
+
+export interface PanelEquipos {
+  control: boolean;
+  redes: string | null;
+  ip_actual: string | null;
+  este_equipo_id: number | null;
+  equipos: EquipoVentanilla[];
+  intentos: IntentoAcceso[];
+}

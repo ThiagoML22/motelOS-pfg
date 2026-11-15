@@ -6,6 +6,7 @@ comprensión (services/comprension.py) y de los razonamientos (comparar, proyect
 mucho?», consejos).
 """
 
+import re
 from datetime import date
 
 import pytest
@@ -200,7 +201,8 @@ async def test_dos_preguntas_juntas_tienen_dos_respuestas(gerencia):
 async def test_un_periodo_sin_arquear_se_explica_en_lugar_de_dar_cero(gerencia, client):
     datos = await _preguntar(gerencia, "cuánto facturamos hoy")
     assert "Todavía no hay" in datos["respuesta"] or "se cobraron" in datos["respuesta"]
-    assert "0 turnos" not in datos["respuesta"]
+    # «0 turnos» como número suelto: «10 turnos» está bien.
+    assert re.search(r"(?<![\d.])0 turnos", datos["respuesta"]) is None
 
 
 async def test_si_duda_pregunta(gerencia):

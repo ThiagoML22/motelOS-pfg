@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Bell, ClipboardList, MessageSquarePlus } from 'lucide-react';
-import { Novedad } from '../types';
+import { Bell, ClipboardList, MessageSquarePlus, ShieldAlert } from 'lucide-react';
+import { IntentoAcceso, Novedad } from '../types';
+
+const horaCorta = (iso: string) => new Date(iso).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
 import { ListaNovedades } from './NovedadesPanel';
 import Button from './ui/Button';
 
@@ -13,6 +15,9 @@ interface CentroAvisosProps {
   operadorId: number;
   // Clave del puesto y la persona para recordar hasta qué novedad se leyó.
   claveVistas: string;
+  // Intentos de entrar desde equipos no autorizados del último día (solo la gerencia, migración 019).
+  intentos?: IntentoAcceso[];
+  onIrEquipos?: () => void;
   onIrActividad: () => void;
   onNuevaNovedad: () => void;
 }
@@ -32,37 +37,41 @@ const CentroAvisos: React.FC<CentroAvisosProps> = ({
   esGerencia,
   operadorId,
   claveVistas,
+  intentos = [],
+  onIrEquipos,
   onIrActividad,
   onNuevaNovedad,
 }) => {
   const [abierto, setAbierto] = useState(false);
   const [vista, setVista] = useState(() => leerVista(claveVistas));
+  const claveIntentos = `${claveVistas}.intentos`;
+  const [vistoIntento, setVistoIntento] = useState(() => leerVista(claveIntentos));
   const contenedor = useRef<HTMLDivElement>(null);
   const sinLeer = novedades.filter((n) => n.id > vista && n.operador_id !== operadorId);
-  const total = sinLeer.length + (esGerencia ? pendientes : 0);
-  const importantes = sinLeer.some((n) => n.importante);
+  const intentosNuevos = esGerencia ? intentos.filter((i) => i.id > vistoIntento) : [];
+  const total = sinLeer.length + (esGerencia ? pendientes : 0) + intentosNuevos.length;
+  const importantes = sinLeer.some((n) => n.importante) || intentosNuevos.length > 0;
 
   useEffect(() => {
     if (!abierto) return;
     const ultima = Math.max(0, ...novedades.map((n) => n.id));
-    if (ultima > vista) {
-      try {
-        localStorage.setItem(claveVistas, String(ultima));
-      } catch {
-        // sin almacenamiento local: la campanita vuelve a contar al recargar
-      }
+    const ultimoIntento = Math.max(0, ...intentos.map((i) => i.id));
+    try {
+      if (ultima > vista) localStorage.setItem(claveVistas, String(ultima));
+      if (ultimoIntento > vistoIntento) localStorage.setItem(claveIntentos, String(ultimoIntento));
+    } catch {
+      // sin almacenamiento local: la campanita vuelve a contar al recargar
     }
+    const cerrar = () => {
+      setAbierto(false);
+      setVista(ultima);
+      setVistoIntento(ultimoIntento);
+    };
     const fuera = (e: MouseEvent) => {
-      if (!contenedor.current?.contains(e.target as Node)) {
-        setAbierto(false);
-        setVista(ultima);
-      }
+      if (!contenedor.current?.contains(e.target as Node)) cerrar();
     };
     const escape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setAbierto(false);
-        setVista(ultima);
-      }
+      if (e.key === 'Escape') cerrar();
     };
     document.addEventListener('mousedown', fuera);
     document.addEventListener('keydown', escape);
@@ -70,7 +79,7 @@ const CentroAvisos: React.FC<CentroAvisosProps> = ({
       document.removeEventListener('mousedown', fuera);
       document.removeEventListener('keydown', escape);
     };
-  }, [abierto, novedades, vista, claveVistas]);
+  }, [abierto, novedades, vista, claveVistas, intentos, vistoIntento, claveIntentos]);
 
   return (
     <div ref={contenedor} className="relative">
@@ -96,6 +105,27 @@ const CentroAvisos: React.FC<CentroAvisosProps> = ({
       {abierto && (
         <div className="fixed inset-x-2 top-[3.75rem] z-40 animate-pop-in rounded-lg border border-line bg-surface p-3 shadow-panel sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-2 sm:w-[22rem]">
           <p className="mb-2 text-sm font-semibold text-ink">Avisos</p>
+          {esGerencia && intentos.length > 0 && onIrEquipos && (
+            <button
+              type="button"
+              onClick={() => {
+                setAbierto(false);
+                setVistoIntento(Math.max(0, ...intentos.map((i) => i.id)));
+                onIrEquipos();
+              }}
+              className="press mb-2 flex w-full items-start gap-2 rounded-md border border-danger/40 bg-danger-soft px-3 py-2 text-left text-sm text-danger"
+            >
+              <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+              <span>
+                {intentos.length === 1 ? 'Un intento' : `${intentos.length} intentos`} de entrar desde equipos no autorizados en las últimas 24 h
+                {intentosNuevos.length > 0 && <span className="font-semibold"> · {intentosNuevos.length} sin ver</span>}
+                <span className="block text-xs opacity-80">
+                  Último: {intentos[0].operador ?? 'un usuario que no existe'}, a las {horaCorta(intentos[0].creado_en)}, desde{' '}
+                  {intentos[0].descripcion}
+                </span>
+              </span>
+            </button>
+          )}
           {esGerencia && pendientes > 0 && (
             <button
               type="button"

@@ -31,6 +31,11 @@ class Settings(BaseSettings):
     # Bloqueo por intentos fallidos de inicio de sesión.
     LOGIN_MAX_INTENTOS: int = 5
     LOGIN_BLOQUEO_MIN: int = 15
+    # Equipos autorizados (migración 019): la marca de cada navegador viaja en esta cookie httpOnly.
+    COOKIE_EQUIPO: str = "motelos_equipo"
+    # Solo si la API está detrás de un proxy propio (por ejemplo, nginx) que agrega X-Forwarded-For: entonces la IP
+    # del equipo sale de ese encabezado. Sin proxy debe quedar en False, porque cualquiera podría inventarlo.
+    CONFIAR_X_FORWARDED_FOR: bool = False
     # Costo de argon2id para las claves (valores por defecto de argon2-cffi; las pruebas los bajan).
     ARGON2_TIME_COST: int = 3
     ARGON2_MEMORY_KIB: int = 65536

@@ -15,6 +15,7 @@ from app.api.v1.endpoints import (
     cliente,
     clientes_perdidos,
     configuracion,
+    equipos,
     guardias,
     habitaciones,
     inteligencia,
@@ -120,6 +121,8 @@ app.include_router(
     inteligencia.router, prefix="/api/v1/inteligencia", tags=["gerencia"], dependencies=solo_gerencia
 )
 app.include_router(operacion.gerencia, prefix="/api/v1/operacion", tags=["gerencia"], dependencies=solo_gerencia)
+# Equipos autorizados (migración 019): desde qué equipos entra el conserje y quién intentó entrar desde otros.
+app.include_router(equipos.router, prefix="/api/v1/equipos", tags=["gerencia"], dependencies=solo_gerencia)
 # Plataforma (multiinquilino): alta, suspensión y resumen de establecimientos. Solo el rol PLATAFORMA.
 app.include_router(
     plataforma.router, prefix="/api/v1/plataforma", tags=["plataforma"], dependencies=[Depends(solo_plataforma)]

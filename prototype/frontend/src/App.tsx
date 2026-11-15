@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowDownUp, BedDouble, Keyboard, LogOut, MessageSquarePlus, Moon, Rows3, UserRound, WifiOff } from 'lucide-react';
-import { Arqueo, Categoria, HabitacionConDetalles, Novedad, PedidoVentanilla, RoomStatus, Sesion, TipoCliente } from './types';
+import { Arqueo, Categoria, HabitacionConDetalles, IntentoAcceso, Novedad, PedidoVentanilla, RoomStatus, Sesion, TipoCliente } from './types';
 import { AsistenteFlotante, AsistenteProvider, useAsistente } from './components/Asistente';
 import AtajosTeclado, { escribiendo } from './components/AtajosTeclado';
 import CentroAvisos from './components/CentroAvisos';
@@ -34,7 +34,7 @@ import LoginView from './components/LoginView';
 import GuardiaView from './components/GuardiaView';
 import CierreCajaView from './components/CierreCajaView';
 import PanelGerencia from './components/PanelGerencia';
-import ConfiguracionView from './components/ConfiguracionView';
+import ConfiguracionView, { Seccion as SeccionConfiguracion } from './components/ConfiguracionView';
 import Button from './components/ui/Button';
 import { useToast } from './components/ui/Toast';
 import { EstadoVacio, EsqueletoGrilla } from './components/ui/Carga';
@@ -63,9 +63,10 @@ function App() {
   }, []);
 
   useEffect(() => {
-    onSesionVencida(() => {
+    onSesionVencida((motivo) => {
       setSesion(null);
-      setAviso('La sesión venció o se cerró. Ingrese nuevamente.');
+      // Si la gerencia le quitó la autorización al equipo, se dice eso; si no, el aviso de siempre.
+      setAviso(motivo?.includes('equipo') ? motivo : 'La sesión venció o se cerró. Ingrese nuevamente.');
     });
     void refrescarSesion().finally(() => setIniciando(false));
   }, [refrescarSesion]);
@@ -158,6 +159,14 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
   // Lo que pidieron los clientes con el QR de su ticket y todavía espera en la ventanilla.
   const [pedidosCliente, setPedidosCliente] = useState<PedidoVentanilla[]>([]);
   const pedidosVistos = useRef<Set<number> | null>(null);
+  // Intentos de entrar desde equipos no autorizados (solo la gerencia) y la sección de Configuración a la que lleva
+  // la campanita.
+  const [intentos, setIntentos] = useState<IntentoAcceso[]>([]);
+  const intentosVistos = useRef<Set<number> | null>(null);
+  const [seccionConfig, setSeccionConfig] = useState<SeccionConfiguracion | undefined>(undefined);
+  useEffect(() => {
+    if (activeView !== 'configuracion') setSeccionConfig(undefined);
+  }, [activeView]);
   const [nuevaNovedad, setNuevaNovedad] = useState(false);
   const [paleta, setPaleta] = useState(false);
   const [atajos, setAtajos] = useState(false);
@@ -215,11 +224,24 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
   const fetchPendientes = useCallback(async () => {
     try {
       setNovedades(await api.getNovedades(30));
-      if (esGerencia) setPendientes(await api.getActividadPendiente());
+      if (esGerencia) {
+        setPendientes(await api.getActividadPendiente());
+        // Equipos autorizados (migración 019): un conserje que intentó entrar desde otro equipo avisa enseguida.
+        const lista = await api.getIntentosAcceso();
+        const vistos = intentosVistos.current;
+        const nuevos = vistos ? lista.filter((i) => !vistos.has(i.id)) : [];
+        intentosVistos.current = new Set(lista.map((i) => i.id));
+        setIntentos(lista);
+        if (nuevos.length) {
+          const quien = nuevos[0].operador ?? 'Alguien';
+          toast(`${quien} intentó entrar desde ${nuevos[0].descripcion}, un equipo no autorizado.`, 'error');
+          if (alertasSonoras) sonarAviso('por_vencer');
+        }
+      }
     } catch {
       // los contadores se actualizan en el próximo sondeo
     }
-  }, [esGerencia]);
+  }, [esGerencia, alertasSonoras, toast]);
 
   // Ctrl+K (⌘K en Mac) abre y cierra la paleta de comandos. Fuera de los campos de texto también hay teclas sueltas:
   // «/» busca, «?» muestra los atajos, «A» abre el asistente, «N» deja una novedad y los números van a cada sección.
@@ -462,6 +484,11 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
             esGerencia={esGerencia}
             operadorId={sesion.operador.id}
             claveVistas={`motelos.novedades.${sesion.establecimiento?.codigo ?? ''}.${sesion.operador.id}`}
+            intentos={intentos}
+            onIrEquipos={() => {
+              setSeccionConfig('equipos');
+              setActiveView('configuracion');
+            }}
             onIrActividad={() => setActiveView('actividad')}
             onNuevaNovedad={() => setNuevaNovedad(true)}
           />
@@ -675,7 +702,12 @@ function Ventanilla({ sesion, onRefrescarSesion, onSalir }: VentanillaProps) {
         {esGerencia && activeView === 'operacion' && <OperacionView />}
 
         {esGerencia && activeView === 'configuracion' && (
-          <ConfiguracionView onCambioHabitaciones={fetchHabitaciones} onCambioApariencia={onRefrescarSesion} />
+          <ConfiguracionView
+            key={seccionConfig ?? 'inicio'}
+            seccionInicial={seccionConfig}
+            onCambioHabitaciones={fetchHabitaciones}
+            onCambioApariencia={onRefrescarSesion}
+          />
         )}
 
         {esGerencia && activeView === 'actividad' && <ActividadView onCambioPendientes={setPendientes} />}

@@ -9,6 +9,7 @@ from app.models import (  # noqa: F401
     cliente_perdido,
     configuracion,
     consumo,
+    equipo,
     establecimiento,
     estadia_activa,
     evento_habitacion,

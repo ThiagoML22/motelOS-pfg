@@ -8,7 +8,8 @@ from app.core.database import get_db
 from app.core.inquilino import PLATAFORMA, fijar_establecimiento, fijar_operador
 from app.core.seguridad import leer_token
 from app.models.establecimiento import Establecimiento
-from app.models.operador import ROL_ADMINISTRADOR, ROL_PLATAFORMA, Operador
+from app.models.operador import ROL_ADMINISTRADOR, ROL_OPERADOR, ROL_PLATAFORMA, Operador
+from app.services import equipos
 
 SIN_SESION = "Sesión no iniciada o vencida. Inicie sesión nuevamente."
 SUSPENDIDO = "El establecimiento está suspendido. Comuníquese con la plataforma."
@@ -29,6 +30,7 @@ async def operador_actual(request: Request, db: AsyncSession = Depends(get_db)) 
         establecimiento_id = int(datos["est"])
     except (TypeError, ValueError):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=SIN_SESION) from None
+    establecimiento = None
     if establecimiento_id != PLATAFORMA:
         establecimiento = await db.get(Establecimiento, establecimiento_id)
         if establecimiento is None:
@@ -46,6 +48,10 @@ async def operador_actual(request: Request, db: AsyncSession = Depends(get_db)) 
     ):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=SIN_SESION)
     await fijar_operador(db, operador.id)
+    # Equipos autorizados (migración 019): si la gerencia le quita la autorización al equipo, la sesión del conserje se
+    # corta en la consulta siguiente, sin esperar a que venza.
+    if operador.rol == ROL_OPERADOR and establecimiento is not None:
+        await equipos.controlar_sesion(db, request, establecimiento, operador)
     return operador
 
 

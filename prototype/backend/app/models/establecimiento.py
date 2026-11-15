@@ -38,3 +38,7 @@ class Establecimiento(Base):
     # Quién lava la ropa (migración 018): el motel (no sale nada) o una lavandería de afuera (se anota lo que sale y
     # lo que vuelve).
     lavanderia_propia = Column(Boolean, nullable=False, default=True, server_default=true())
+    # Equipos autorizados (migración 019): si está activo, el conserje entra solo desde un equipo que autorizó la
+    # gerencia y, si hay redes cargadas («192.168.0.0/24, 10.0.0.5»), solo desde ellas.
+    control_equipos = Column(Boolean, nullable=False, default=False, server_default=false())
+    redes_permitidas = Column(String(200), nullable=True)

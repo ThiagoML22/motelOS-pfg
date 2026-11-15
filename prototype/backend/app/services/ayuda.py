@@ -24,6 +24,9 @@ from app.core.inquilino import CLAVE
 from app.models.articulo import Articulo
 from app.models.categoria import CategoriaHabitacion
 from app.models.configuracion import ConfiguracionCaja
+from app.models.equipo import AUTORIZADO, Equipo, IntentoAcceso
+from app.models.equipo import PENDIENTE as EQUIPO_PENDIENTE
+from app.models.establecimiento import Establecimiento
 from app.models.habitacion import Habitacion
 from app.models.novedad import Novedad
 from app.models.operacion import EN_CURSO, RUBROS, SIN_RESOLVER, Arreglo
@@ -40,6 +43,13 @@ from app.services.liquidacion import con_zona, liquidar_turno
 
 ESPECIALES = re.compile(r"tarifas? especial(es)?")
 CUANDO_CAMBIA = re.compile(r"cuando (cambia|sube|baja) (la tarifa|el precio)")
+SOBRE_EQUIPOS = re.compile(
+    r"\bintent\w* (de )?(entrar|ingresar|conectar\w*|acceder|loguear\w*)"
+    r"|\bquien (quiso|trato de|intento|quiere) (entrar|ingresar|conectar\w*)"
+    r"|\b(equipos?|dispositivos?|compus?|pcs?|celulares?) (autorizad|conectad|no autorizad|pendiente|bloquead)"
+    r"|\bdesde (que|cuales|donde|otros?|que otro) (equipos?|dispositivos?|celular|compu|pc)"
+    r"|\bdispositivos? conectados?"
+)
 RIGE = re.compile(r"\b(rige|corre|vigente|actual|ahora)\b")
 # Frases que piden instrucciones: con ellas, un tema de ayuda gana sobre el análisis de datos.
 COMO = re.compile(
@@ -569,6 +579,32 @@ TEMAS: tuple[Tema, ...] = (
         GERENCIA,
     ),
     Tema(
+        "equipos",
+        "Elegir desde qué equipos entra el conserje",
+        (
+            r"\bautoriz\w* (la |el |un |una |este |esta )?(pc|compu\w*|equipo|computadora|celular|dispositivo)",
+            r"\b(equipos?|dispositivos?) autorizad",
+            r"\bcontrol de (equipos|dispositivos)",
+            r"(entr|ingres)\w* (desde|con) (el|su|un) celular",
+            r"\bdesde (cualquier|otro) (lado|lugar|equipo)",
+        ),
+        (
+            "En Configuración → «Equipos» están los equipos desde los que entró un conserje.",
+            "Para autorizar la PC de la ventanilla: que el conserje intente entrar desde ella y tocá «Autorizar» con "
+            "un nombre, o iniciá sesión vos en esa PC y tocá «Autorizar este equipo».",
+            "Con al menos uno autorizado, activá «Solo desde equipos autorizados». La gerencia entra desde donde "
+            "quiera.",
+            "Si un conserje intenta entrar desde otro equipo no entra, el equipo queda pendiente y te llega a la "
+            "campanita. Desde ahí lo autorizás o lo bloqueás.",
+            "«Quitar autorización» corta también la sesión abierta en ese equipo.",
+            "Si el Wi-Fi de clientes es otra red, podés cargar la red de la ventanilla (por ejemplo, 192.168.0.0/24).",
+        ),
+        "configuracion",
+        GERENCIA,
+        "No es seguridad absoluta (quien sepa copiar una cookie podría llevarla a otro equipo), pero frena el uso "
+        "desde el celular o desde afuera.",
+    ),
+    Tema(
         "config_articulos",
         "Cambiar el precio de un artículo o darlo de baja",
         (
@@ -935,6 +971,7 @@ PANTALLAS = {
             "tarifas especiales por día y hora en un mapa de la semana.",
             "«Habitaciones» y «Artículos»: altas, bajas, números, categorías y precios.",
             "«Conserjes»: altas, bajas y clave restablecida.",
+            "«Equipos»: desde qué equipos entra el conserje y quién intentó entrar desde otros.",
             "«Fondo de cambio» y «Apariencia y avisos»: el fondo de cada guardia, el color, el eslogan y las alertas.",
         ),
         (),
@@ -1679,6 +1716,10 @@ async def responder(
     if CUANDO_CAMBIA.search(texto):
         return ventanilla.cambios_texto().como_dict(), texto
 
+    # «¿Quién intentó entrar?»: los equipos autorizados y los intentos desde otros (migración 019). De la gerencia.
+    if es_gerencia and (SOBRE_EQUIPOS.search(original) or SOBRE_EQUIPOS.search(texto)):
+        return (await _equipos(db)).como_dict(), texto
+
     # 1. Situaciones conocidas («me equivoqué en el arqueo») y «¿qué es…?», «¿para qué sirve…?»: el glosario.
     intencion_datos = _intencion(texto)
     definicion = conocimiento.definicion(texto, es_gerencia)
@@ -1777,6 +1818,51 @@ async def responder(
         "desconocida",
         sugerencias=[_como_pregunta(e) for _, e in parecidas] or _sugerencias_de(pantalla, es_gerencia),
     ).como_dict(), texto
+
+
+async def _equipos(db: AsyncSession) -> Respuesta:
+    """Los equipos del conserje y los intentos de la última semana, para la gerencia (migración 019)."""
+    establecimiento = await db.get(Establecimiento, db.info.get(CLAVE))
+    todos = list((await db.execute(select(Equipo))).scalars())
+    autorizados = [e for e in todos if e.estado == AUTORIZADO]
+    pendientes = [e for e in todos if e.estado == EQUIPO_PENDIENTE]
+    desde = datetime.now(UTC) - timedelta(days=7)
+    intentos = list(
+        (
+            await db.execute(
+                select(IntentoAcceso)
+                .where(IntentoAcceso.creado_en >= desde)
+                .order_by(IntentoAcceso.creado_en.desc(), IntentoAcceso.id.desc())
+            )
+        ).scalars()
+    )
+    if establecimiento is not None and establecimiento.control_equipos:
+        estado = f"El conserje entra solo desde los equipos autorizados ({len(autorizados)})."
+    else:
+        estado = "El control de equipos está apagado: el conserje puede entrar desde cualquier equipo."
+    if not intentos:
+        texto = f"En los últimos 7 días nadie intentó entrar desde un equipo no autorizado. {estado}"
+    else:
+        ultimo = intentos[0]
+        quien = await db.get(Operador, ultimo.operador_id) if ultimo.operador_id else None
+        cuando = con_zona(ultimo.creado_en).astimezone(ZoneInfo(settings.ZONA_HORARIA))
+        hoy = datetime.now(ZoneInfo(settings.ZONA_HORARIA)).date()
+        dia = "hoy" if cuando.date() == hoy else cuando.strftime("el %d/%m")
+        clave = "con la clave correcta" if ultimo.clave_correcta else "con una clave equivocada"
+        persona = quien.nombre_visible if quien else "un usuario que no existe"
+        veces = "1 intento" if len(intentos) == 1 else f"{len(intentos)} intentos"
+        texto = (
+            f"En los últimos 7 días hubo {veces} de entrar desde equipos no autorizados. El último fue {persona}, "
+            f"{dia} a las {cuando:%H:%M}, desde {ultimo.descripcion}, {clave}. {estado}"
+        )
+    if pendientes:
+        texto += f" Hay {len(pendientes)} {'equipo' if len(pendientes) == 1 else 'equipos'} esperando que decidas."
+    return Respuesta(
+        texto,
+        "equipos",
+        acciones=_ir("configuracion"),
+        sugerencias=["¿Cómo autorizo la PC de la ventanilla?"] if not autorizados else [],
+    )
 
 
 async def _ventanilla_por_intencion(ventanilla: Ventanilla, intencion: str, texto: str) -> Respuesta | None:
