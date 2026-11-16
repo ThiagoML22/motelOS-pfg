@@ -30,7 +30,7 @@ try {
                    'verify_personalizacion_novedades.sql', 'verify_pedidos.sql', 'verify_historial_clientes.sql',
                    'verify_sellos.sql', 'verify_pedidos_cliente.sql', 'verify_franjas.sql',
                    'verify_cliente_ampliado.sql', 'verify_operacion.sql', 'verify_recuento_ropa.sql',
-                   'verify_lavanderia_resena.sql') {
+                   'verify_lavanderia_resena.sql', 'verify_equipos.sql', 'verify_qr_fijo.sql') {
         Write-Host "Verificando $v"
         Invoke-Psql 'motel_schema' @('-f', "/db/$v")
     }

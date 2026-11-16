@@ -862,6 +862,36 @@ export interface TicketCliente {
   qr: string;
   numero: number;
   hora_inicio: string;
+  // Celulares vinculados con el QR fijo de la habitación (migración 020).
+  vinculados: number;
+}
+
+// QR fijo de la habitación (migración 020). Sin vínculo se ve solo la carta, igual con la habitación libre u ocupada.
+export type EntradaQR =
+  | { estado: 'vinculado' | 'terminada'; token: string }
+  | {
+      estado: 'libre';
+      motel: string;
+      color_marca: string | null;
+      numero: number;
+      categoria: string | null;
+      bienvenida: string | null;
+      articulos: { descripcion: string; precio: number; categoria: string | null }[];
+    };
+
+export interface InvitacionCelular {
+  direccion: string;
+  qr: string;
+  vence: string;
+}
+
+export interface QRHabitacion {
+  id: number;
+  numero: number;
+  categoria: string | null;
+  version: number;
+  direccion: string;
+  qr: string;
 }
 
 // Pedidos de reposición a proveedores (migración 010).
@@ -1092,4 +1122,46 @@ export interface TableroOperacion {
     motivo: string;
     operador: string;
   }[];
+}
+
+// Equipos autorizados (migración 019): desde qué equipos entra el conserje.
+export type EstadoEquipo = 'PENDIENTE' | 'AUTORIZADO' | 'BLOQUEADO';
+
+export interface EquipoVentanilla {
+  id: number;
+  nombre: string | null;
+  estado: EstadoEquipo;
+  // «Chrome en Android (celular)»: lo que dice el navegador, resumido.
+  descripcion: string;
+  ultima_ip: string | null;
+  ultimo_uso: string | null;
+  ultimo_operador: string | null;
+  en_uso: boolean;
+  decidido_por: string | null;
+  decidido_en: string | null;
+  creado_en: string;
+}
+
+export interface IntentoAcceso {
+  id: number;
+  creado_en: string;
+  // Nombre visible y usuario, solo si el usuario existe.
+  operador: string | null;
+  usuario: string | null;
+  clave_correcta: boolean;
+  motivo: 'EQUIPO' | 'RED';
+  ip: string | null;
+  descripcion: string;
+  equipo_id: number | null;
+  equipo_estado: EstadoEquipo | null;
+  equipo_nombre: string | null;
+}
+
+export interface PanelEquipos {
+  control: boolean;
+  redes: string | null;
+  ip_actual: string | null;
+  este_equipo_id: number | null;
+  equipos: EquipoVentanilla[];
+  intentos: IntentoAcceso[];
 }

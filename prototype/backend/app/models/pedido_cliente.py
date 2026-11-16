@@ -16,6 +16,9 @@ AVISOS = {
     SALIDA: "Pide la cuenta",
     TIEMPO: "Se queda más tiempo",
 }
+# «Estoy en la habitación y no veo mi estadía» (migración 020): lo manda el QR fijo y la ventanilla lo resuelve
+# liberando el QR. No es un aviso que el cliente elija desde su estadía, por eso no está en AVISOS.
+VINCULO = "VINCULO"
 # Los que se mandan con un toque; la cuenta y el tiempo tienen su propio paso en la página.
 AVISOS_DIRECTOS = ("TOALLAS", "LLAMAR")
 MINUTOS_EXTRA = (30, 60, 120)

@@ -665,7 +665,7 @@ const OpinionesCard: React.FC<{ datos: Opiniones }> = ({ datos }) => {
   if (!datos.cantidad) {
     return (
       <Tarjeta titulo={titulo} icono={Star} extra={`últimos ${datos.dias} días`}>
-        <p className="text-sm text-muted">Todavía nadie calificó su estadía. Se hace desde el QR del ticket, de forma anónima.</p>
+        <p className="text-sm text-muted">Todavía nadie calificó su estadía. Se hace desde el QR de la habitación o del ticket, de forma anónima.</p>
       </Tarjeta>
     );
   }

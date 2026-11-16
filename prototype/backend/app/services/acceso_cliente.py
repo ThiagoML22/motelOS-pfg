@@ -1,8 +1,9 @@
 """El cliente en su habitación: con el QR de su ticket ve su tiempo y su cuenta y le pide algo a la ventanilla.
 
 No hay cuenta ni datos personales. El enlace lleva el turno y una firma del servidor (HMAC): no se puede inventar ni
-pasar al turno de otro, no hace falta guardar nada, y sirve solo mientras el turno está en curso. Por eso va en un
-ticket y no pegado en la habitación: un código fijo le mostraría la cuenta del siguiente cliente a quien lo fotografió.
+pasar al turno de otro, no hace falta guardar nada, y sirve solo mientras el turno está en curso. Ese enlace va en un
+ticket. El QR fijo pegado en la habitación (app/services/qr_habitacion.py) no lleva el turno: vincula el celular a la
+estadía, porque si no le mostraría la cuenta del siguiente cliente a quien lo fotografió.
 
 El cliente no ve la patente, ni quién atiende, ni nada de la caja. Un pedido no toca el stock ni la cuenta: el conserje
 lo atiende, y recién ahí se carga como consumo con las reglas de siempre. Avisar que se queda más o pedir la cuenta
@@ -54,6 +55,7 @@ from app.models.pedido_cliente import (
     SALIDA,
     SIN_RESOLVER,
     TIEMPO,
+    VINCULO,
     PedidoCliente,
 )
 from app.models.tarifa import Tarifa
@@ -73,10 +75,15 @@ MAXIMAS_LINEAS = 8
 HORIZONTE_MIN = 720
 
 
-def _firma(establecimiento_id: int, turno_id: str) -> str:
-    clave = hmac.new(settings.JWT_SECRET.encode(), b"acceso-cliente", hashlib.sha256).digest()
-    resumen = hmac.new(clave, f"{establecimiento_id}.{turno_id}".encode(), hashlib.sha256).digest()
+def firmar(proposito: bytes, texto: str) -> str:
+    """Firma corta del servidor. Cada uso tiene su propia clave: una firma de un uso no sirve para otro."""
+    clave = hmac.new(settings.JWT_SECRET.encode(), proposito, hashlib.sha256).digest()
+    resumen = hmac.new(clave, texto.encode(), hashlib.sha256).digest()
     return base64.urlsafe_b64encode(resumen).decode().rstrip("=")[:LARGO_FIRMA]
+
+
+def _firma(establecimiento_id: int, turno_id: str) -> str:
+    return firmar(b"acceso-cliente", f"{establecimiento_id}.{turno_id}")
 
 
 def token_de(establecimiento_id: int, turno_id: uuid.UUID) -> str:
@@ -128,6 +135,8 @@ def descripcion_de(tipo: str, articulo: str | None, minutos: int | None, medio_p
         return f"Se queda {_duracion_texto(minutos)} más"
     if tipo == SALIDA and medio_pago:
         return f"Pide la cuenta: paga con {MEDIOS_PAGO[medio_pago].lower()}"
+    if tipo == VINCULO:
+        return "Alguien en la habitación no puede ver su estadía con el QR"
     return AVISOS[tipo]
 
 
@@ -222,7 +231,7 @@ def _respuestas_de_mot(
     ]
 
 
-def _puede_calificar(turno: Turno, ahora: datetime) -> bool:
+def puede_calificar(turno: Turno, ahora: datetime) -> bool:
     if turno.estado == "En Curso":
         return True
     limite = timedelta(minutes=VENTANA_DESPUES_DEL_COBRO_MIN)
@@ -247,7 +256,7 @@ async def estadia(db: AsyncSession, turno: Turno) -> dict:
         return {
             "activa": False,
             **marca,
-            "puede_calificar": _puede_calificar(turno, datetime.now(UTC)) and not calificada,
+            "puede_calificar": puede_calificar(turno, datetime.now(UTC)) and not calificada,
             "problemas": _problemas(),
         }
     liquidacion = await liquidar_turno(db, turno)
@@ -260,10 +269,13 @@ async def estadia(db: AsyncSession, turno: Turno) -> dict:
     )
     nombres = {a.id: a.descripcion for a in articulos}
     consumos = list((await db.execute(select(Consumo).where(Consumo.turno_id == turno.id))).scalars())
+    # El aviso «no veo mi estadía» es para la ventanilla: no se lista entre lo que pidió el cliente.
     pedidos = list(
         (
             await db.execute(
-                select(PedidoCliente).where(PedidoCliente.turno_id == turno.id).order_by(PedidoCliente.id.desc())
+                select(PedidoCliente)
+                .where(PedidoCliente.turno_id == turno.id, PedidoCliente.tipo != VINCULO)
+                .order_by(PedidoCliente.id.desc())
             )
         ).scalars()
     )
@@ -320,7 +332,13 @@ async def _sin_resolver(db: AsyncSession, turno: Turno, nuevas: int = 1) -> list
     """Lo que el turno tiene sin resolver, si todavía puede pedir `nuevas` líneas. Un carrito cuenta como un pedido."""
     if turno.estado != "En Curso":
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Esta estadía ya terminó.")
-    del_turno = list((await db.execute(select(PedidoCliente).where(PedidoCliente.turno_id == turno.id))).scalars())
+    del_turno = list(
+        (
+            await db.execute(
+                select(PedidoCliente).where(PedidoCliente.turno_id == turno.id, PedidoCliente.tipo != VINCULO)
+            )
+        ).scalars()
+    )
     abiertos = [p for p in del_turno if p.estado in SIN_RESOLVER]
     pedidos = {p.lote or p.id for p in abiertos}
     if len(pedidos) >= MAXIMO_PENDIENTES or len(del_turno) + nuevas > MAXIMO_POR_TURNO:
@@ -412,7 +430,7 @@ def _resena(texto: str | None) -> str | None:
 
 async def calificar(db: AsyncSession, turno: Turno, puntaje: int, problemas: int, resena: str | None = None) -> dict:
     texto = _resena(resena)
-    if not _puede_calificar(turno, datetime.now(UTC)):
+    if not puede_calificar(turno, datetime.now(UTC)):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Pasó el tiempo para calificar esta estadía.")
     if await _calificacion(db, turno) is not None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Ya calificaste esta estadía. ¡Gracias!")

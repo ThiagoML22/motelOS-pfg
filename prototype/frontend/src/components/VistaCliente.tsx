@@ -17,13 +17,14 @@ import {
   Receipt,
   ShieldCheck,
   ShoppingBag,
+  Smartphone,
   Star,
   Timer,
   Wallet,
   Wifi,
   X,
 } from 'lucide-react';
-import { EstadiaCliente, PedidoEstadia } from '../types';
+import { EstadiaCliente, InvitacionCelular, PedidoEstadia } from '../types';
 import { api, getErrorMessage } from '../services/api';
 import { useDialog } from '../hooks/useDialog';
 import { formatDuration, formatMoney, formatRoomNumber } from '../utils/format';
@@ -36,7 +37,7 @@ const REFRESCO_MS = 10000;
 const AVISO_FINAL_MIN = 20;
 
 type Pestana = 'estadia' | 'pedir' | 'mot';
-type Hoja = 'carrito' | 'tiempo' | 'cuenta';
+type Hoja = 'carrito' | 'tiempo' | 'cuenta' | 'sumar';
 
 const AVISOS: Record<string, { etiqueta: string; icono: LucideIcon; listo: string }> = {
   TOALLAS: { etiqueta: 'Necesito toallas', icono: BedDouble, listo: 'Ya te las llevan.' },
@@ -323,9 +324,12 @@ const PestanaMot: React.FC<{ datos: EstadiaCliente; onAvisar: (tipo: string) => 
   );
 };
 
-// Lo que ve el cliente con el QR de su ticket, en su celular: sin cuenta y sin datos personales. No es parte de la
-// aplicación del personal: no pide sesión y el enlace deja de funcionar cuando se cierra el turno.
+// Lo que ve el cliente en su celular, con el QR de su ticket o con el QR fijo de la habitación: sin cuenta y sin datos
+// personales. No es parte de la aplicación del personal: no pide sesión y deja de funcionar cuando se cierra el turno.
 const VistaCliente: React.FC<{ token: string }> = ({ token }) => {
+  // Con el QR fijo (migración 020) el enlace sirve solo en este celular, y desde acá se suman otros.
+  const conQRFijo = token.startsWith('v.');
+  const [invitacion, setInvitacion] = useState<InvitacionCelular | null>(null);
   const [datos, setDatos] = useState<EstadiaCliente | null>(null);
   const [invalido, setInvalido] = useState(false);
   const [pestana, setPestana] = useState<Pestana>('estadia');
@@ -422,6 +426,18 @@ const VistaCliente: React.FC<{ token: string }> = ({ token }) => {
     }
   };
 
+  const sumarCelular = async () => {
+    setEnviando(true);
+    try {
+      setInvitacion(await api.invitarCelular(token));
+      setHoja('sumar');
+    } catch (err) {
+      setMensaje({ texto: getErrorMessage(err, 'No se pudo generar el código.'), error: true });
+    } finally {
+      setEnviando(false);
+    }
+  };
+
   const fondo = 'cielo relative min-h-screen overflow-x-hidden px-4 pb-44 pt-6 text-white';
 
   if (invalido || (datos && !datos.activa)) {
@@ -435,8 +451,16 @@ const VistaCliente: React.FC<{ token: string }> = ({ token }) => {
           ) : (
             <Mot estado="saludando" className="mx-auto h-36 w-28" />
           )}
-          <h1 className="mt-4 text-xl font-semibold">{invalido ? 'Este código no es válido' : '¡Gracias por venir!'}</h1>
-          <p className="mt-1 text-sm text-white/60">{invalido ? 'Pedí tu ticket en la ventanilla.' : 'Tu estadía terminó y este enlace ya no se usa.'}</p>
+          <h1 className="mt-4 text-xl font-semibold">
+            {!invalido ? '¡Gracias por venir!' : conQRFijo ? 'Este celular ya no ve la estadía' : 'Este código no es válido'}
+          </h1>
+          <p className="mt-1 text-sm text-white/60">
+            {!invalido
+              ? 'Tu estadía terminó y este enlace ya no se usa.'
+              : conQRFijo
+                ? 'Si estás en la habitación, escaneá de nuevo el QR que está en ella.'
+                : 'Pedí tu ticket en la ventanilla.'}
+          </p>
           {datos?.puede_calificar && (
             <div className="mt-5 rounded-2xl border border-white/10 bg-white/[0.06] p-4">
               <Calificar token={token} problemas={datos.problemas ?? []} onListo={() => undefined} />
@@ -648,9 +672,23 @@ const VistaCliente: React.FC<{ token: string }> = ({ token }) => {
               </Tarjeta>
             )}
 
+            {conQRFijo && (
+              <button
+                type="button"
+                disabled={enviando}
+                onClick={() => void sumarCelular()}
+                className="press flex w-full items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-3 text-sm font-medium hover:bg-white/10 disabled:opacity-60"
+              >
+                <Smartphone className="h-4 w-4" aria-hidden="true" />
+                Sumar otro celular
+              </button>
+            )}
+
             <p className="flex items-start justify-center gap-1.5 px-2 pt-1 text-center text-xs text-white/40">
               <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-              Sin cuenta ni datos personales. Este enlace deja de funcionar cuando te vas.
+              {conQRFijo
+                ? 'Sin cuenta ni datos personales. Solo los celulares conectados ven tu estadía, y dejan de verla cuando te vas.'
+                : 'Sin cuenta ni datos personales. Este enlace deja de funcionar cuando te vas.'}
             </p>
           </div>
         )}
@@ -826,6 +864,14 @@ const VistaCliente: React.FC<{ token: string }> = ({ token }) => {
               </li>
             ))}
           </ul>
+        </HojaInferior>
+      )}
+
+      {hoja === 'sumar' && invitacion && (
+        <HojaInferior titulo="Sumar otro celular" onCerrar={() => setHoja(null)}>
+          <p className="text-sm text-white/70">Que la otra persona escanee este código con la cámara de su celular.</p>
+          <img src={invitacion.qr} alt="Código para sumar otro celular" className="mx-auto mt-4 h-56 w-56 animate-pop-in rounded-xl bg-white p-2" />
+          <p className="mt-3 text-center text-xs text-white/50">Sirve hasta las {hora(invitacion.vence)}. Pueden ver la estadía hasta 3 celulares.</p>
         </HojaInferior>
       )}
 

@@ -592,6 +592,16 @@
     width: 100%;
     padding: 16px;
   }
+
+  /* Dentro del area, lo que es solo para la pantalla (por ejemplo, los botones). */
+  [data-print-area] [data-no-print] {
+    display: none;
+  }
+
+  /* Los QR fijos de las habitaciones: una tarjeta no se corta entre dos hojas. */
+  [data-qr-tarjeta] {
+    break-inside: avoid;
+  }
 }
 
 /* El chip de una categoría usa su color; en modo oscuro se aclara, porque un azul marino sobre fondo oscuro no se lee. */

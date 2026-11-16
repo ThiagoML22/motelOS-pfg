@@ -19,14 +19,19 @@ import {
   EstablecimientoAlta,
   EstablecimientoDatos,
   EstablecimientoResumen,
+  EntradaQR,
   EstadiaCliente,
   EscenarioGemelo,
+  InvitacionCelular,
+  QRHabitacion,
   FondoCambio,
   Guardia,
   HabitacionConDetalles,
   HabitacionConfiguracion,
   IntegridadComprobantes,
+  IntentoAcceso,
   LineaDeTiempoDatos,
+  PanelEquipos,
   MarcaPublica,
   MedioPago,
   MetricasCaja,
@@ -78,10 +83,11 @@ const http = axios.create({
   timeout: 15000,
 });
 
-let alVencerSesion: (() => void) | null = null;
+let alVencerSesion: ((motivo?: string) => void) | null = null;
 
-// La aplicación registra qué hacer cuando la API responde 401 (sesión vencida o cerrada en otro lado).
-export const onSesionVencida = (handler: () => void) => {
+// La aplicación registra qué hacer cuando la API responde 401 (sesión vencida o cerrada en otro lado). El motivo es el
+// que da el servidor, por ejemplo que la gerencia le quitó la autorización al equipo (migración 019).
+export const onSesionVencida = (handler: (motivo?: string) => void) => {
   alVencerSesion = handler;
 };
 
@@ -145,7 +151,8 @@ http.interceptors.response.use(
     if (axios.isAxiosError(error)) {
       marcarConexion(Boolean(error.response));
       if (error.response?.status === 401 && !url.startsWith('/auth/')) {
-        alVencerSesion?.();
+        const detalle = error.response.data?.detail;
+        alVencerSesion?.(typeof detalle === 'string' ? detalle : undefined);
       }
     }
     return Promise.reject(error);
@@ -216,6 +223,26 @@ export const api = {
   calificarEstadia: async (token: string, puntaje: number, problemas: number, resena?: string) =>
     (await http.post(`/cliente/${token}/calificacion`, { puntaje, problemas, resena: resena || null })).data,
 
+  // --- QR fijo de la habitación (migración 020): el primer celular que escanea se queda con la estadía ---
+  entrarConQR: async (qr: string): Promise<EntradaQR> =>
+    (await http.post(`/cliente/habitacion/${encodeURIComponent(qr)}/entrar`)).data,
+
+  avisarSinEstadia: async (qr: string) => (await http.post(`/cliente/habitacion/${encodeURIComponent(qr)}/aviso`)).data,
+
+  invitarCelular: async (token: string): Promise<InvitacionCelular> =>
+    (await http.post(`/cliente/${token}/invitacion`)).data,
+
+  sumarCelular: async (invitacion: string): Promise<EntradaQR> =>
+    (await http.post(`/cliente/sumar/${encodeURIComponent(invitacion)}`)).data,
+
+  desvincularCelulares: async (turno_id: string): Promise<{ cortados: number }> =>
+    (await http.post(`/turnos/${turno_id}/desvincular`)).data,
+
+  getQRHabitaciones: async (): Promise<QRHabitacion[]> => (await http.get('/configuracion/qr-habitaciones')).data,
+
+  regenerarQR: async (habitacion_id: number): Promise<QRHabitacion> =>
+    (await http.post(`/configuracion/habitaciones/${habitacion_id}/qr`)).data,
+
   // --- Lo que pide el cliente, en la ventanilla ---
   getTicket: async (turno_id: string): Promise<TicketCliente> => (await http.get(`/turnos/${turno_id}/ticket`)).data,
 
@@ -283,6 +310,22 @@ export const api = {
   // La gerencia elige si la ropa se cuenta por estado o todo junto.
   formaDeContarRopa: async (porEstado: boolean): Promise<{ por_estado: boolean }> =>
     (await http.patch('/operacion/ropa/forma', { por_estado: porEstado })).data,
+
+  // Equipos autorizados (migración 019): desde qué equipos entra el conserje. Solo la gerencia.
+  getEquipos: async (): Promise<PanelEquipos> => (await http.get('/equipos/')).data,
+
+  // Los intentos del último día, para la campanita.
+  getIntentosAcceso: async (): Promise<IntentoAcceso[]> => (await http.get('/equipos/intentos')).data,
+
+  ajustesEquipos: async (ajustes: { control?: boolean; redes?: string }): Promise<{ control: boolean; redes: string | null }> =>
+    (await http.patch('/equipos/ajustes', ajustes)).data,
+
+  autorizarEquipo: async (id: number, nombre: string) => (await http.post(`/equipos/${id}/autorizar`, { nombre })).data,
+
+  bloquearEquipo: async (id: number) => (await http.post(`/equipos/${id}/bloquear`)).data,
+
+  // La gerencia, en la PC de la ventanilla, la autoriza desde su sesión.
+  autorizarEsteEquipo: async (nombre: string) => (await http.post('/equipos/este-equipo', { nombre })).data,
 
   getArreglos: async (filtro: { habitacionId?: number; sinResolver?: boolean } = {}): Promise<Arreglo[]> =>
     (
