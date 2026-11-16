@@ -771,6 +771,10 @@ export interface RespuestaAsistente {
   acciones?: AccionAsistente[];
   // Una orden lista para confirmar: el asistente nunca la ejecuta por su cuenta.
   confirmacion?: ConfirmacionAsistente | null;
+  // Qué entendió Mot («Ingresos · del 1/11 al 7/11 · VIP») y la pregunta completa, con lo que tomó de las anteriores:
+  // la próxima («¿y la anterior?», «¿por qué?») se entiende sobre ella.
+  entendido?: string | null;
+  pregunta_resuelta?: string | null;
 }
 
 export interface ConfirmacionAsistente {
@@ -788,6 +792,7 @@ export interface ConfirmacionAsistente {
   texto?: string;
   importante?: boolean;
   motivo?: MotivoPerdida;
+  motivo_detalle?: string | null;
   categoria_id?: number | null;
   tarifa_id?: number | null;
 }
@@ -815,6 +820,11 @@ export interface EstadiaCliente {
   ahora?: string;
   estadia_base_min?: number;
   tarifa_base?: number;
+  // Lo que se cobra si se pasa de la estadía base, con la misma regla que el cobro.
+  tolerancia_min?: number;
+  fraccion_min?: number;
+  tarifa_fraccion?: number;
+  tope?: number | null;
   total_sobreturno?: number;
   total_consumos?: number;
   total?: number;

@@ -9,6 +9,7 @@ from sqlalchemy import select
 from app.models.articulo import Articulo
 from app.models.calificacion import Calificacion
 from app.models.pedido_cliente import PedidoCliente
+from app.models.tarifa import Tarifa
 from app.models.turno import Turno
 from app.services import inteligencia as ia
 from app.services import rotacion
@@ -305,6 +306,28 @@ async def test_mot_responde_con_los_datos_de_la_estadia(client, anonimo, cliente
     assert "llega hasta las" in respuestas["salida"] and "2 h" in respuestas["salida"]
     assert "$ 8.000" in respuestas["gasto"]
     assert all(r["pregunta"].startswith("¿") for r in datos["mot"])
+
+
+async def test_el_cliente_ve_lo_que_se_cobra_si_se_pasa_y_la_tolerancia(client, anonimo, db):
+    tarifa = (await db.execute(select(Tarifa).where(Tarifa.nombre == "Estandar"))).scalars().first()
+    tarifa.tolerancia_min, tarifa.tope = 10, 20000
+    await db.commit()
+    datos = (await anonimo.get(await _enlace(client, await _turno(client)))).json()
+    assert (datos["tolerancia_min"], datos["fraccion_min"], datos["tarifa_fraccion"], datos["tope"]) == (
+        10,
+        30,
+        2500,
+        20000,
+    )
+    salida = {r["id"]: r["respuesta"] for r in datos["mot"]}["salida"]
+    assert "10 min de tolerancia" in salida and "$ 2.500 cada 30 min o fracción" in salida
+    assert "nunca pasa de $ 20.000" in salida
+
+
+async def test_sin_tolerancia_mot_lo_dice(client, anonimo):
+    datos = (await anonimo.get(await _enlace(client, await _turno(client)))).json()
+    assert datos["tolerancia_min"] == 0 and datos["tope"] is None
+    assert "sin tolerancia" in {r["id"]: r["respuesta"] for r in datos["mot"]}["salida"]
 
 
 async def test_sin_wifi_cargado_mot_no_lo_ofrece(client, anonimo):

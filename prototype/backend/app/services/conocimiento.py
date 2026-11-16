@@ -570,7 +570,6 @@ SINONIMOS = {
     "password": "clave",
     "pass": "clave",
     "boleta": "comprobante",
-    "factura": "comprobante",
     "tarjeta": "posnet",
     "debito": "posnet",
     "credito": "posnet",
@@ -613,7 +612,18 @@ VOCABULARIO_BASE = set(
     # Palabras comunes del castellano que se parecen a términos del sistema («estado» no es «estadía»).
     "estado estados estoy estamos estaba ventana ventanilla sistema cosas todos todas misma porque cuando donde "
     "quien cuanto cuanta mucho mejor primero primera ultimo ultima siempre nunca tambien despues antes ayudar entrar "
-    "salir sesion turnos dentro afuera arriba abajo pantalla boton menu opcion opciones nuevo nueva".split()
+    "salir sesion turnos dentro afuera arriba abajo pantalla boton menu opcion opciones nuevo nueva "
+    # Palabras de una charla normal con Mot, para que el corrector no las cambie por otra («venimos» no es «vendimos»).
+    "venimos vamos viene vienen estamos estan andamos andan hicimos sacamos entraron vinieron estuvo estuvimos "
+    "tuvimos fueron hubo compara comparar comparame comparado comparacion contra ritmo proyeccion proyectar "
+    "recomendas recomendame recomendacion consejo consejos sugerencia sugerencias deberia conviene convendria mejorar "
+    "ganar vender facturar factura facturado facturacion recaudacion alertas alerta raro revisar mirar record peor "
+    "flojo fuerte calculas calcular esperamos gente parejas autos motos personas contentos conformes satisfechos "
+    "resenas resena robando faltante tarjeta lugar entrar limpiaramos tardara pongo agrego tuviera hubiera precios "
+    "precio subir bajar aumentar negocio dejaron anoche desde quincena principio terminar termino irme salgo "
+    "desocupa desocupan excedido excedida pasado vencida roto limpia lista tenes tengo novedad llego "
+    "anterior antepasada semana semanas mucho poco normal bueno malo alto bajo explicame cerrariamos "
+    "proximo siguiente".split()
 )
 
 
@@ -653,19 +663,34 @@ def vocabulario(entradas) -> set[str]:
     return _VOCABULARIO
 
 
+TERMINACION = re.compile(
+    r"(arle|erle|irle|arla|arlo|arles|arlas|arlos|aron|ieron|amos|emos|imos|ando|iendo|aban|aba|aria|arian|ado|ada"
+    r"|ados|adas|ido|ida|idos|idas|ar|er|ir)$"
+)
+
+
 def corregir(texto: str, entradas, propias: set[str] | None = None) -> str:
     """Aplica sinónimos y corrige palabras mal escritas con la más parecida del vocabulario del sistema. `propias` son
     palabras del motel (categorías, artículos, nombres) que no se tocan y también sirven de referencia."""
     palabras = texto.split()
     salida = []
     vocab = vocabulario(entradas) | (propias or set())
-    for palabra in palabras:
+    for i, palabra in enumerate(palabras):
+        # «La factura» es un comprobante; «qué categoría factura más» es plata.
+        if palabra == "factura" and i and palabras[i - 1] in ("la", "una", "mi", "esa", "esta", "de", "el"):
+            salida.append("comprobante")
+            continue
         if palabra in SINONIMOS:
             salida.append(SINONIMOS[palabra])
             continue
         if len(palabra) >= 6 and palabra.isalpha() and palabra not in vocab:
             # Un error de tipeo casi nunca cambia la primera letra ni el largo en más de dos.
             candidatas = [v for v in vocab if v[:1] == palabra[:1] and abs(len(v) - len(palabra)) <= 2]
+            # Una palabra conjugada («vendieron», «limpiar») se corrige solo hacia otra con el mismo comienzo y la
+            # misma terminación: «factruamos» → «facturamos» sí; «vendieron» → «vinieron», no.
+            final = TERMINACION.search(palabra)
+            if final:
+                candidatas = [v for v in candidatas if v.endswith(final.group(0)) and v[:3] == palabra[:3]]
             parecida = difflib.get_close_matches(palabra, candidatas, n=1, cutoff=0.8)
             if parecida:
                 salida.append(parecida[0])

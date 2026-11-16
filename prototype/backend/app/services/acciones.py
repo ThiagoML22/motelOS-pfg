@@ -12,13 +12,15 @@ pregunta. El cobro queda afuera a propósito: necesita el medio de pago y el mon
 import re
 from dataclasses import dataclass, field
 
-from app.models.cliente_perdido import ESPERA, PRECIO, SIN_LUGAR
+from app.models.cliente_perdido import ESPERA, OTRO, PRECIO, SIN_LUGAR
+from app.services import moderacion
 from app.services.asistente import normalizar
 
 CANTIDADES = {"un": 1, "una": 1, "uno": 1, "dos": 2, "tres": 3, "cuatro": 4, "cinco": 5}
 ORDEN = re.compile(
     r"^(?:(?:por favor|porfa|dale|che|bueno)\s+)*"
-    r"(?P<verbo>pasa|pasame|pone|poneme|deja|dejame|manda|libera|liberame|habilita|abri|abrime|ocupa|ocupame"
+    r"(?P<verbo>pasa|pasame|pasala|pasalo|pone|poneme|ponele|ponela|ponelo|deja|dejame|manda|mandame|mandala|mandale"
+    r"|libera|liberame|habilita|abri|abrime|ocupa|ocupame"
     r"|carga|cargale|cargame|agrega|agregale|agregame|suma|sumale|sumame|anota|anotame|anotale|registra|escribi"
     r"|cobra|cobrale|cerra|cerrale|traslada|trasladame|muda|mudame|cambia|cambiame)\b(?P<resto>.*)$"
 )
@@ -31,6 +33,15 @@ DESTINOS = (
 TRASLADO = re.compile(
     r"(?:la |el |habitacion |hab |n |numero )*(?P<desde>\d{1,4})\b.*?\b(?:a|para)\s+"
     r"(?:la |el |habitacion |hab |n |numero )*(?P<hacia>\d{1,4})\b"
+)
+# Lo que se cuenta en lugar de ordenar: «la 4 ya está limpia», «se fue un cliente porque no había lugar».
+YA_LIMPIA = re.compile(
+    r"^(?:ya )?(?:la |el )?(?:habitacion )?(?P<numero>\d{1,4}) (?:ya )?(?:esta|quedo|queda|estan) (?:ya )?"
+    r"(?:limpi[ao]|list[ao]|libre|disponible|repasad[ao])\b"
+)
+SE_FUE = re.compile(
+    r"^se (?:me |nos )?(?:fue|fueron|va|acaba de ir) (?:un |una |el |la )?"
+    r"(?:cliente|pareja|auto|moto|senor|senora|chico|chica|tipo)"
 )
 PATENTE = re.compile(r"\b([a-z]{2} ?\d{3} ?[a-z]{2}|[a-z]{3} ?\d{3})\b")
 
@@ -90,6 +101,28 @@ def _estado(texto: str, ventanilla) -> Propuesta | None:
         f"Listo: la {numero} quedó {etiqueta}.",
         habitacion_id=habitacion.id,
         estado=estado,
+    )
+
+
+def _a_libre(numero: int, ventanilla) -> Propuesta:
+    """«La 4 ya está limpia»: se propone dejarla disponible."""
+    habitacion = _buscar_habitacion(ventanilla, numero)
+    if habitacion is None:
+        return Propuesta(f"No encuentro la habitación {numero}.", "accion:rechazada")
+    if habitacion.estado == "Libre":
+        return Propuesta(f"La {numero} ya está disponible.", "accion:rechazada")
+    if habitacion.estado == "Ocupada":
+        return Propuesta(
+            f"La {numero} figura ocupada: primero hay que cobrar el turno.",
+            "accion:rechazada",
+            acciones=_abrir(habitacion.id, numero),
+        )
+    return _a_confirmar(
+        "estado",
+        f"Dejar la {numero} disponible",
+        f"Listo: la {numero} quedó disponible.",
+        habitacion_id=habitacion.id,
+        estado="Libre",
     )
 
 
@@ -247,33 +280,53 @@ def _novedad(pregunta: str, texto: str, ventanilla) -> Propuesta | None:
     )
 
 
-def _cliente_perdido(texto: str, ventanilla, tiene_guardia: bool) -> Propuesta | None:
-    if not re.search(r"\bcliente\b", texto) or not re.search(r"perdid|se fue|se va\b|se fueron", texto):
+def _cliente_perdido(texto: str, ventanilla, tiene_guardia: bool, contado: bool = False) -> Propuesta | None:
+    if not contado and (
+        not re.search(r"\bcliente\b", texto) or not re.search(r"perdid|se fue|se va\b|se fueron", texto)
+    ):
         return None
     if not tiene_guardia:
         return Propuesta("Para registrarlo hace falta tener la guardia abierta.", "accion:rechazada")
-    motivo = SIN_LUGAR
+    motivo, detalle = SIN_LUGAR, None
     if re.search(r"esperar|espera\b", texto):
         motivo = ESPERA
     elif re.search(r"\bcaro\b|precio", texto):
         motivo = PRECIO
+    elif re.search(r"(no (habia|hay|tenia|tenemos|teniamos) lugar|sin lugar|lleno|completo)", texto):
+        motivo = SIN_LUGAR
+    elif m := re.search(r"\b(?:porque|por que|ya que|pq)\b\s+(.+)$", texto):
+        # Otro motivo: lo que contó, en pocas palabras y con el mismo filtro que la reseña del cliente.
+        escrito = moderacion.limpiar(m.group(1))[:80]
+        if moderacion.revisar(escrito):
+            return Propuesta(
+                "Contalo de otra manera, sin groserías ni datos de la persona, y lo registro.", "accion:rechazada"
+            )
+        motivo, detalle = OTRO, escrito
     categoria = ventanilla.categoria_mencionada(texto)
     etiquetas = {SIN_LUGAR: "no había lugar", ESPERA: "no quiso esperar", PRECIO: "le pareció caro"}
     busco = f", buscaba {categoria.nombre}" if categoria else ""
     return _a_confirmar(
         "cliente_perdido",
-        f"Registrar un cliente que se fue ({etiquetas[motivo]}{busco})",
+        f"Registrar un cliente que se fue ({etiquetas.get(motivo, detalle)}{busco})",
         "Listo: quedó registrado.",
         motivo=motivo,
+        motivo_detalle=detalle,
         categoria_id=categoria.id if categoria else None,
     )
 
 
 def interpretar(pregunta: str, texto: str, ventanilla, tiene_guardia: bool) -> Propuesta | None:
     """La propuesta de una orden, o None si la frase no es una orden que el asistente sepa cumplir."""
+    # «Abrí un turno por error, ¿cómo lo borro?», «se fue un cliente, ¿qué hago?»: empiezan igual que una orden o un
+    # aviso, pero piden ayuda.
+    if re.search(r"\b(como|por que|por error|se puede|que hago|que tengo que|que hay que)\b|equivoc", texto):
+        return None
+    if (m := YA_LIMPIA.match(texto)) is not None:
+        return _a_libre(int(m.group("numero")), ventanilla)
+    if SE_FUE.match(texto) is not None:
+        return _cliente_perdido(texto, ventanilla, tiene_guardia, contado=True)
     orden = ORDEN.match(texto)
-    # «Abrí un turno por error, ¿cómo lo borro?»: empieza igual que una orden, pero cuenta algo que ya pasó.
-    if orden is None or re.search(r"\b(como|por que|por error|se puede)\b|equivoc", texto):
+    if orden is None:
         return None
     verbo, resto = orden.group("verbo"), orden.group("resto")
     if verbo.startswith(("cobra", "cerra")):
@@ -292,6 +345,13 @@ def interpretar(pregunta: str, texto: str, ventanilla, tiene_guardia: bool) -> P
             return traslado
     if verbo.startswith(("carga", "agrega", "suma")):
         return _consumo(resto, ventanilla, tiene_guardia)
+    # «Ponele una cerveza a la 1» es un consumo; «poné la 3 en mantenimiento», un cambio de estado.
+    if verbo.startswith("pone"):
+        pedido = re.match(r"\s*(?:le |me )?(?:\d{1,2}|una?|uno|dos|tres|cuatro|cinco)?\s*(.+?)\s+(?:a|en|para) ", resto)
+        nombra_articulo = pedido is not None and _articulo(pedido.group(1), ventanilla) is not None
+        con_cantidad = re.match(r"\s*(?:le |me )?(?:\d{1,2}|una?|uno|dos|tres|cuatro|cinco)\s+\w", resto) is not None
+        if (nombra_articulo or con_cantidad) and pedido and not re.search(r"\b(la|el|habitacion)\b", pedido.group(1)):
+            return _consumo(resto, ventanilla, tiene_guardia)
     return (
         _novedad(pregunta, texto, ventanilla)
         or _cliente_perdido(texto, ventanilla, tiene_guardia)

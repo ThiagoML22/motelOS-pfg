@@ -27,6 +27,7 @@ import { EstadiaCliente, PedidoEstadia } from '../types';
 import { api, getErrorMessage } from '../services/api';
 import { useDialog } from '../hooks/useDialog';
 import { formatDuration, formatMoney, formatRoomNumber } from '../utils/format';
+import { formatMinutos } from '../utils/turno';
 import { aplicarMarca } from '../utils/marca';
 import Mot, { EstadoMot } from './Mot';
 
@@ -73,8 +74,8 @@ const Tarjeta: React.FC<{ titulo?: string; children: React.ReactNode; retraso?: 
   </section>
 );
 
-// El tiempo de la estadía base como un anillo que se completa; pasada la base, cambia de color.
-const Anillo: React.FC<{ parte: number; excedido: boolean; children: React.ReactNode }> = ({ parte, excedido, children }) => {
+// El tiempo de la estadía base como un anillo que se completa; en la tolerancia se pone ámbar y pasada, rojo.
+const Anillo: React.FC<{ parte: number; excedido: boolean; tolerancia?: boolean; children: React.ReactNode }> = ({ parte, excedido, tolerancia = false, children }) => {
   const radio = 96;
   const largo = 2 * Math.PI * radio;
   return (
@@ -86,7 +87,7 @@ const Anillo: React.FC<{ parte: number; excedido: boolean; children: React.React
           cy="110"
           r={radio}
           fill="none"
-          stroke={excedido ? '#fb7185' : 'rgb(var(--accent-claro, 147 197 253))'}
+          stroke={excedido ? '#fb7185' : tolerancia ? '#fcd34d' : 'rgb(var(--accent-claro, 147 197 253))'}
           strokeWidth="10"
           strokeLinecap="round"
           strokeDasharray={largo}
@@ -456,8 +457,15 @@ const VistaCliente: React.FC<{ token: string }> = ({ token }) => {
   const inicio = new Date(datos.hora_inicio as string).getTime();
   const transcurrido = ahora + desfase.current - inicio;
   const baseMs = (datos.estadia_base_min ?? 120) * 60000;
-  const excedido = transcurrido > baseMs;
+  const toleranciaMin = datos.tolerancia_min ?? 0;
+  const finToleranciaMs = baseMs + toleranciaMin * 60000;
+  // Pasada la base empieza la tolerancia (si la hay); recién pasada la tolerancia se cobra tiempo extra.
+  const excedido = transcurrido > finToleranciaMs;
+  const enTolerancia = !excedido && transcurrido > baseMs;
   const restanMin = Math.ceil((baseMs - transcurrido) / 60000);
+  const restaToleranciaMin = Math.max(Math.ceil((finToleranciaMs - transcurrido) / 60000), 1);
+  const finBase = new Date(inicio + baseMs).toISOString();
+  const finTolerancia = new Date(inicio + finToleranciaMs).toISOString();
   const pedidos = datos.pedidos ?? [];
   const delMinibar = agrupar(pedidos.filter((p) => p.tipo === 'ARTICULO'));
   const avisos = pedidos.filter((p) => p.tipo !== 'ARTICULO');
@@ -478,20 +486,26 @@ const VistaCliente: React.FC<{ token: string }> = ({ token }) => {
         {pestana === 'estadia' && (
           <div key="estadia" className="animate-fade-in space-y-3">
             <div className="animate-pop-in py-1">
-              <Anillo parte={transcurrido / baseMs} excedido={excedido}>
+              <Anillo parte={transcurrido / baseMs} excedido={excedido} tolerancia={enTolerancia}>
                 <p className="font-mono text-4xl font-semibold tabular-nums">{formatDuration(transcurrido)}</p>
-                <p className={`mt-1 flex items-center justify-center gap-1 text-sm ${excedido ? 'text-rose-300' : 'text-white/60'}`}>
+                <p className={`mt-1 flex items-center justify-center gap-1 text-sm ${excedido ? 'text-rose-300' : enTolerancia ? 'text-amber-200' : 'text-white/60'}`}>
                   <Clock className="h-3.5 w-3.5" aria-hidden="true" />
-                  {excedido ? 'Pasaste la estadía base' : `Quedan ${restanMin} min de estadía`}
+                  {excedido ? 'Estás en tiempo extra' : enTolerancia ? `Tolerancia: ${restaToleranciaMin} min sin cargo` : `Quedan ${restanMin} min de estadía`}
                 </p>
               </Anillo>
             </div>
 
-            {!pidioLaCuenta && !avisoDeTiempo && (excedido || restanMin <= AVISO_FINAL_MIN) && (
+            {!pidioLaCuenta && !avisoDeTiempo && (excedido || enTolerancia || restanMin <= AVISO_FINAL_MIN) && (
               <button type="button" onClick={() => setHoja('tiempo')} className="press flex w-full animate-pop-in items-center gap-3 rounded-2xl bg-amber-300/15 px-4 py-3 text-left">
                 <Timer className="h-5 w-5 shrink-0 text-amber-200" aria-hidden="true" />
                 <span className="min-w-0 flex-1 text-sm">
-                  <span className="block font-medium text-amber-100">{excedido ? 'Ya estás en tiempo extra' : `Te quedan ${restanMin} min`}</span>
+                  <span className="block font-medium text-amber-100">
+                    {excedido
+                      ? 'Ya estás en tiempo extra'
+                      : enTolerancia
+                        ? `Estás en la tolerancia: hasta las ${hora(finTolerancia)} no se cobra extra`
+                        : `Te quedan ${restanMin} min`}
+                  </span>
                   <span className="text-amber-100/70">Mirá cuánto sale quedarte más</span>
                 </span>
               </button>
@@ -510,7 +524,45 @@ const VistaCliente: React.FC<{ token: string }> = ({ token }) => {
 
             {avisoDeTiempo && <p className="text-center text-xs text-white/60">{avisoDeTiempo.descripcion.replace('Se queda', 'Avisaste que te quedás')}.</p>}
 
-            <Tarjeta titulo="Tu cuenta">
+            <Tarjeta titulo="Tu tarifa">
+              <dl className="space-y-1.5 text-sm">
+                <div className="flex justify-between gap-3">
+                  <dt className="text-white/70">
+                    Estadía de {formatMinutos(datos.estadia_base_min ?? 120)}
+                    {datos.franja && <span className="text-white/40"> · {datos.franja}</span>}
+                  </dt>
+                  <dd className="tabular-nums">{formatMoney(datos.tarifa_base ?? 0)}</dd>
+                </div>
+                {datos.tarifa_fraccion != null && datos.fraccion_min != null && (
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-white/70">Si te pasás</dt>
+                    <dd className="text-right tabular-nums">
+                      + {formatMoney(datos.tarifa_fraccion)} <span className="text-white/50">cada {formatMinutos(datos.fraccion_min)}</span>
+                    </dd>
+                  </div>
+                )}
+                <div className="flex justify-between gap-3">
+                  <dt className="text-white/70">Tolerancia</dt>
+                  <dd className="text-right">{toleranciaMin > 0 ? `${formatMinutos(toleranciaMin)} sin cargo` : 'Sin tolerancia'}</dd>
+                </div>
+                {datos.tope != null && (
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-white/70">Nunca pasa de</dt>
+                    <dd className="tabular-nums">{formatMoney(datos.tope)}</dd>
+                  </div>
+                )}
+              </dl>
+              <p className="mt-2 border-t border-white/10 pt-2 text-xs leading-relaxed text-white/55">
+                {toleranciaMin > 0 && excedido
+                  ? `La tolerancia terminó a las ${hora(finTolerancia)}: el tiempo extra se cuenta desde las ${hora(finBase)}`
+                  : toleranciaMin > 0
+                    ? `Si salís antes de las ${hora(finTolerancia)}, no se cobra extra. Pasada la tolerancia, el tiempo extra se cuenta desde las ${hora(finBase)}`
+                    : `Desde las ${hora(finBase)} se suma tiempo extra`}
+                {datos.fraccion_min != null && `, por cada ${formatMinutos(datos.fraccion_min)} o fracción`}.
+              </p>
+            </Tarjeta>
+
+            <Tarjeta titulo="Tu cuenta" retraso={30}>
               <dl className="space-y-1 text-sm">
                 <div className="flex justify-between gap-3">
                   <dt className="text-white/70">

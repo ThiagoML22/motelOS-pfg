@@ -116,7 +116,7 @@ const ejecutarOrden = async (c: ConfirmacionAsistente) => {
   if (c.tipo === 'estado') await api.updateHabitacionEstado(c.habitacion_id as number, c.estado as string);
   else if (c.tipo === 'consumo') await api.addConsumo(c.turno_id as string, c.articulo_id as number, c.cantidad as number);
   else if (c.tipo === 'novedad') await api.crearNovedad({ texto: c.texto as string, importante: Boolean(c.importante), habitacion_id: c.habitacion_id ?? null });
-  else if (c.tipo === 'cliente_perdido') await api.registrarClientePerdido(c.motivo ?? 'SIN_LUGAR', c.categoria_id ?? null);
+  else if (c.tipo === 'cliente_perdido') await api.registrarClientePerdido(c.motivo ?? 'SIN_LUGAR', c.categoria_id ?? null, c.motivo_detalle ?? undefined);
   else if (c.tipo === 'traslado')
     await api.trasladarTurno(c.turno_id as string, { habitacion_id: c.habitacion_id as number, motivo: c.motivo_traslado ?? 'OTRO' });
   else
@@ -224,7 +224,7 @@ export const AsistenteProvider: React.FC<{ esGerencia: boolean; children: React.
     setPensando(true);
     try {
       const respuesta = await api.preguntar(limpia, ultima.current?.pregunta, ultima.current?.intencion, pantalla.current);
-      ultima.current = { pregunta: limpia, intencion: respuesta.intencion };
+      ultima.current = { pregunta: respuesta.pregunta_resuelta || limpia, intencion: respuesta.intencion };
       setMensajes((m) => {
         const confirmacion = respuesta.confirmacion;
         if (confirmacion) ordenPendiente.current = { indice: m.length, confirmacion };
@@ -426,9 +426,13 @@ export const ChatAsistente: React.FC<ChatAsistenteProps> = ({ className = 'h-[mi
                   </table>
                 </div>
               )}
-              {(m.respuesta?.periodo || m.respuesta?.detalle) && (
+              {(m.respuesta?.entendido || m.respuesta?.periodo || m.respuesta?.detalle) && (
                 <p className="mt-1.5 text-[11px] text-muted">
-                  {m.respuesta.periodo && <>Período: {m.respuesta.periodo}. </>}
+                  {m.respuesta.entendido ? (
+                    <>Entendí: {m.respuesta.entendido}. </>
+                  ) : (
+                    m.respuesta.periodo && <>Período: {m.respuesta.periodo}. </>
+                  )}
                   {m.respuesta.detalle}
                 </p>
               )}
