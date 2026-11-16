@@ -3,15 +3,17 @@ import os
 # Las pruebas usan un costo de argon2 bajo para no demorar: se fija antes de importar la aplicación.
 os.environ.setdefault("ARGON2_TIME_COST", "1")
 os.environ.setdefault("ARGON2_MEMORY_KIB", "1024")
+# Los tres valores de abajo se imponen (no setdefault): las pruebas dependen de ellos, y dentro del contenedor del
+# backend el compose ya define FONDO_INICIAL_CAJA=25000 y EXIGIR_RECUENTO_ROPA=True (manual de despliegue, sección 9).
 # Las pruebas de caja verifican la aritmética del arqueo sin fondo de cambio; el fondo aprobado ($25.000) se
 # prueba aparte en test_caja (test_el_fondo_de_cambio_integra_el_efectivo_del_sistema).
-os.environ.setdefault("FONDO_INICIAL_CAJA", "0")
+os.environ["FONDO_INICIAL_CAJA"] = "0"
 # Las pruebas de caja abren y cierran guardias sin el recuento de ropa; el que lo exige se prueba en test_operacion.
-os.environ.setdefault("EXIGIR_RECUENTO_ROPA", "false")
+os.environ["EXIGIR_RECUENTO_ROPA"] = "false"
 # Multiinquilino: el inicio de sesión sin código entra al establecimiento de las pruebas.
 ESTABLECIMIENTO_PRUEBA = "prueba"
 ESTABLECIMIENTO_OTRO = "otro"
-os.environ.setdefault("ESTABLECIMIENTO_PREDETERMINADO", ESTABLECIMIENTO_PRUEBA)
+os.environ["ESTABLECIMIENTO_PREDETERMINADO"] = ESTABLECIMIENTO_PRUEBA
 
 import pytest_asyncio  # noqa: E402
 from httpx import ASGITransport, AsyncClient  # noqa: E402

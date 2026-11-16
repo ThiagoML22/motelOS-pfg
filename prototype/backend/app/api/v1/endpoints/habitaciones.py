@@ -32,11 +32,18 @@ async def get_habitaciones(db: AsyncSession = Depends(get_db)):
     await cargar_estadia_base(db, lista_activos)
     turnos_activos = {t.habitacion_id: t for t in lista_activos}
     arreglos_abiertos = await arreglos.cuantos_sin_resolver(db)
+    limpiezas = await rotacion.limpiezas_en_curso(db, list(habitaciones))
 
     response_list = []
     for h in habitaciones:
         h_dict = h.__dict__.copy()
         h_dict["arreglos_abiertos"] = arreglos_abiertos.get(h.id, 0)
+        # RF-12: minutos En Limpieza calculados acá, con el reloj del servidor, y la marca de demora.
+        if h.id in limpiezas:
+            limpieza = limpiezas[h.id]
+            h_dict["en_limpieza_desde"] = limpieza.desde
+            h_dict["minutos_en_limpieza"] = limpieza.minutos
+            h_dict["demora_limpieza"] = limpieza.demora
         if h.id in turnos_activos:
             h_dict["turno_activo"] = turnos_activos[h.id]
         response_list.append(HabitacionResponse.model_validate(h_dict))
