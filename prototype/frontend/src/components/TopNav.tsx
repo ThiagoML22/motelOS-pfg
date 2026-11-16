@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { Sesion } from '../types';
 import { parseUtc } from '../utils/format';
+import Logo from './ui/Logo';
 import ThemeToggle from './ui/ThemeToggle';
 
 export type View =
@@ -94,7 +95,7 @@ const TopNav: React.FC<TopNavProps> = ({
       {/* Fila 1: el motel y las herramientas */}
       <div className="mx-auto flex h-14 max-w-[1600px] items-center gap-4 px-4 sm:px-6">
         <div className="flex min-w-0 items-center gap-3">
-          <img src="/logo.png" alt="MotelOS" className="logo h-7 shrink-0 object-contain" />
+          <Logo className="h-5 sm:h-[1.375rem]" />
           {establecimiento && (
             <>
               <span className="hidden h-6 w-px bg-line sm:block" aria-hidden="true" />
@@ -140,8 +141,8 @@ const TopNav: React.FC<TopNavProps> = ({
         </div>
       </div>
 
-      {/* Fila 2: secciones y guardia en curso */}
-      <div className="mx-auto flex h-11 max-w-[1600px] items-stretch gap-4 px-4 sm:px-6">
+      {/* Fila 2: secciones y guardia en curso. En el celular las secciones van en la barra de abajo (NavInferior). */}
+      <div className="mx-auto hidden h-11 max-w-[1600px] items-stretch gap-4 px-4 sm:flex sm:px-6">
         <nav aria-label="Principal" className="sin-barra -mb-px flex min-w-0 flex-1 items-stretch gap-1 overflow-x-auto">
           {items.map(({ view, label, icon: Icon }) => {
             const active = activeView === view;
@@ -229,7 +230,7 @@ const MenuUsuario: React.FC<MenuUsuarioProps> = ({ sesion, activeView, setActive
       {abierto && (
         <div
           role="menu"
-          className="absolute right-0 top-full z-40 mt-2 w-72 animate-pop-in overflow-hidden rounded-lg border border-line bg-surface shadow-panel"
+          className="fixed inset-x-2 top-[3.75rem] z-40 animate-pop-in overflow-hidden rounded-lg border border-line bg-surface shadow-panel sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-2 sm:w-72"
         >
           <div className="flex items-center gap-3 border-b border-line px-4 py-3">
             <Avatar nombre={operador.nombre_visible} />

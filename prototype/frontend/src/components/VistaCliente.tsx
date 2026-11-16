@@ -128,10 +128,16 @@ const HojaInferior: React.FC<{ titulo: string; onCerrar: () => void; children: R
   );
 };
 
-// De 1 a 5 y, si no estuvo bien, qué falló. Sin texto libre y sin nada que diga quién es.
+const PALABRAS_RESENA = 6;
+const LARGO_RESENA = 60;
+const palabrasDe = (texto: string): number => (texto.trim() ? texto.trim().split(/\s+/).length : 0);
+
+// De 1 a 5; si no fue perfecto, qué falló; y si quiere, una reseña de hasta seis palabras (el servidor la pasa por el
+// filtro de groserías). Nada que diga quién es.
 const Calificar: React.FC<{ token: string; problemas: { valor: number; etiqueta: string }[]; onListo: () => void }> = ({ token, problemas, onListo }) => {
   const [puntaje, setPuntaje] = useState(0);
   const [marcados, setMarcados] = useState(0);
+  const [resena, setResena] = useState('');
   const [enviando, setEnviando] = useState(false);
   const [hecho, setHecho] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -140,7 +146,7 @@ const Calificar: React.FC<{ token: string; problemas: { valor: number; etiqueta:
     setEnviando(true);
     setError(null);
     try {
-      await api.calificarEstadia(token, puntaje, puntaje <= 3 ? marcados : 0);
+      await api.calificarEstadia(token, puntaje, puntaje <= 4 ? marcados : 0, resena.trim() || undefined);
       setHecho(true);
       onListo();
     } catch (err) {
@@ -149,6 +155,9 @@ const Calificar: React.FC<{ token: string; problemas: { valor: number; etiqueta:
       setEnviando(false);
     }
   };
+
+  const palabras = palabrasDe(resena);
+  const largaDeMas = palabras > PALABRAS_RESENA;
 
   if (hecho) {
     return (
@@ -176,9 +185,9 @@ const Calificar: React.FC<{ token: string; problemas: { valor: number; etiqueta:
           </button>
         ))}
       </div>
-      {puntaje > 0 && puntaje <= 3 && (
+      {puntaje > 0 && puntaje <= 4 && (
         <div className="mt-3 animate-fade-in">
-          <p className="mb-1.5 text-center text-xs text-white/60">¿Qué falló?</p>
+          <p className="mb-1.5 text-center text-xs text-white/60">{puntaje === 4 ? '¿Qué podríamos mejorar?' : '¿Qué falló?'}</p>
           <div className="flex flex-wrap justify-center gap-1.5">
             {problemas.map((p) => {
               const activo = Boolean(marcados & p.valor);
@@ -197,13 +206,51 @@ const Calificar: React.FC<{ token: string; problemas: { valor: number; etiqueta:
           </div>
         </div>
       )}
+      {puntaje > 0 && (
+        <div className="mt-3 animate-fade-in">
+          <label htmlFor="resena" className="mb-1.5 block text-center text-xs text-white/60">
+            Tu reseña, en pocas palabras (opcional)
+          </label>
+          <input
+            id="resena"
+            autoComplete="off"
+            enterKeyHint="send"
+            maxLength={LARGO_RESENA}
+            placeholder="Ej.: Todo impecable, volveremos"
+            aria-describedby="resena-ayuda"
+            aria-invalid={largaDeMas}
+            value={resena}
+            onChange={(e) => {
+              setResena(e.target.value.replace(/\s{2,}/g, ' '));
+              setError(null);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !largaDeMas && !enviando) void enviar();
+            }}
+            className={`w-full rounded-xl border bg-white/10 px-3 py-2.5 text-sm text-white placeholder:text-white/35 focus:outline-none ${
+              largaDeMas ? 'border-rose-300' : 'border-white/15 focus:border-white/40'
+            }`}
+          />
+          <p id="resena-ayuda" className="mt-1 flex justify-between gap-2 text-[11px]">
+            <span className="text-white/40">Sin insultos ni datos de nadie.</span>
+            <span className={`tabular-nums ${largaDeMas ? 'font-medium text-rose-300' : 'text-white/50'}`}>
+              {palabras}/{PALABRAS_RESENA} palabras
+            </span>
+          </p>
+        </div>
+      )}
       {error && <p className="mt-2 text-center text-xs text-rose-300">{error}</p>}
       {puntaje > 0 && (
-        <button type="button" disabled={enviando} onClick={() => void enviar()} className="press mt-3 w-full animate-fade-in rounded-xl bg-white py-3 text-sm font-semibold text-slate-900 disabled:opacity-60">
-          {enviando ? 'Enviando…' : 'Enviar'}
+        <button
+          type="button"
+          disabled={enviando || largaDeMas}
+          onClick={() => void enviar()}
+          className="press mt-3 w-full animate-fade-in rounded-xl bg-white py-3 text-sm font-semibold text-slate-900 disabled:opacity-60"
+        >
+          {enviando ? 'Enviando…' : largaDeMas ? `Hasta ${PALABRAS_RESENA} palabras` : 'Enviar'}
         </button>
       )}
-      <p className="mt-2 text-center text-[11px] text-white/40">Es anónimo: nadie sabe quién lo marcó.</p>
+      <p className="mt-2 text-center text-[11px] text-white/40">Es anónimo: nadie sabe quién lo escribió.</p>
     </div>
   );
 };

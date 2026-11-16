@@ -365,7 +365,7 @@ const OperacionView: React.FC = () => {
         <p className="mt-0.5 text-sm text-muted">Arreglos, ropa, cambios de guardia y traslados de turno.</p>
       </div>
 
-      <div role="tablist" aria-label="Secciones de la operación" className="mb-5 flex flex-wrap gap-1.5">
+      <div role="tablist" aria-label="Secciones de la operación" className="sin-barra -mx-4 mb-5 flex gap-1.5 overflow-x-auto px-4 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0">
         {SECCIONES.map(({ id, label, icon: Icon }) => (
           <button
             key={id}
@@ -373,7 +373,7 @@ const OperacionView: React.FC = () => {
             role="tab"
             aria-selected={seccion === id}
             onClick={() => setSeccion(id)}
-            className={`press hit flex h-11 items-center gap-2 rounded-md border px-4 text-sm ${
+            className={`press hit flex h-11 shrink-0 items-center gap-2 whitespace-nowrap rounded-md border px-4 text-sm ${
               seccion === id
                 ? 'border-accent bg-accent-soft font-medium text-accent'
                 : 'border-line-strong bg-surface text-muted hover:text-ink'

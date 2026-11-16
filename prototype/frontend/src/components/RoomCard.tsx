@@ -79,9 +79,9 @@ const RoomCard: React.FC<RoomCardProps> = ({ room, categoria, now, onClick, onAd
         }
       }}
       aria-label={`${formatRoomNumber(room.numero)}, ${meta.label}`}
-      className={`group relative flex h-full min-h-[9.5rem] cursor-pointer flex-col rounded-lg border border-l-4 border-line bg-surface p-4 transition duration-200 ease-out hover:-translate-y-0.5 hover:border-b-line-strong hover:border-r-line-strong hover:border-t-line-strong hover:shadow-lift active:translate-y-0 active:shadow-none ${barClass} ${destello ? 'animate-destello' : ''}`}
+      className={`group relative flex h-full min-h-[8.5rem] cursor-pointer flex-col rounded-lg border border-l-4 border-line bg-surface p-3 transition sm:min-h-[9.5rem] sm:p-4 duration-200 ease-out hover:-translate-y-0.5 hover:border-b-line-strong hover:border-r-line-strong hover:border-t-line-strong hover:shadow-lift active:translate-y-0 active:shadow-none ${barClass} ${destello ? 'animate-destello' : ''}`}
     >
-      <div className="flex items-start justify-between gap-2">
+      <div className="flex items-start justify-between gap-x-2 gap-y-0.5 max-sm:flex-col">
         <h3 className="flex items-center gap-1.5 text-base font-semibold text-ink">
           {formatRoomNumber(room.numero)}
           {(room.arreglos_abiertos ?? 0) > 0 && (
@@ -91,7 +91,7 @@ const RoomCard: React.FC<RoomCardProps> = ({ room, categoria, now, onClick, onAd
             </span>
           )}
         </h3>
-        <span className={`flex items-center gap-1.5 text-xs font-medium ${meta.text}`}>
+        <span className={`flex items-center gap-1.5 text-[11px] font-medium sm:text-xs ${meta.text}`}>
           <span className={`h-2 w-2 rounded-full ${meta.dot}`} aria-hidden="true" />
           {meta.label}
         </span>
@@ -156,7 +156,8 @@ const RoomCard: React.FC<RoomCardProps> = ({ room, categoria, now, onClick, onAd
               onAddConsumo(room);
             }}
           >
-            Agregar producto
+            <span className="sm:hidden">+ Producto</span>
+            <span className="max-sm:hidden">Agregar producto</span>
           </Button>
         ) : (
           <span />

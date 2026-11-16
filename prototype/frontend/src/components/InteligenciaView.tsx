@@ -4,6 +4,8 @@ import {
   AlertTriangle,
   BedDouble,
   CalendarDays,
+  ChevronRight,
+  FlaskConical,
   Info,
   Lightbulb,
   Package,
@@ -83,12 +85,97 @@ const Tarjeta: React.FC<{ titulo: string; icono?: React.ElementType; extra?: Rea
   </section>
 );
 
+// Cada análisis vive en su sección. El resumen junta lo importante y lleva a cada una.
+type Seccion = 'resumen' | 'demanda' | 'ingresos' | 'tarifas' | 'habitaciones' | 'minibar' | 'simulador';
+
+const SECCIONES: { id: Seccion; label: string; icon: React.ElementType; que_mira: string }[] = [
+  {
+    id: 'resumen',
+    label: 'Resumen',
+    icon: Sparkles,
+    que_mira: 'Lo más importante de hoy, los números de la semana y lo que hay que revisar en cada sección.',
+  },
+  {
+    id: 'demanda',
+    label: 'Demanda',
+    icon: CalendarDays,
+    que_mira:
+      'Cuántos clientes se esperan, en qué días y horas llegan, y los que se fueron sin quedarse. Sale de las llegadas de las últimas 8 semanas.',
+  },
+  {
+    id: 'ingresos',
+    label: 'Ingresos y caja',
+    icon: Wallet,
+    que_mira: 'Lo que se cobró cada día, cómo pagan los clientes y lo que llama la atención en los arqueos. Solo guardias ya arqueadas.',
+  },
+  {
+    id: 'tarifas',
+    label: 'Tarifas',
+    icon: Lightbulb,
+    que_mira:
+      'Una propuesta por categoría según su ocupación en las últimas 4 semanas, con el efecto estimado antes de aplicarla.',
+  },
+  {
+    id: 'habitaciones',
+    label: 'Habitaciones',
+    icon: BedDouble,
+    que_mira: 'Cuánto tarda la limpieza, qué dicen los clientes de cada habitación, las que se usan poco y lo que se repite en la operación.',
+  },
+  {
+    id: 'minibar',
+    label: 'Minibar',
+    icon: Package,
+    que_mira: 'Lo que más se vende y qué conviene pedir para cubrir dos semanas, con el ritmo de venta real.',
+  },
+  {
+    id: 'simulador',
+    label: 'Simulador',
+    icon: FlaskConical,
+    que_mira: 'Probá un cambio de limpieza, habitaciones o precio sobre lo que pasó de verdad, sin tocar nada.',
+  },
+];
+
+// A qué sección pertenece cada alerta del servidor.
+const SECCION_DE_ALERTA: Record<string, Seccion> = {
+  demanda: 'demanda',
+  caja: 'ingresos',
+  turnos: 'ingresos',
+  habitacion: 'habitaciones',
+  ropa: 'habitaciones',
+  inventario: 'minibar',
+};
+
+const seccionDe = (a: AlertaIA): Seccion => SECCION_DE_ALERTA[a.tipo] ?? 'resumen';
+
+const CLAVE_SECCION = 'motelos.inteligencia-seccion';
+
+const leerSeccion = (): Seccion => {
+  try {
+    const guardada = localStorage.getItem(CLAVE_SECCION);
+    return SECCIONES.some((s) => s.id === guardada) ? (guardada as Seccion) : 'resumen';
+  } catch {
+    return 'resumen';
+  }
+};
+
 // Inteligencia local: todo se calcula en el servidor del motel con los turnos de guardias ya arqueadas (RN-RES-03).
 const InteligenciaView: React.FC = () => {
   const { toast } = useToast();
   const [tablero, setTablero] = useState<Tablero | null>(null);
   const [estado, setEstado] = useState<'cargando' | 'ok' | 'error'>('cargando');
   const [aplicando, setAplicando] = useState<SugerenciaTarifa | null>(null);
+  const [seccion, setSeccionEstado] = useState<Seccion>(leerSeccion);
+
+  const setSeccion = (nueva: Seccion) => {
+    setSeccionEstado(nueva);
+    try {
+      localStorage.setItem(CLAVE_SECCION, nueva);
+    } catch {
+      // Sin almacenamiento, la sección se elige igual; solo no se recuerda.
+    }
+    document.querySelector('main')?.scrollTo?.({ top: 0 });
+    window.scrollTo({ top: 0 });
+  };
 
   const cargar = useCallback(async () => {
     try {
@@ -143,42 +230,74 @@ const InteligenciaView: React.FC = () => {
           )}
           {estado === 'ok' && tablero && (
           <>
-            <Resumen tablero={tablero} />
-            <Indicadores tablero={tablero} />
-            {tablero.alertas.length > 0 && <Alertas alertas={tablero.alertas} />}
-            <PronosticoCard tablero={tablero} />
-            <div className="grid gap-5 2xl:grid-cols-2">
-              <ClientesPerdidosCard datos={tablero.clientes_perdidos} />
-              <RotacionCard datos={tablero.rotacion} />
-            </div>
-            <OpinionesCard datos={tablero.opiniones} />
-            <GemeloMotel />
-            <div className="grid gap-5 2xl:grid-cols-2">
-              <SerieCard tablero={tablero} />
-              <DemandaCard tablero={tablero} />
-            </div>
-            <Sugerencias sugerencias={tablero.sugerencias} onAplicar={setAplicando} />
-            <ReposicionCard tablero={tablero} />
-            <div className="grid gap-5 lg:grid-cols-2">
-              <Tarjeta titulo="Cómo pagan los clientes" icono={Wallet} extra="últimos 30 días">
-                {tablero.medios_de_pago.length ? (
-                  <BarraPartes
-                    partes={tablero.medios_de_pago.map((m) => ({ clave: m.medio, etiqueta: m.etiqueta, parte: m.parte, valor: formatMoney(m.monto) }))}
-                  />
-                ) : (
-                  <p className="text-sm text-muted">Sin cobros en el período.</p>
-                )}
-              </Tarjeta>
-              <Tarjeta titulo="Lo más vendido del minibar" icono={Package} extra="unidades, últimos 30 días">
-                {tablero.mas_vendidos.length ? (
-                  <BarrasHorizontales
-                    filas={tablero.mas_vendidos.map((m) => ({ clave: m.articulo_id, etiqueta: m.descripcion, valor: m.unidades, texto: `${m.unidades} · ${formatMoney(m.importe)}` }))}
-                  />
-                ) : (
-                  <p className="text-sm text-muted">Sin consumos en el período.</p>
-                )}
-              </Tarjeta>
-            </div>
+            <NavSecciones actual={seccion} alertas={tablero.alertas} onElegir={setSeccion} />
+            <CabeceraSeccion seccion={seccion} />
+
+            {seccion === 'resumen' && (
+              <>
+                <Resumen tablero={tablero} />
+                <Indicadores tablero={tablero} />
+                <ParaRevisar alertas={tablero.alertas} onIr={setSeccion} />
+                <MapaSecciones tablero={tablero} onIr={setSeccion} />
+              </>
+            )}
+
+            {seccion === 'demanda' && (
+              <>
+                <Alertas alertas={tablero.alertas.filter((a) => seccionDe(a) === 'demanda')} />
+                <PronosticoCard tablero={tablero} />
+                <div className="grid grid-cols-1 gap-5 2xl:grid-cols-2">
+                  <DemandaCard tablero={tablero} />
+                  <ClientesPerdidosCard datos={tablero.clientes_perdidos} />
+                </div>
+              </>
+            )}
+
+            {seccion === 'ingresos' && (
+              <>
+                <Alertas alertas={tablero.alertas.filter((a) => seccionDe(a) === 'ingresos')} />
+                <SerieCard tablero={tablero} />
+                <Tarjeta titulo="Cómo pagan los clientes" icono={Wallet} extra="últimos 30 días">
+                  {tablero.medios_de_pago.length ? (
+                    <BarraPartes
+                      partes={tablero.medios_de_pago.map((m) => ({ clave: m.medio, etiqueta: m.etiqueta, parte: m.parte, valor: formatMoney(m.monto) }))}
+                    />
+                  ) : (
+                    <p className="text-sm text-muted">Sin cobros en el período.</p>
+                  )}
+                </Tarjeta>
+              </>
+            )}
+
+            {seccion === 'tarifas' && <Sugerencias sugerencias={tablero.sugerencias} onAplicar={setAplicando} />}
+
+            {seccion === 'habitaciones' && (
+              <>
+                <Alertas alertas={tablero.alertas.filter((a) => seccionDe(a) === 'habitaciones')} />
+                <div className="grid grid-cols-1 gap-5 2xl:grid-cols-2">
+                  <RotacionCard datos={tablero.rotacion} />
+                  <OpinionesCard datos={tablero.opiniones} />
+                </div>
+              </>
+            )}
+
+            {seccion === 'minibar' && (
+              <>
+                <Alertas alertas={tablero.alertas.filter((a) => seccionDe(a) === 'minibar')} />
+                <ReposicionCard tablero={tablero} />
+                <Tarjeta titulo="Lo más vendido del minibar" icono={Package} extra="unidades, últimos 30 días">
+                  {tablero.mas_vendidos.length ? (
+                    <BarrasHorizontales
+                      filas={tablero.mas_vendidos.map((m) => ({ clave: m.articulo_id, etiqueta: m.descripcion, valor: m.unidades, texto: `${m.unidades} · ${formatMoney(m.importe)}` }))}
+                    />
+                  ) : (
+                    <p className="text-sm text-muted">Sin consumos en el período.</p>
+                  )}
+                </Tarjeta>
+              </>
+            )}
+
+            {seccion === 'simulador' && <GemeloMotel />}
           </>
           )}
         </div>
@@ -257,42 +376,205 @@ const Indicadores: React.FC<{ tablero: Tablero }> = ({ tablero }) => {
   );
 };
 
-const Alertas: React.FC<{ alertas: AlertaIA[] }> = ({ alertas }) => (
-  <Tarjeta titulo="Alertas" icono={AlertTriangle} extra="últimos 30 días · detectadas por el sistema">
-    <ul className="space-y-2">
-      {alertas.map((a, i) => {
-        const meta = SEVERIDAD[a.severidad];
-        const Icono = meta.icono;
-        return (
-          <li key={i} className="rounded-md border border-line p-3">
-            <div className="flex flex-wrap items-start gap-2">
-              <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${meta.clase}`}>
-                <Icono className="h-3.5 w-3.5" aria-hidden="true" />
-                {meta.etiqueta}
-              </span>
-              <p className="min-w-0 flex-1 font-medium text-ink">{a.titulo}</p>
-            </div>
-            <p className="mt-1 text-sm text-muted">{a.detalle}</p>
-            {a.evidencia.length > 0 && (
-              <p className="mt-1 text-xs text-subtle">{a.evidencia.map((e) => `${e.etiqueta}: ${e.valor}`).join(' · ')}</p>
-            )}
-            {a.sugerencia && (
-              <p className="mt-1.5 flex items-start gap-1.5 text-sm text-ink">
-                <Lightbulb className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent" aria-hidden="true" />
-                {a.sugerencia}
-              </p>
-            )}
-          </li>
-        );
-      })}
-    </ul>
-  </Tarjeta>
+const ORDEN_SEVERIDAD: Record<Severidad, number> = { alta: 0, media: 1, info: 2 };
+const importantes = (alertas: AlertaIA[]) => alertas.filter((a) => a.severidad !== 'info').length;
+
+// Las secciones del análisis. El número marca lo que hay para revisar en cada una (sin contar lo informativo).
+const NavSecciones: React.FC<{ actual: Seccion; alertas: AlertaIA[]; onElegir: (s: Seccion) => void }> = ({
+  actual,
+  alertas,
+  onElegir,
+}) => (
+  // En el celular se desliza; en pantallas más anchas, si no entran en una fila, pasan a la siguiente: ninguna queda oculta.
+  <div
+    role="tablist"
+    aria-label="Secciones de Inteligencia"
+    className="sin-barra -mx-4 flex gap-1.5 overflow-x-auto px-4 pb-1 sm:-mx-1 sm:gap-1 sm:flex-wrap sm:overflow-visible sm:px-1"
+  >
+    {SECCIONES.map(({ id, label, icon: Icon }) => {
+      const pendientes = id === 'resumen' ? 0 : importantes(alertas.filter((a) => seccionDe(a) === id));
+      const elegida = actual === id;
+      return (
+        <button
+          key={id}
+          type="button"
+          role="tab"
+          aria-selected={elegida}
+          aria-label={pendientes ? `${label}: ${pendientes} para revisar` : label}
+          onClick={() => onElegir(id)}
+          className={`press hit flex h-10 shrink-0 items-center gap-2 rounded-md border px-3 text-sm ${
+            elegida ? 'border-accent bg-accent-soft font-medium text-accent' : 'border-line-strong bg-surface text-muted hover:text-ink'
+          }`}
+        >
+          <Icon className="h-4 w-4" aria-hidden="true" />
+          {label}
+          {pendientes > 0 && (
+            <span className="rounded-full bg-warn-soft px-1.5 text-[11px] font-semibold tabular-nums text-warn">{pendientes}</span>
+          )}
+        </button>
+      );
+    })}
+  </div>
 );
 
+const CabeceraSeccion: React.FC<{ seccion: Seccion }> = ({ seccion }) => {
+  const meta = SECCIONES.find((s) => s.id === seccion);
+  if (!meta || seccion === 'resumen') return null;
+  return <p className="-mt-1 text-sm text-muted">{meta.que_mira}</p>;
+};
+
+const FilaAlerta: React.FC<{ alerta: AlertaIA; pie?: React.ReactNode }> = ({ alerta: a, pie }) => {
+  const meta = SEVERIDAD[a.severidad];
+  const Icono = meta.icono;
+  return (
+    <li className="rounded-md border border-line p-3">
+      <div className="flex flex-wrap items-start gap-2">
+        <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${meta.clase}`}>
+          <Icono className="h-3.5 w-3.5" aria-hidden="true" />
+          {meta.etiqueta}
+        </span>
+        <p className="min-w-0 flex-1 font-medium text-ink">{a.titulo}</p>
+      </div>
+      <p className="mt-1 text-sm text-muted">{a.detalle}</p>
+      {a.evidencia.length > 0 && (
+        <p className="mt-1 text-xs text-subtle">{a.evidencia.map((e) => `${e.etiqueta}: ${e.valor}`).join(' · ')}</p>
+      )}
+      {a.sugerencia && (
+        <p className="mt-1.5 flex items-start gap-1.5 text-sm text-ink">
+          <Lightbulb className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent" aria-hidden="true" />
+          {a.sugerencia}
+        </p>
+      )}
+      {pie}
+    </li>
+  );
+};
+
+// Las alertas de una sección, arriba de sus análisis. Sin alertas no ocupa lugar.
+const Alertas: React.FC<{ alertas: AlertaIA[] }> = ({ alertas }) =>
+  alertas.length === 0 ? null : (
+    <Tarjeta titulo="Para revisar" icono={AlertTriangle} extra="últimos 30 días · detectado por el sistema">
+      <ul className="space-y-2">
+        {[...alertas]
+          .sort((a, b) => ORDEN_SEVERIDAD[a.severidad] - ORDEN_SEVERIDAD[b.severidad])
+          .map((a, i) => (
+            <FilaAlerta key={i} alerta={a} />
+          ))}
+      </ul>
+    </Tarjeta>
+  );
+
+const PRIMERAS = 4;
+
+// En el resumen, lo importante de todas las secciones, cada una con el camino a su análisis.
+const ParaRevisar: React.FC<{ alertas: AlertaIA[]; onIr: (s: Seccion) => void }> = ({ alertas, onIr }) => {
+  const [todas, setTodas] = useState(false);
+  const ordenadas = [...alertas].sort((a, b) => ORDEN_SEVERIDAD[a.severidad] - ORDEN_SEVERIDAD[b.severidad]);
+  const visibles = todas ? ordenadas : ordenadas.slice(0, PRIMERAS);
+  if (!alertas.length) {
+    return (
+      <Tarjeta titulo="Para revisar" icono={AlertTriangle}>
+        <p className="text-sm text-muted">Nada fuera de lo común en los últimos 30 días.</p>
+      </Tarjeta>
+    );
+  }
+  return (
+    <Tarjeta titulo="Para revisar" icono={AlertTriangle} extra={`${alertas.length} en total · las más importantes primero`}>
+      <ul className="space-y-2">
+        {visibles.map((a, i) => {
+          const destino = seccionDe(a);
+          const meta = SECCIONES.find((s) => s.id === destino);
+          return (
+            <FilaAlerta
+              key={i}
+              alerta={a}
+              pie={
+                meta &&
+                destino !== 'resumen' && (
+                  <button
+                    type="button"
+                    onClick={() => onIr(destino)}
+                    className="press mt-2 inline-flex items-center gap-1 text-sm font-medium text-accent hover:underline"
+                  >
+                    Ver en {meta.label}
+                    <ChevronRight className="h-4 w-4" aria-hidden="true" />
+                  </button>
+                )
+              }
+            />
+          );
+        })}
+      </ul>
+      {ordenadas.length > PRIMERAS && (
+        <Button variant="ghost" size="sm" className="mt-2" onClick={() => setTodas((v) => !v)}>
+          {todas ? 'Ver menos' : `Ver las ${ordenadas.length}`}
+        </Button>
+      )}
+    </Tarjeta>
+  );
+};
+
+// Una tarjeta por sección con su dato principal: el índice de lo que hay en Inteligencia.
+const MapaSecciones: React.FC<{ tablero: Tablero; onIr: (s: Seccion) => void }> = ({ tablero, onIr }) => {
+  const ingresos30 = tablero.serie.reduce((suma, d) => suma + d.ingresos, 0);
+  const conPropuesta = tablero.sugerencias.filter((s) => s.propuesta).length;
+  const aPedir = tablero.reposicion.filter((r) => r.sugerido > 0).length;
+  const datos: Record<Exclude<Seccion, 'resumen'>, string> = {
+    demanda: tablero.pronostico.horas.length
+      ? `Unos ${Math.round(tablero.pronostico.total)} turnos en las próximas 24 h`
+      : 'Todavía sin historia para pronosticar',
+    ingresos: `${formatMoney(ingresos30)} cobrados en 30 días`,
+    tarifas: conPropuesta ? `${conPropuesta} ${conPropuesta === 1 ? 'propuesta' : 'propuestas'} para revisar` : 'Las tarifas están bien así',
+    habitaciones:
+      tablero.rotacion.mediana !== null
+        ? `Limpieza típica de ${Math.round(tablero.rotacion.mediana)} min${tablero.opiniones.promedio ? ` · ${decimal(tablero.opiniones.promedio)} de 5` : ''}`
+        : 'Todavía sin limpiezas medidas',
+    minibar: aPedir ? `${aPedir} ${aPedir === 1 ? 'artículo' : 'artículos'} para pedir` : 'Stock cubierto',
+    simulador: 'Probá un cambio antes de hacerlo',
+  };
+  return (
+    <section aria-labelledby="titulo-secciones">
+      <h2 id="titulo-secciones" className="mb-2 text-sm font-semibold text-ink">
+        Cada análisis en detalle
+      </h2>
+      <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-3">
+        {SECCIONES.filter((s) => s.id !== 'resumen').map(({ id, label, icon: Icon }) => {
+          const pendientes = importantes(tablero.alertas.filter((a) => seccionDe(a) === id));
+          return (
+            <button
+              key={id}
+              type="button"
+              onClick={() => onIr(id)}
+              className="press group flex items-start gap-3 rounded-lg border border-line bg-surface p-4 text-left transition-colors hover:border-accent/50"
+            >
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-accent-soft text-accent">
+                <Icon className="h-4 w-4" aria-hidden="true" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="flex items-center gap-2 text-sm font-semibold text-ink">
+                  {label}
+                  {pendientes > 0 && (
+                    <span className="rounded-full bg-warn-soft px-1.5 text-[11px] font-semibold tabular-nums text-warn">
+                      {pendientes} para revisar
+                    </span>
+                  )}
+                </span>
+                <span className="mt-0.5 block text-sm text-muted">{datos[id as Exclude<Seccion, 'resumen'>]}</span>
+              </span>
+              <ChevronRight className="mt-2 h-4 w-4 shrink-0 text-subtle transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
+};
+
+// Una cifra con su etiqueta. Nunca se monta sobre la de al lado: si no entra, baja de renglón.
 const Mini: React.FC<{ etiqueta: string; valor: React.ReactNode; nota?: string }> = ({ etiqueta, valor, nota }) => (
-  <div>
+  <div className="min-w-0">
     <p className="text-xs text-muted">{etiqueta}</p>
-    <p className="mt-0.5 text-xl font-semibold text-ink">{valor}</p>
+    <p className="mt-0.5 text-lg font-semibold leading-tight text-ink [overflow-wrap:anywhere] sm:text-xl">{valor}</p>
     {nota && <p className="text-xs text-subtle">{nota}</p>}
   </div>
 );
@@ -311,7 +593,8 @@ const ClientesPerdidosCard: React.FC<{ datos: ClientesPerdidos }> = ({ datos }) 
   const { franja } = datos;
   return (
     <Tarjeta titulo="Clientes que se fueron" icono={UserRoundX} extra={`últimos ${datos.dias} días`}>
-      <div className="grid grid-cols-3 gap-3">
+      {/* En el celular, el valor en pesos necesita su lugar: la tercera cifra baja de renglón. */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-[repeat(3,minmax(0,1fr))]">
         <Mini etiqueta="Clientes" valor={<Cifra valor={datos.total} />} nota={`${porcentaje(datos.parte)} de los que llegaron`} />
         <Mini
           etiqueta="Valor estimado"
@@ -347,15 +630,38 @@ const ClientesPerdidosCard: React.FC<{ datos: ClientesPerdidos }> = ({ datos }) 
         />
       </div>
       <div className="mt-3">
-        <BarraPartes partes={datos.motivos.map((m) => ({ clave: m.motivo, etiqueta: m.etiqueta, parte: m.parte, valor: String(m.cantidad) }))} />
+        <BarraPartes
+          partes={[...datos.motivos.filter((m) => m.motivo !== 'OTRO'), ...datos.motivos.filter((m) => m.motivo === 'OTRO')].map((m) => ({
+            clave: m.motivo,
+            etiqueta: m.etiqueta,
+            parte: m.parte,
+            valor: String(m.cantidad),
+          }))}
+        />
       </div>
+      {datos.otros.length > 0 && (
+        <div className="mt-3 border-t border-line pt-3">
+          <p className="text-xs font-medium text-muted">Lo que anotaron con «Otro motivo»</p>
+          <ul className="mt-1.5 space-y-1 text-sm">
+            {datos.otros.map((o) => (
+              <li key={o.detalle} className="flex items-baseline justify-between gap-3">
+                <span className="min-w-0 text-ink">{o.detalle}</span>
+                <span className="shrink-0 tabular-nums text-muted">{o.cantidad === 1 ? '1 vez' : `${o.cantidad} veces`}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </Tarjeta>
   );
 };
 
-// Lo que marcan los clientes al irse. Son anónimas: solo totales, nunca una opinión suelta con su hora.
+// Lo que marcan los clientes al irse. Son anónimas: totales, y las reseñas de seis palabras sin hora ni habitación.
+const PRIMERAS_RESENAS = 6;
+
 const OpinionesCard: React.FC<{ datos: Opiniones }> = ({ datos }) => {
   const titulo = 'Lo que dicen los clientes';
+  const [todasLasResenas, setTodasLasResenas] = useState(false);
   if (!datos.cantidad) {
     return (
       <Tarjeta titulo={titulo} icono={Star} extra={`últimos ${datos.dias} días`}>
@@ -374,7 +680,7 @@ const OpinionesCard: React.FC<{ datos: Opiniones }> = ({ datos }) => {
   ];
   return (
     <Tarjeta titulo={titulo} icono={Star} extra={`últimos ${datos.dias} días · anónimas`}>
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-[repeat(3,minmax(0,1fr))] gap-3">
         <Mini etiqueta="Promedio" valor={`${decimal(datos.promedio ?? 0)} de 5`} nota={`${datos.cantidad} opiniones`} />
         <Mini etiqueta="Califican" valor={porcentaje(datos.parte)} nota="de los turnos" />
         <Mini etiqueta="Lo que más marcan" valor={masMarcado?.problema ?? '—'} nota={masMarcado ? `${masMarcado.cantidad} veces` : 'nada por ahora'} />
@@ -384,7 +690,7 @@ const OpinionesCard: React.FC<{ datos: Opiniones }> = ({ datos }) => {
       </div>
       {datos.habitaciones.length > 0 && (
         <div className="mt-3 overflow-x-auto">
-          <table className="w-full min-w-[26rem] text-left text-sm">
+          <table className="tabla-movil sin-margen w-full min-w-[26rem] text-left text-sm">
             <thead>
               <tr className="border-b border-line text-xs font-medium uppercase tracking-wide text-subtle">
                 <th className="py-2 pr-3">Habitación</th>
@@ -396,14 +702,44 @@ const OpinionesCard: React.FC<{ datos: Opiniones }> = ({ datos }) => {
             <tbody className="divide-y divide-line">
               {datos.habitaciones.slice(0, 5).map((h) => (
                 <tr key={h.habitacion_id}>
-                  <td className="py-2 pr-3 text-ink">{h.numero}</td>
-                  <td className="py-2 pr-3 text-right tabular-nums">{decimal(h.promedio)}</td>
-                  <td className="py-2 pr-3 text-right tabular-nums">{h.cantidad}</td>
-                  <td className="py-2 text-muted">{h.problema ?? '—'}</td>
+                  <td className="principal py-2 pr-3 text-ink">Habitación {h.numero}</td>
+                  <td className="py-2 pr-3 text-right tabular-nums" data-etiqueta="Promedio">{decimal(h.promedio)}</td>
+                  <td className="py-2 pr-3 text-right tabular-nums" data-etiqueta="Opiniones">{h.cantidad}</td>
+                  <td className="ancha py-2 text-muted" data-etiqueta="Lo que más marcan:">{h.problema ?? '—'}</td>
                 </tr>
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+      {datos.resenas.length > 0 && (
+        <div className="mt-3 border-t border-line pt-3">
+          <p className="text-xs font-medium text-muted">Reseñas más nuevas</p>
+          <ul className="mt-2 grid gap-2 sm:grid-cols-2">
+            {datos.resenas.slice(0, todasLasResenas ? undefined : PRIMERAS_RESENAS).map((r, i) => (
+              <li key={i} className="rounded-md bg-surface-2 px-3 py-2">
+                <span className="flex gap-0.5" role="img" aria-label={`${r.puntaje} de 5`}>
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <Star
+                      key={n}
+                      className={`h-3 w-3 ${n <= r.puntaje ? 'fill-amber-400 text-amber-400' : 'text-line-strong'}`}
+                      aria-hidden="true"
+                    />
+                  ))}
+                </span>
+                <q className="mt-1 block text-sm text-ink">{r.texto}</q>
+              </li>
+            ))}
+          </ul>
+          {datos.resenas.length > PRIMERAS_RESENAS && (
+            <button
+              type="button"
+              onClick={() => setTodasLasResenas((v) => !v)}
+              className="press mt-2 h-9 rounded-md px-2 text-sm font-medium text-accent hover:bg-accent-soft"
+            >
+              {todasLasResenas ? 'Ver menos' : `Ver las ${datos.resenas.length}`}
+            </button>
+          )}
         </div>
       )}
     </Tarjeta>
@@ -417,7 +753,7 @@ const RotacionCard: React.FC<{ datos: Rotacion }> = ({ datos }) => (
       <p className="text-sm text-muted">Todavía no hay limpiezas medidas: se miden desde el cobro hasta «Liberar».</p>
     ) : (
       <>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-[repeat(3,minmax(0,1fr))] gap-3">
           <Mini etiqueta="Típica" valor={<><Cifra valor={datos.mediana} /> min</>} nota={`${datos.cantidad} limpiezas`} />
           <Mini etiqueta="La más lenta de cada 10" valor={`${datos.p90 ?? '—'} min`} nota="o más" />
           <Mini etiqueta="Sin turno antes" valor={<Cifra valor={datos.sin_turno} />} nota={datos.sin_turno ? 'para revisar' : 'ninguna'} />
@@ -766,7 +1102,7 @@ const ReposicionCard: React.FC<{ tablero: Tablero }> = ({ tablero }) => {
   return (
     <Tarjeta titulo="Reposición sugerida" icono={Package} extra={`${aPedir.length} artículos para pedir · cubre 14 días`}>
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[36rem] text-left text-sm">
+        <table className="tabla-movil sin-margen w-full min-w-[36rem] text-left text-sm">
           <thead>
             <tr className="border-b border-line text-xs font-medium uppercase tracking-wide text-subtle">
               <th className="py-2 pr-3">Artículo</th>
@@ -780,11 +1116,11 @@ const ReposicionCard: React.FC<{ tablero: Tablero }> = ({ tablero }) => {
           <tbody className="divide-y divide-line">
             {filas.map((r) => (
               <tr key={r.articulo_id}>
-                <td className="py-2 pr-3 text-ink">{r.descripcion}</td>
-                <td className="py-2 pr-3 text-right tabular-nums">{r.stock}</td>
-                <td className="py-2 pr-3 text-right tabular-nums">{decimal(r.por_dia)}</td>
-                <td className="py-2 pr-3 text-right tabular-nums">{r.dias_restantes === null ? '—' : `${decimal(r.dias_restantes)} días`}</td>
-                <td className="py-2 pr-3 text-right font-medium tabular-nums text-ink">{r.sugerido || '—'}</td>
+                <td className="principal py-2 pr-3 text-ink">{r.descripcion}</td>
+                <td className="py-2 pr-3 text-right tabular-nums" data-etiqueta="Stock">{r.stock}</td>
+                <td className="py-2 pr-3 text-right tabular-nums" data-etiqueta="Por día">{decimal(r.por_dia)}</td>
+                <td className="py-2 pr-3 text-right tabular-nums" data-etiqueta="Alcanza">{r.dias_restantes === null ? '—' : `${decimal(r.dias_restantes)} días`}</td>
+                <td className="py-2 pr-3 text-right font-medium tabular-nums text-ink" data-etiqueta="Pedir">{r.sugerido || '—'}</td>
                 <td className="py-2">
                   <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${URGENCIA[r.urgencia].clase}`}>
                     {URGENCIA[r.urgencia].etiqueta}

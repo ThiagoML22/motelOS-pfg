@@ -953,14 +953,16 @@ PANTALLAS = {
     ),
     "inteligencia": Pantalla(
         "Inteligencia",
-        "Es el análisis del motel calculado en su propio servidor, sin internet: resumen, alertas, pronóstico de "
-        "turnos, demanda por hora, clientes que se fueron, limpieza, el gemelo del motel, sugerencias de tarifa y "
-        "reposición sugerida. Solo usa lo ya arqueado.",
+        "Es el análisis del motel calculado en su propio servidor, sin internet, separado en secciones: Resumen, "
+        "Demanda, Ingresos y caja, Tarifas, Habitaciones, Minibar y Simulador. Solo usa lo ya arqueado.",
         (
-            "Los gráficos muestran cada valor al pasar el mouse.",
-            "En el gemelo del motel probás un cambio de limpieza, habitaciones o precio antes de hacerlo.",
-            "«Ver y aplicar» en una sugerencia de tarifa muestra el efecto estimado antes de confirmar.",
-            "«Armar pedido con esto» convierte la reposición sugerida en un pedido al proveedor.",
+            "«Resumen» junta lo más importante y lo que hay para revisar; «Ver en…» lleva a la sección de cada cosa.",
+            "El número en cada sección es lo que tiene para revisar.",
+            "«Demanda»: pronóstico, cuándo llegan y clientes que se fueron.",
+            "«Ingresos y caja»: lo cobrado por día y los medios de pago.",
+            "«Tarifas»: «Ver y aplicar» muestra el efecto estimado antes de confirmar.",
+            "«Habitaciones»: limpieza y opiniones. «Minibar»: «Armar pedido con esto» arma el pedido al proveedor.",
+            "«Simulador»: probás un cambio de limpieza, habitaciones o precio antes de hacerlo.",
             "A la derecha estoy yo, Mot: preguntame por los datos con tus palabras.",
         ),
         (),

@@ -48,7 +48,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       <div
         role="status"
         aria-live="polite"
-        className="pointer-events-none fixed bottom-4 left-4 z-[60] flex w-full max-w-sm flex-col gap-2"
+        className="pointer-events-none fixed bottom-[calc(4.75rem+env(safe-area-inset-bottom))] left-3 right-20 z-[60] flex max-w-sm flex-col gap-2 sm:bottom-4 sm:left-4 sm:right-auto sm:w-full"
       >
         {items.map((t) => (
           <div

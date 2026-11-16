@@ -137,10 +137,12 @@ const SeccionCategorias: React.FC<SeccionCategoriasProps> = ({ categorias, habit
                   {numeros.length > 0 ? `Habitaciones: ${numeros.map(formatRoomNumber).join(', ')}` : 'Sin habitaciones asignadas.'}
                 </p>
 
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <Button className="h-11" disabled={!c.activa} onClick={() => setModo({ tipo: 'tarifa', categoria: c })}>
+                {/* En el celular: «Cambiar tarifa» ocupa lo que sobra y los íconos quedan en la misma fila. */}
+                <div className="mt-3 flex gap-2 sm:flex-wrap">
+                  <Button className="h-11 min-w-0 flex-1 sm:flex-none" disabled={!c.activa} onClick={() => setModo({ tipo: 'tarifa', categoria: c })}>
                     <Receipt className="h-4 w-4" aria-hidden="true" />
-                    Cambiar tarifa
+                    <span className="sm:hidden">Tarifa</span>
+                    <span className="max-sm:hidden">Cambiar tarifa</span>
                   </Button>
                   <Button variant="secondary" className="h-11" aria-label={`Editar ${c.nombre}`} onClick={() => setModo({ tipo: 'editar', categoria: c })}>
                     <Pencil className="h-4 w-4" aria-hidden="true" />

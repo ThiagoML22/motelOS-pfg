@@ -106,7 +106,7 @@ const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({ onCambioHabitacio
         </p>
       </div>
 
-      <div role="tablist" aria-label="Secciones de la configuración" className="mb-5 flex flex-wrap gap-1.5">
+      <div role="tablist" aria-label="Secciones de la configuración" className="sin-barra -mx-4 mb-5 flex gap-1.5 overflow-x-auto px-4 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0">
         {SECCIONES.map(({ id, label, icon: Icon }) => (
           <button
             key={id}
@@ -114,7 +114,7 @@ const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({ onCambioHabitacio
             role="tab"
             aria-selected={seccion === id}
             onClick={() => setSeccion(id)}
-            className={`press hit flex h-11 items-center gap-2 rounded-md border px-4 text-sm ${
+            className={`press hit flex h-11 shrink-0 items-center gap-2 whitespace-nowrap rounded-md border px-4 text-sm ${
               seccion === id
                 ? 'border-accent bg-accent-soft font-medium text-accent'
                 : 'border-line-strong bg-surface text-muted hover:text-ink'
@@ -538,7 +538,7 @@ const SeccionArticulos: React.FC<SeccionConBajas & { articulos: Articulo[] }> = 
     <>
       <h2 className="mb-1 text-base font-semibold text-ink">Artículos y precios</h2>
       <p className="mb-4 text-sm text-muted">El alta de artículos nuevos se hace desde Inventario.</p>
-      <table className="w-full text-sm">
+      <table className="tabla-movil sin-margen w-full text-sm">
         <thead className="text-left text-xs text-muted">
           <tr>
             <th className="py-2 font-medium">Código</th>
@@ -552,13 +552,13 @@ const SeccionArticulos: React.FC<SeccionConBajas & { articulos: Articulo[] }> = 
           {articulos.map((a) => (
             <tr key={a.id} className={`border-t border-line ${a.activo === false ? 'text-muted' : ''}`}>
               <td className="py-2 font-mono text-xs">{a.codigo}</td>
-              <td className="py-2">
+              <td className="principal py-2">
                 {a.descripcion}
-                {a.activo === false && <span className="ml-2 text-xs">(dado de baja)</span>}
+                {a.activo === false && <span className="ml-2 text-xs font-normal">(dado de baja)</span>}
               </td>
-              <td className="py-2 text-right tabular-nums">{formatMoney(a.precio_unitario)}</td>
-              <td className="py-2 text-right tabular-nums">{a.stock_actual}</td>
-              <td className="py-2">
+              <td className="py-2 text-right tabular-nums" data-etiqueta="Precio">{formatMoney(a.precio_unitario)}</td>
+              <td className="py-2 text-right tabular-nums" data-etiqueta="Stock">{a.stock_actual}</td>
+              <td className="acciones py-2">
                 <div className="flex justify-end gap-2">
                   <Button variant="secondary" className="h-11" onClick={() => editar(a)}>
                     Editar
@@ -679,14 +679,14 @@ const SeccionHabitaciones: React.FC<
 
   return (
     <>
-      <form onSubmit={agregar} className="mb-5 flex flex-wrap items-end gap-3">
+      <form onSubmit={agregar} className="mb-5 grid grid-cols-2 items-end gap-3 sm:flex sm:flex-wrap">
         <Field label="Número de la habitación nueva" htmlFor="hab_nueva">
-          <input id="hab_nueva" inputMode="numeric" required className={`${campo} w-48`} value={nueva} onChange={(e) => setNueva(e.target.value)} />
+          <input id="hab_nueva" inputMode="numeric" required className={`${campo} sm:w-48`} value={nueva} onChange={(e) => setNueva(e.target.value)} />
         </Field>
         <Field label="Categoría" htmlFor="hab_nueva_categoria">
           <select
             id="hab_nueva_categoria"
-            className={`${campo} w-56`}
+            className={`${campo} sm:w-56`}
             value={categoriaNueva}
             onChange={(e) => setCategoriaNueva(Number(e.target.value))}
           >
@@ -697,11 +697,11 @@ const SeccionHabitaciones: React.FC<
             ))}
           </select>
         </Field>
-        <Button type="submit" className="h-11" disabled={ocupado}>
+        <Button type="submit" className="col-span-2 h-11" disabled={ocupado}>
           Agregar habitación
         </Button>
       </form>
-      <table className="w-full text-sm">
+      <table className="tabla-movil sin-margen w-full text-sm">
         <thead className="text-left text-xs text-muted">
           <tr>
             <th className="py-2 font-medium">Habitación</th>
@@ -713,14 +713,14 @@ const SeccionHabitaciones: React.FC<
         <tbody>
           {habitaciones.map((h) => (
             <tr key={h.id} className={`border-t border-line ${h.activa ? '' : 'text-muted'}`}>
-              <td className="py-2 font-medium">{formatRoomNumber(h.numero)}</td>
-              <td className="py-2">
+              <td className="principal py-2 font-medium">{formatRoomNumber(h.numero)}</td>
+              <td className="ancha py-2">
                 <div className="flex items-center gap-2">
                   <ChipCategoria categoria={categoriaDe(h.categoria_id)} className="hidden sm:inline-flex" />
                   {h.activa && (
                     <select
                       aria-label={`Categoría de la ${formatRoomNumber(h.numero)}`}
-                      className={`${campo} w-40`}
+                      className={`${campo} sm:w-40`}
                       value={h.categoria_id}
                       disabled={ocupado}
                       onChange={(e) => {
@@ -744,8 +744,8 @@ const SeccionHabitaciones: React.FC<
                   )}
                 </div>
               </td>
-              <td className="py-2">{h.activa ? h.estado : 'Dada de baja (conserva su historial)'}</td>
-              <td className="py-2">
+              <td className="py-2" data-etiqueta="Estado:">{h.activa ? h.estado : 'Dada de baja (conserva su historial)'}</td>
+              <td className="acciones py-2">
                 <div className="flex justify-end gap-2">
                   <Button
                     variant="secondary"
@@ -862,7 +862,7 @@ const SeccionConserjes: React.FC<SeccionConBajas & { operadores: OperadorEstado[
 
   return (
     <div className="grid gap-6 lg:grid-cols-[1fr_22rem]">
-      <table className="w-full self-start text-sm">
+      <table className="tabla-movil sin-margen w-full self-start text-sm">
         <thead className="text-left text-xs text-muted">
           <tr>
             <th className="py-2 font-medium">Nombre</th>
@@ -874,14 +874,14 @@ const SeccionConserjes: React.FC<SeccionConBajas & { operadores: OperadorEstado[
         <tbody>
           {operadores.map((o) => (
             <tr key={o.id} className={`border-t border-line ${o.activo ? '' : 'text-muted'}`}>
-              <td className="py-2">
+              <td className="principal py-2">
                 {o.nombre_visible}
-                {o.rol === 'ADMINISTRADOR' && <span className="ml-2 text-xs text-muted">(gerencia)</span>}
-                {!o.activo && <span className="ml-2 text-xs">(dado de baja)</span>}
+                {o.rol === 'ADMINISTRADOR' && <span className="ml-2 text-xs font-normal text-muted">(gerencia)</span>}
+                {!o.activo && <span className="ml-2 text-xs font-normal">(dado de baja)</span>}
               </td>
               <td className="py-2 font-mono text-xs">{o.usuario}</td>
-              <td className="py-2">{o.ultimo_acceso ? formatDateTime(o.ultimo_acceso) : '—'}</td>
-              <td className="py-2">
+              <td className="py-2" data-etiqueta="Último acceso">{o.ultimo_acceso ? formatDateTime(o.ultimo_acceso) : '—'}</td>
+              <td className="acciones py-2">
                 <div className="flex justify-end gap-2">
                   {o.rol === 'OPERADOR' && o.activo && (
                     <Button

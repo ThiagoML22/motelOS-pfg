@@ -183,7 +183,7 @@ const InventarioView: React.FC<InventarioViewProps> = ({ esConserje }) => {
           <h1 className="text-xl font-semibold text-ink">Inventario</h1>
           <p className="mt-0.5 text-sm text-muted">Minibar y productos de venta</p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap [&>button]:max-sm:w-full [&>button]:max-sm:px-2">
           {esConserje && <MovimientoRopa />}
           {!esConserje && <BotonNuevoPedido onCreado={() => setVersionPedidos((v) => v + 1)} />}
           <Button onClick={abrirModal}>
@@ -248,7 +248,7 @@ const InventarioView: React.FC<InventarioViewProps> = ({ esConserje }) => {
             <div
               role="group"
               aria-label="Filtrar por categoría"
-              className="mb-6 grid grid-cols-[repeat(auto-fill,minmax(12rem,1fr))] gap-3"
+              className="mb-6 grid grid-cols-2 gap-2.5 sm:grid-cols-[repeat(auto-fill,minmax(12rem,1fr))] sm:gap-3"
             >
               {categorias.map(([nombre, c]) => {
                 const activa = categoria === nombre;
@@ -258,7 +258,7 @@ const InventarioView: React.FC<InventarioViewProps> = ({ esConserje }) => {
                     type="button"
                     aria-pressed={activa}
                     onClick={() => setCategoria(activa ? null : nombre)}
-                    className={`press rounded-lg border p-4 text-left transition duration-200 hover:-translate-y-0.5 hover:shadow-lift ${
+                    className={`press min-w-0 rounded-lg border p-3 text-left transition duration-200 hover:-translate-y-0.5 hover:shadow-lift sm:p-4 ${
                       activa ? 'border-accent bg-accent-soft' : 'border-line bg-surface hover:border-line-strong'
                     }`}
                   >
@@ -309,7 +309,46 @@ const InventarioView: React.FC<InventarioViewProps> = ({ esConserje }) => {
             </div>
           </div>
 
-          <div className="overflow-x-auto rounded-lg border border-line bg-surface">
+          {/* En el celular, una tarjeta por artículo: se lee sin deslizar de costado. */}
+          <ul className="divide-y divide-line rounded-lg border border-line bg-surface sm:hidden">
+            {visibles.map((a) => (
+              <li key={a.id} className="flex items-center gap-3 px-3 py-3">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-medium text-ink">{a.descripcion}</p>
+                  <p className="mt-0.5 truncate text-xs text-muted">
+                    <span className="font-mono">{a.codigo}</span> · {categoriaDe(a)} · {formatMoney(a.precio_unitario)}
+                  </p>
+                  <p className="mt-1 text-sm">
+                    <span className={`font-semibold tabular-nums ${esSin(a) ? 'text-danger' : esBajo(a) ? 'text-warn' : 'text-ink'}`}>
+                      {a.stock_actual}
+                    </span>{' '}
+                    <span className="text-muted">en stock</span>
+                    {esSin(a) && <span className="ml-2 text-xs font-medium text-danger">Sin stock</span>}
+                    {esBajo(a) && <span className="ml-2 text-xs font-medium text-warn">Stock bajo</span>}
+                  </p>
+                </div>
+                <Button
+                  variant="secondary"
+                  className="h-11 shrink-0"
+                  aria-label={`Reponer ${a.descripcion}`}
+                  onClick={() => {
+                    setCantidad('');
+                    setReponiendo(a);
+                  }}
+                >
+                  <PackagePlus className="h-4 w-4" aria-hidden="true" />
+                  Reponer
+                </Button>
+              </li>
+            ))}
+            {visibles.length === 0 && (
+              <li className="px-4 py-12 text-center text-sm text-muted">
+                {articulos.length === 0 ? 'Todavía no hay artículos cargados.' : 'Ningún artículo coincide con los filtros aplicados.'}
+              </li>
+            )}
+          </ul>
+
+          <div className="overflow-x-auto rounded-lg border border-line bg-surface max-sm:hidden">
             <table className="w-full min-w-[40rem] text-left text-sm">
               <thead>
                 <tr className="border-b border-line bg-surface-2 text-xs font-medium uppercase tracking-wide text-subtle">

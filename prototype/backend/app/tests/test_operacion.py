@@ -118,7 +118,9 @@ async def test_una_diferencia_llega_a_la_gerencia_con_los_dos_nombres(client, ot
     assert "Conserje Uno" in aviso.descripcion and "Conserje Dos" in aviso.descripcion
 
 
-async def test_lo_que_sale_a_lavanderia_no_es_un_faltante(client, otro_conserje, db):
+async def test_lo_que_sale_a_lavanderia_no_es_un_faltante(client, otro_conserje, gerencia, db):
+    # Con una lavandería de afuera (migración 018): la ropa sale del motel y vuelve.
+    assert (await gerencia.patch(f"{OPERACION}/ropa/lavanderia", json={"propia": False})).status_code == 200
     await _cerrar_con_conteo(client, _ropa())
     assert (await otro_conserje.post(f"{GUARDIAS}/", json=_ropa())).status_code == 201
     movimiento = {"prenda": "SABANAS", "tipo": "LAVANDERIA_SALE", "cantidad": 12}
@@ -604,13 +606,13 @@ async def test_todo_junto_acepta_las_partes_y_guarda_el_total(client, gerencia, 
 
 async def test_el_conserje_ve_lo_que_anoto_en_su_guardia(client, otro_conserje):
     assert (await client.get(f"{OPERACION}/ropa/movimientos")).json() == []
-    for tipo, cantidad in (("LAVANDERIA_SALE", 12), ("BAJA", 1)):
+    for tipo, cantidad in (("COMPRA", 12), ("BAJA", 1)):
         movimiento = {"prenda": "SABANAS", "tipo": tipo, "cantidad": cantidad}
         assert (await client.post(f"{OPERACION}/ropa/movimientos", json=movimiento)).status_code == 201
     propios = (await client.get(f"{OPERACION}/ropa/movimientos")).json()
     assert [(m["tipo"], m["signo"], m["cantidad"]) for m in propios] == [
         ("Baja por rotura", -1, 1),
-        ("Salió a la lavandería", -1, 12),
+        ("Compra", 1, 12),
     ]
     # Quien no tiene la guardia no ve los de otro.
     assert (await otro_conserje.get(f"{OPERACION}/ropa/movimientos")).json() == []

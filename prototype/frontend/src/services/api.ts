@@ -213,8 +213,8 @@ export const api = {
   pedirCarrito: async (token: string, lineas: { articulo_id: number; cantidad: number }[]) =>
     (await http.post(`/cliente/${token}/carrito`, { lineas })).data,
 
-  calificarEstadia: async (token: string, puntaje: number, problemas: number) =>
-    (await http.post(`/cliente/${token}/calificacion`, { puntaje, problemas })).data,
+  calificarEstadia: async (token: string, puntaje: number, problemas: number, resena?: string) =>
+    (await http.post(`/cliente/${token}/calificacion`, { puntaje, problemas, resena: resena || null })).data,
 
   // --- Lo que pide el cliente, en la ventanilla ---
   getTicket: async (turno_id: string): Promise<TicketCliente> => (await http.get(`/turnos/${turno_id}/ticket`)).data,
@@ -243,8 +243,12 @@ export const api = {
   getLineaDeTiempo: async (dia?: string): Promise<LineaDeTiempoDatos> =>
     (await http.get('/habitaciones/linea-de-tiempo', { params: { dia } })).data,
 
-  registrarClientePerdido: async (motivo: MotivoPerdida, categoria_id: number | null): Promise<{ en_la_guardia: number }> =>
-    (await http.post('/clientes-perdidos/', { motivo, categoria_id })).data,
+  registrarClientePerdido: async (
+    motivo: MotivoPerdida,
+    categoria_id: number | null,
+    detalle?: string,
+  ): Promise<{ en_la_guardia: number }> =>
+    (await http.post('/clientes-perdidos/', { motivo, categoria_id, detalle: detalle || null })).data,
 
   // --- Novedades de guardia (migración 009) ---
   getNovedades: async (limite = 30): Promise<Novedad[]> => (await http.get('/novedades/', { params: { limite } })).data,
@@ -267,6 +271,14 @@ export const api = {
 
   // Lo que el conserje anotó en su guardia abierta.
   getMovimientosRopa: async (): Promise<MovimientoRopaHecho[]> => (await http.get('/operacion/ropa/movimientos')).data,
+
+  // Cómo se cuenta y quién lava: el conserje ve solo las opciones que corresponden (migración 018).
+  getAjustesRopa: async (): Promise<{ por_estado: boolean; lavanderia_propia: boolean }> =>
+    (await http.get('/operacion/ropa/ajustes')).data,
+
+  // La gerencia elige quién lava: el motel o una lavandería de afuera.
+  lavanderiaPropia: async (propia: boolean): Promise<{ lavanderia_propia: boolean }> =>
+    (await http.patch('/operacion/ropa/lavanderia', { propia })).data,
 
   // La gerencia elige si la ropa se cuenta por estado o todo junto.
   formaDeContarRopa: async (porEstado: boolean): Promise<{ por_estado: boolean }> =>

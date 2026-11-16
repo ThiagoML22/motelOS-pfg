@@ -52,6 +52,8 @@ LUNA = {
     "eslogan": "Noches bajo la luna",
     # Motel Luna cuenta sus toallas y sábanas todas juntas; Motel C.C., separadas por estado (migración 017).
     "ropa_por_estado": False,
+    # Motel Luna lava su ropa, como la mayoría; Motel C.C. la manda a una lavandería de afuera (migración 018).
+    "lavanderia_propia": True,
 }
 # Eslogan de Motel C.C. (migración 009); su color queda el azul de MotelOS, así se ve la diferencia entre moteles.
 ESLOGAN_MOTELCC = "Tu descanso, a tu manera"
@@ -249,6 +251,8 @@ async def cargar() -> None:
             principal = (await db.execute(consulta)).scalars().one()
             if not principal.eslogan:
                 principal.eslogan = ESLOGAN_MOTELCC
+                # Con el eslogan se carga la primera vez: Motel C.C. trabaja con una lavandería de afuera.
+                principal.lavanderia_propia = False
                 await db.commit()
             # Lo que ve el cliente con su QR; si la gerencia ya lo cargó, no se toca.
             if not principal.wifi_nombre:

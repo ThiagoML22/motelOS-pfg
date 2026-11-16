@@ -57,6 +57,12 @@ class FormaDeContar(BaseModel):
     por_estado: bool
 
 
+class Lavanderia(BaseModel):
+    """True: el motel lava su ropa. False: la manda a una lavandería de afuera."""
+
+    propia: bool
+
+
 class MovimientoRopa(BaseModel):
     prenda: Prenda
     tipo: Literal["LAVANDERIA_SALE", "LAVANDERIA_VUELVE", "COMPRA", "BAJA"]
@@ -108,6 +114,12 @@ async def movimiento_de_ropa(
     return await ropa.registrar_movimiento(db, operador, datos.prenda, datos.tipo, datos.cantidad)
 
 
+@router.get("/ropa/ajustes")
+async def ajustes_de_ropa(db: AsyncSession = Depends(get_db), _: Operador = Depends(operador_actual)) -> dict:
+    """Cómo se cuenta y quién lava: la pantalla muestra solo las opciones que corresponden."""
+    return await ropa.ajustes(db)
+
+
 @router.get("/ropa/movimientos")
 async def movimientos_de_mi_guardia(
     db: AsyncSession = Depends(get_db), operador: Operador = Depends(operador_actual)
@@ -133,6 +145,14 @@ async def forma_de_contar(
 ) -> dict:
     """Cómo cuenta la ropa este establecimiento. Rige desde el próximo recuento."""
     return await ropa.cambiar_forma(db, operador, datos.por_estado)
+
+
+@gerencia.patch("/ropa/lavanderia")
+async def quien_lava(
+    datos: Lavanderia, db: AsyncSession = Depends(get_db), operador: Operador = Depends(operador_actual)
+) -> dict:
+    """Lavandería propia o de afuera. Lo ya anotado no cambia."""
+    return await ropa.cambiar_lavanderia(db, operador, datos.propia)
 
 
 @gerencia.patch("/arreglos/{arreglo_id}/costo")

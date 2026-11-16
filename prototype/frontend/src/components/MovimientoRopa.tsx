@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Minus, PackageCheck, Plus, Shirt, ShoppingBag, Trash2, Truck } from 'lucide-react';
+import { Info, Minus, PackageCheck, Plus, Shirt, ShoppingBag, Trash2, Truck } from 'lucide-react';
 import { MovimientoRopaHecho, Prenda, TipoMovimientoRopa } from '../types';
 import { api, getErrorMessage } from '../services/api';
 import { formatDateTime } from '../utils/format';
@@ -9,11 +9,21 @@ import { inputClass } from './ui/Field';
 import Modal from './ui/Modal';
 import { useToast } from './ui/Toast';
 
-const TIPOS: { value: TipoMovimientoRopa; label: string; detalle: string; signo: 1 | -1; icon: React.ElementType }[] = [
-  { value: 'LAVANDERIA_SALE', label: 'Sale a la lavandería', detalle: 'Se la llevan a lavar', signo: -1, icon: Truck },
-  { value: 'LAVANDERIA_VUELVE', label: 'Vuelve de la lavandería', detalle: 'La traen lavada', signo: 1, icon: PackageCheck },
+interface Tipo {
+  value: TipoMovimientoRopa;
+  label: string;
+  detalle: string;
+  signo: 1 | -1;
+  icon: React.ElementType;
+  // Solo con una lavandería de afuera: con lavandería propia la ropa no sale del motel.
+  deAfuera?: boolean;
+}
+
+const TIPOS: Tipo[] = [
   { value: 'COMPRA', label: 'Compra', detalle: 'Entra ropa nueva', signo: 1, icon: ShoppingBag },
-  { value: 'BAJA', label: 'Baja por rotura', detalle: 'Se descarta', signo: -1, icon: Trash2 },
+  { value: 'BAJA', label: 'Baja por rotura', detalle: 'Se rompió y se tira', signo: -1, icon: Trash2 },
+  { value: 'LAVANDERIA_SALE', label: 'Sale a la lavandería', detalle: 'Se la llevan a lavar', signo: -1, icon: Truck, deAfuera: true },
+  { value: 'LAVANDERIA_VUELVE', label: 'Vuelve de la lavandería', detalle: 'La traen lavada', signo: 1, icon: PackageCheck, deAfuera: true },
 ];
 
 const RAPIDAS = [5, 10, 20];
@@ -45,17 +55,20 @@ export const FilaMovimiento: React.FC<{ movimiento: MovimientoRopaHecho; conQuie
   </li>
 );
 
-// La ropa que entra o sale del motel se anota: así en el próximo recuento no aparece como faltante.
+// La ropa que entra o sale del motel se anota: así en el próximo recuento no aparece como faltante. Con lavandería propia
+// (lo que elige la gerencia) solo hay compras y bajas: la ropa que se lava no sale del motel.
 const MovimientoRopa: React.FC = () => {
   const { toast } = useToast();
   const [abierto, setAbierto] = useState(false);
   const [prenda, setPrenda] = useState<Prenda>('TOALLAS');
-  const [tipo, setTipo] = useState<TipoMovimientoRopa>('LAVANDERIA_SALE');
+  const [tipo, setTipo] = useState<TipoMovimientoRopa>('COMPRA');
+  const [propia, setPropia] = useState<boolean | null>(null);
   const [cantidad, setCantidad] = useState('');
   const [enviando, setEnviando] = useState(false);
   const [anotados, setAnotados] = useState<MovimientoRopaHecho[] | null>(null);
   const valor = /^\d{1,6}$/.test(cantidad) ? parseInt(cantidad, 10) : 0;
-  const elegido = TIPOS.find((t) => t.value === tipo) ?? TIPOS[0];
+  const tipos = propia === false ? TIPOS : TIPOS.filter((t) => !t.deAfuera);
+  const elegido = tipos.find((t) => t.value === tipo) ?? tipos[0];
   const nombre = (PRENDAS.find((p) => p.prenda === prenda)?.label ?? '').toLowerCase();
 
   const cargar = useCallback(async () => {
@@ -67,7 +80,12 @@ const MovimientoRopa: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (abierto) void cargar();
+    if (!abierto) return;
+    void cargar();
+    api
+      .getAjustesRopa()
+      .then((a) => setPropia(a.lavanderia_propia))
+      .catch(() => setPropia(true));
   }, [abierto, cargar]);
 
   const enviar = async (e: React.FormEvent) => {
@@ -75,7 +93,7 @@ const MovimientoRopa: React.FC = () => {
     if (valor < 1) return;
     setEnviando(true);
     try {
-      await api.movimientoRopa({ prenda, tipo, cantidad: valor });
+      await api.movimientoRopa({ prenda, tipo: elegido.value, cantidad: valor });
       toast(`Anotado: ${elegido.signo > 0 ? '+' : '−'}${valor} ${nombre}.`, 'success');
       // La lavandería suele llevarse toallas y sábanas juntas: el diálogo queda abierto para anotar lo que sigue.
       setCantidad('');
@@ -96,7 +114,11 @@ const MovimientoRopa: React.FC = () => {
       {abierto && (
         <Modal
           title="Movimiento de ropa"
-          subtitle="Anote lo que entra o sale del motel: así no figura como faltante en el recuento."
+          subtitle={
+            propia === false
+              ? 'Anote lo que entra o sale del motel: así no figura como faltante en el recuento.'
+              : 'Anote la ropa que se compra y la que se tira: así no figura como faltante en el recuento.'
+          }
           onClose={() => !enviando && setAbierto(false)}
           footer={
             <div className="flex justify-end gap-3">
@@ -113,14 +135,14 @@ const MovimientoRopa: React.FC = () => {
             <div>
               <Titulo>Qué pasó</Titulo>
               <div role="radiogroup" aria-label="Qué pasó" className="grid grid-cols-2 gap-2">
-                {TIPOS.map(({ value, label, detalle, signo, icon: Icon }) => (
+                {tipos.map(({ value, label, detalle, signo, icon: Icon }) => (
                   <button
                     key={value}
                     type="button"
                     role="radio"
-                    aria-checked={tipo === value}
+                    aria-checked={elegido.value === value}
                     onClick={() => setTipo(value)}
-                    className={`${claseOpcion(tipo === value)} flex items-start gap-2.5 px-3 py-2.5`}
+                    className={`${claseOpcion(elegido.value === value)} flex items-start gap-2.5 px-3 py-2.5`}
                   >
                     <Icon className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
                     <span className="min-w-0">
@@ -132,6 +154,12 @@ const MovimientoRopa: React.FC = () => {
                   </button>
                 ))}
               </div>
+              {propia && (
+                <p className="mt-2 flex items-start gap-1.5 text-xs text-muted">
+                  <Info className="mt-px h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                  En este motel la ropa se lava acá: la que está lavándose no sale del motel y en el recuento va con la sucia.
+                </p>
+              )}
             </div>
 
             <div className="grid gap-5 sm:grid-cols-2">

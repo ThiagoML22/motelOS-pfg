@@ -5,6 +5,7 @@ import { api, getErrorMessage } from '../services/api';
 import { aplicarMarca } from '../utils/marca';
 import { useNow } from '../hooks/useNow';
 import Button from './ui/Button';
+import Logo from './ui/Logo';
 import Field, { inputClass } from './ui/Field';
 import ThemeToggle from './ui/ThemeToggle';
 
@@ -186,7 +187,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onIngreso, aviso }) => {
           <ThemeToggle />
         </div>
         <div className="w-full max-w-sm animate-pop-in">
-          <img src="/logo.png" alt="MotelOS" className="logo mb-8 h-9 object-contain lg:hidden" />
+          <Logo className="mb-8 h-7 lg:hidden" />
           <h1 className="text-2xl font-semibold text-ink">Ingresar</h1>
           <p className="mt-1 text-sm text-muted">Cada operación queda registrada a su nombre.</p>
 

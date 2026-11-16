@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { AlertTriangle, ArrowRight, CheckCircle2, Layers, Rows3, Truck } from 'lucide-react';
+import { AlertTriangle, ArrowRight, CheckCircle2, Layers, Rows3, Truck, WashingMachine } from 'lucide-react';
 import { RecuentoAgrupado, RopaContada, TableroOperacion } from '../types';
 import { api, getErrorMessage } from '../services/api';
 import { formatDateTime } from '../utils/format';
@@ -31,42 +31,66 @@ const Tarjeta: React.FC<{ titulo: string; detalle?: string; extra?: React.ReactN
 
 const Vacio: React.FC<{ children: React.ReactNode }> = ({ children }) => <p className="text-sm text-muted">{children}</p>;
 
-const FORMAS: { porEstado: boolean; label: string; detalle: string; icon: React.ElementType }[] = [
-  { porEstado: true, label: 'Por estado', detalle: 'Limpias, sucias y en uso, cada una por separado.', icon: Rows3 },
-  { porEstado: false, label: 'Todo junto', detalle: 'Un solo número por prenda.', icon: Layers },
+interface Opcion {
+  valor: boolean;
+  label: string;
+  detalle: string;
+  icon: React.ElementType;
+}
+
+const FORMAS: Opcion[] = [
+  { valor: true, label: 'Por estado', detalle: 'Limpias, sucias y en uso, cada una por separado.', icon: Rows3 },
+  { valor: false, label: 'Todo junto', detalle: 'Un solo número por prenda.', icon: Layers },
 ];
 
-// Cada motel cuenta a su manera. Lo que se controla entre un recuento y el siguiente es siempre el total.
-const FormaDeContar: React.FC<{ porEstado: boolean; onCambio: () => Promise<void> }> = ({ porEstado, onCambio }) => {
-  const { toast } = useToast();
-  const [guardando, setGuardando] = useState(false);
+const LAVANDERIAS: Opcion[] = [
+  {
+    valor: true,
+    label: 'Propia',
+    detalle: 'La ropa se lava en el motel: el conserje anota solo lo que se compra y lo que se tira.',
+    icon: WashingMachine,
+  },
+  {
+    valor: false,
+    label: 'De afuera',
+    detalle: 'Una lavandería se la lleva y la trae: el conserje anota también lo que sale y lo que vuelve.',
+    icon: Truck,
+  },
+];
 
-  const elegir = async (valor: boolean) => {
-    if (valor === porEstado || guardando) return;
+// Una elección de dos opciones que rige desde ya para los conserjes. Lo ya anotado no cambia.
+const Ajuste: React.FC<{
+  titulo: string;
+  nota: string;
+  opciones: Opcion[];
+  valor: boolean;
+  onElegir: (valor: boolean) => Promise<void>;
+}> = ({ titulo, nota, opciones, valor, onElegir }) => {
+  const [guardando, setGuardando] = useState(false);
+  const elegir = async (nuevo: boolean) => {
+    if (nuevo === valor || guardando) return;
     setGuardando(true);
     try {
-      await api.formaDeContarRopa(valor);
-      toast(valor ? 'Desde el próximo recuento se cuenta por estado.' : 'Desde el próximo recuento se cuenta todo junto.', 'success');
-      await onCambio();
-    } catch (e) {
-      toast(getErrorMessage(e, 'No se pudo cambiar la forma de contar.'), 'error');
+      await onElegir(nuevo);
     } finally {
       setGuardando(false);
     }
   };
-
   return (
-    <section className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 rounded-lg border border-line bg-surface px-5 py-3.5">
-      <div className="min-w-0">
-        <h2 className="text-sm font-semibold text-ink">Cómo cuentan los conserjes</h2>
+    <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 py-3.5 first:pt-0 last:pb-0">
+      <div className="min-w-0 sm:flex-1">
+        <h3 className="text-sm font-semibold text-ink">{titulo}</h3>
         <p className="mt-0.5 text-xs text-muted">
-          {FORMAS.find((f) => f.porEstado === porEstado)?.detalle} Un cambio rige desde el próximo recuento; el control de
-          faltantes sigue igual, porque compara el total.
+          {opciones.find((o) => o.valor === valor)?.detalle} {nota}
         </p>
       </div>
-      <div role="radiogroup" aria-label="Cómo se cuenta la ropa" className="flex shrink-0 rounded-md border border-line-strong p-0.5">
-        {FORMAS.map(({ porEstado: valor, label, icon: Icon }) => {
-          const elegida = valor === porEstado;
+      <div
+        role="radiogroup"
+        aria-label={titulo}
+        className="grid w-full shrink-0 grid-cols-2 rounded-md border border-line-strong p-0.5 sm:flex sm:w-auto"
+      >
+        {opciones.map(({ valor: opcion, label, icon: Icon }) => {
+          const elegida = opcion === valor;
           return (
             <button
               key={label}
@@ -74,8 +98,8 @@ const FormaDeContar: React.FC<{ porEstado: boolean; onCambio: () => Promise<void
               role="radio"
               aria-checked={elegida}
               disabled={guardando}
-              onClick={() => void elegir(valor)}
-              className={`press hit flex h-9 items-center gap-2 rounded px-3.5 text-sm ${
+              onClick={() => void elegir(opcion)}
+              className={`press hit flex h-9 items-center justify-center gap-2 whitespace-nowrap rounded px-3.5 text-sm ${
                 elegida ? 'bg-accent-soft font-medium text-accent' : 'text-muted hover:text-ink'
               }`}
             >
@@ -85,11 +109,60 @@ const FormaDeContar: React.FC<{ porEstado: boolean; onCambio: () => Promise<void
           );
         })}
       </div>
+    </div>
+  );
+};
+
+// Cada motel trabaja a su manera: cómo cuentan los conserjes y quién lava. Lo que se controla entre un recuento y el
+// siguiente es siempre el total, así que cambiar cualquiera de las dos no corta el control.
+const AjustesDeRopa: React.FC<{ ropa: Ropa; onCambio: () => Promise<void> }> = ({ ropa, onCambio }) => {
+  const { toast } = useToast();
+  const guardar = async (accion: () => Promise<unknown>, aviso: string, error: string) => {
+    try {
+      await accion();
+      toast(aviso, 'success');
+      await onCambio();
+    } catch (e) {
+      toast(getErrorMessage(e, error), 'error');
+    }
+  };
+  return (
+    <section className="divide-y divide-line rounded-lg border border-line bg-surface px-5 py-3.5">
+      <Ajuste
+        titulo="Cómo cuentan los conserjes"
+        nota="Un cambio rige desde el próximo recuento; el control de faltantes sigue igual, porque compara el total."
+        opciones={FORMAS}
+        valor={ropa.por_estado}
+        onElegir={(valor) =>
+          guardar(
+            () => api.formaDeContarRopa(valor),
+            valor ? 'Desde el próximo recuento se cuenta por estado.' : 'Desde el próximo recuento se cuenta todo junto.',
+            'No se pudo cambiar la forma de contar.',
+          )
+        }
+      />
+      <Ajuste
+        titulo="Lavandería"
+        nota="Los conserjes ven solo las opciones que corresponden; lo ya anotado no cambia."
+        opciones={LAVANDERIAS}
+        valor={ropa.lavanderia_propia}
+        onElegir={(valor) =>
+          guardar(
+            () => api.lavanderiaPropia(valor),
+            valor ? 'Listo: la ropa se lava en el motel.' : 'Listo: la ropa va a una lavandería de afuera.',
+            'No se pudo cambiar la lavandería.',
+          )
+        }
+      />
     </section>
   );
 };
 
-const TarjetaPrenda: React.FC<{ fila: Ropa['resumen'][number]; dias: number }> = ({ fila: r, dias }) => {
+const TarjetaPrenda: React.FC<{ fila: Ropa['resumen'][number]; dias: number; deAfuera: boolean }> = ({
+  fila: r,
+  dias,
+  deAfuera,
+}) => {
   const Icono = PRENDAS.find((p) => p.prenda === r.prenda)?.icon ?? Layers;
   const conPartes = r.limpias !== null && r.sucias !== null && r.en_habitaciones !== null && !!r.total;
   return (
@@ -104,7 +177,7 @@ const TarjetaPrenda: React.FC<{ fila: Ropa['resumen'][number]; dias: number }> =
             {r.contado_en ? `Último recuento: ${formatDateTime(r.contado_en)} · ${r.contado_por}` : 'Sin recuentos todavía.'}
           </p>
         </div>
-        {r.en_lavanderia > 0 && (
+        {deAfuera && r.en_lavanderia > 0 && (
           <span className="flex shrink-0 items-center gap-1.5 rounded-full bg-surface-2 px-2.5 py-1 text-xs text-ink">
             <Truck className="h-3.5 w-3.5 text-muted" aria-hidden="true" />
             <span className="tabular-nums">{r.en_lavanderia}</span> en lavandería
@@ -227,7 +300,7 @@ const CeldaPrenda: React.FC<{ prenda?: PrendaContada }> = ({ prenda: p }) =>
   !p ? (
     <td className="py-2.5 pl-4 text-subtle">—</td>
   ) : (
-    <td className="py-2.5 pl-4 align-top">
+    <td className="py-2.5 pl-4 align-top max-sm:flex-1" data-etiqueta={p.etiqueta}>
       <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
         <span className="font-semibold tabular-nums text-ink">{p.total}</span>
         <Control valor={p.diferencia} />
@@ -268,7 +341,7 @@ const Recuentos: React.FC<{ recuentos: RecuentoAgrupado[] }> = ({ recuentos }) =
       ) : (
         <>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[36rem] text-sm">
+            <table className="tabla-movil sin-margen w-full min-w-[36rem] text-sm">
               <thead>
                 <tr className="border-b border-line text-left text-xs text-muted">
                   <th scope="col" className="py-2 font-medium">Cuándo</th>
@@ -283,11 +356,14 @@ const Recuentos: React.FC<{ recuentos: RecuentoAgrupado[] }> = ({ recuentos }) =
               <tbody className="divide-y divide-line">
                 {visibles.map((r) => (
                   <tr key={r.clave}>
-                    <td className="py-2.5 align-top">
-                      <span className="block text-ink">{MOMENTO[r.momento]}</span>
-                      <span className="block text-xs text-muted">{formatDateTime(r.creado_en)}</span>
+                    <td className="principal py-2.5 align-top">
+                      <span className="block text-ink">
+                        {MOMENTO[r.momento]}
+                        <span className="font-normal text-muted sm:hidden"> · {r.operador}</span>
+                      </span>
+                      <span className="block text-xs font-normal text-muted">{formatDateTime(r.creado_en)}</span>
                     </td>
-                    <td className="py-2.5 pl-4 align-top text-ink">{r.operador}</td>
+                    <td className="py-2.5 pl-4 align-top text-ink max-sm:hidden">{r.operador}</td>
                     {PRENDAS.map((p) => (
                       <CeldaPrenda key={p.prenda} prenda={r.prendas.find((x) => x.prenda === p.prenda)} />
                     ))}
@@ -307,14 +383,14 @@ const Recuentos: React.FC<{ recuentos: RecuentoAgrupado[] }> = ({ recuentos }) =
   );
 };
 
-// Lo que la gerencia ve de la ropa: cuánta hay, dónde faltó y cada recuento. Y elige cómo se cuenta.
+// Lo que la gerencia ve de la ropa: cuánta hay, dónde faltó y cada recuento. Y elige cómo se cuenta y quién lava.
 const RopaGerencia: React.FC<{ ropa: Ropa; onCambio: () => Promise<void> }> = ({ ropa, onCambio }) => (
   <div className="space-y-5">
-    <FormaDeContar porEstado={ropa.por_estado} onCambio={onCambio} />
+    <AjustesDeRopa ropa={ropa} onCambio={onCambio} />
 
     <div className="grid gap-5 lg:grid-cols-2">
       {ropa.resumen.map((r) => (
-        <TarjetaPrenda key={r.prenda} fila={r} dias={ropa.por_persona.dias} />
+        <TarjetaPrenda key={r.prenda} fila={r} dias={ropa.por_persona.dias} deAfuera={!ropa.lavanderia_propia} />
       ))}
     </div>
 
@@ -322,7 +398,14 @@ const RopaGerencia: React.FC<{ ropa: Ropa; onCambio: () => Promise<void> }> = ({
 
     <Recuentos recuentos={ropa.recuentos} />
 
-    <Tarjeta titulo="Lo que entró y salió" detalle="Lavandería, compras y bajas que anotaron los conserjes en su guardia.">
+    <Tarjeta
+      titulo="Lo que entró y salió"
+      detalle={
+        ropa.lavanderia_propia
+          ? 'Compras y bajas que anotaron los conserjes en su guardia.'
+          : 'Lavandería, compras y bajas que anotaron los conserjes en su guardia.'
+      }
+    >
       {ropa.movimientos.length === 0 ? (
         <Vacio>No hay movimientos anotados.</Vacio>
       ) : (

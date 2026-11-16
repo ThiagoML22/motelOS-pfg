@@ -39,6 +39,8 @@
   --viz-1: 42 120 214;
   --viz-2: 235 104 52;
   --viz-3: 27 175 122;
+  /* Neutro, para lo que sobra: «Otro» va al final y en gris. */
+  --viz-4: 150 154 166;
   --viz-grid: 225 224 217;
   --viz-axis: 195 194 183;
 }
@@ -77,6 +79,7 @@
   --viz-1: 57 135 229;
   --viz-2: 217 89 38;
   --viz-3: 25 158 112;
+  --viz-4: 112 120 140;
   --viz-grid: 44 50 66;
   --viz-axis: 60 70 92;
 }
@@ -84,6 +87,39 @@
 /* El logo es oscuro sobre transparente: en modo oscuro se aclara. */
 :root[data-theme='dark'] .logo {
   filter: invert(1) hue-rotate(180deg) brightness(1.15);
+}
+
+/* El logo con el color del motel (ui/Logo.tsx): dos máscaras sacadas de logo.png, pintadas con la tinta y el acento. El
+   color cambia con una transición corta, al elegir otro en Configuración o al pasar de claro a oscuro. */
+.logo-marca {
+  position: relative;
+  display: inline-block;
+  aspect-ratio: 900 / 181;
+}
+
+.logo-marca > span {
+  position: absolute;
+  inset: 0;
+  -webkit-mask: var(--logo-capa) center / contain no-repeat;
+  mask: var(--logo-capa) center / contain no-repeat;
+  transition: background-color 400ms ease;
+}
+
+.logo-tinta {
+  --logo-capa: url('/logo-tinta.png');
+  background-color: rgb(var(--ink));
+}
+
+.logo-acento {
+  --logo-capa: url('/logo-acento.png');
+  background-color: rgb(var(--accent));
+}
+
+@media (forced-colors: active) {
+  .logo-marca > span {
+    forced-color-adjust: none;
+    background-color: CanvasText;
+  }
 }
 
 /* Cambio de tema: la página nueva aparece en una onda de borde suave que nace del botón (View Transitions). Un resplandor
@@ -565,6 +601,79 @@
 
 [data-theme='dark'] .chip-categoria {
   color: color-mix(in srgb, var(--chip) 45%, white);
+}
+
+/* Tablas en el celular: cada fila es una tarjeta, sin deslizar de costado. La celda «principal» va arriba y a lo ancho;
+   las que tienen data-etiqueta muestran su nombre antes del valor; las «acciones» van abajo, con botones grandes. */
+@media (max-width: 639.98px) {
+  .tabla-movil {
+    display: block;
+    width: 100%;
+    min-width: 0 !important;
+  }
+  .tabla-movil thead {
+    display: none;
+  }
+  .tabla-movil tbody {
+    display: block;
+  }
+  .tabla-movil tr {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    column-gap: 0.875rem;
+    row-gap: 0.25rem;
+    padding: 0.875rem 1rem;
+  }
+  .tabla-movil.sin-margen tr {
+    padding-left: 0;
+    padding-right: 0;
+  }
+  .tabla-movil td {
+    display: block;
+    padding: 0 !important;
+    text-align: left !important;
+    white-space: normal !important;
+  }
+  .tabla-movil td[data-etiqueta]::before {
+    content: attr(data-etiqueta);
+    margin-right: 0.375rem;
+    font-size: 0.75rem;
+    font-weight: 400;
+    color: rgb(var(--muted));
+  }
+  .tabla-movil td.principal {
+    order: -1;
+    flex-basis: 100%;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: rgb(var(--ink));
+  }
+  .tabla-movil td.ancha,
+  .tabla-movil td.vacia {
+    flex-basis: 100%;
+  }
+  .tabla-movil td.vacia {
+    text-align: center !important;
+  }
+  .tabla-movil td.acciones {
+    flex-basis: 100%;
+    margin-top: 0.5rem;
+  }
+  .tabla-movil td.acciones > div {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+  .tabla-movil td.acciones button {
+    flex: 1 1 auto;
+  }
+}
+
+/* Los diálogos, en el celular, suben desde abajo como una hoja (ui/Modal.tsx). */
+@media (max-width: 639.98px) {
+  .modal-hoja {
+    animation: hoja-subir 260ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+  }
 }
 
 /* La hoja que sube desde abajo en la página del cliente. */

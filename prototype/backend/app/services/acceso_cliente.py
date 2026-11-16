@@ -8,8 +8,9 @@ El cliente no ve la patente, ni quién atiende, ni nada de la caja. Un pedido no
 lo atiende, y recién ahí se carga como consumo con las reglas de siempre. Avisar que se queda más o pedir la cuenta
 tampoco cobra nada: lo que se paga sale siempre del tiempo real y se cobra en la ventanilla.
 
-Mot responde lo mismo que la pantalla ya sabe, con botones: el cliente no escribe texto libre. Se puede calificar hasta
-una hora después del cobro; el resto del enlace deja de servir al cerrar el turno.
+Mot responde lo mismo que la pantalla ya sabe, con botones: el cliente no le escribe texto libre. Lo único que escribe
+es la reseña de la calificación, de seis palabras como máximo y con el filtro de app/services/moderacion.py. Se puede
+calificar hasta una hora después del cobro; el resto del enlace deja de servir al cerrar el turno.
 """
 
 import base64
@@ -28,7 +29,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.models.articulo import Articulo
-from app.models.calificacion import PROBLEMAS, VENTANA_DESPUES_DEL_COBRO_MIN, Calificacion
+from app.models.calificacion import (
+    LARGO_RESENA,
+    PALABRAS_RESENA,
+    PROBLEMAS,
+    VENTANA_DESPUES_DEL_COBRO_MIN,
+    Calificacion,
+)
 from app.models.categoria import CategoriaHabitacion
 from app.models.consumo import Consumo
 from app.models.establecimiento import Establecimiento
@@ -51,6 +58,7 @@ from app.models.pedido_cliente import (
 )
 from app.models.tarifa import Tarifa
 from app.models.turno import Turno
+from app.services import moderacion
 from app.services.actividad import pesos
 from app.services.billing_service import calcular_sobreturno
 from app.services.liquidacion import con_zona, liquidar_turno
@@ -374,12 +382,36 @@ async def pedir(
     return {"ok": True}
 
 
-async def calificar(db: AsyncSession, turno: Turno, puntaje: int, problemas: int) -> dict:
+def _resena(texto: str | None) -> str | None:
+    """La reseña lista para guardar, o un 422 que le dice al cliente qué cambiar."""
+    resena = moderacion.limpiar(texto or "")
+    if not resena:
+        return None
+    if moderacion.contar_palabras(resena) > PALABRAS_RESENA:
+        raise HTTPException(status_code=422, detail=f"La reseña va en {PALABRAS_RESENA} palabras como máximo.")
+    if len(resena) > LARGO_RESENA:
+        raise HTTPException(status_code=422, detail=f"La reseña va en {LARGO_RESENA} letras como máximo.")
+    motivo = moderacion.revisar(resena)
+    if motivo:
+        raise HTTPException(status_code=422, detail=motivo)
+    return resena
+
+
+async def calificar(db: AsyncSession, turno: Turno, puntaje: int, problemas: int, resena: str | None = None) -> dict:
+    texto = _resena(resena)
     if not _puede_calificar(turno, datetime.now(UTC)):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Pasó el tiempo para calificar esta estadía.")
     if await _calificacion(db, turno) is not None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Ya calificaste esta estadía. ¡Gracias!")
-    db.add(Calificacion(turno_id=turno.id, habitacion_id=turno.habitacion_id, puntaje=puntaje, problemas=problemas))
+    db.add(
+        Calificacion(
+            turno_id=turno.id,
+            habitacion_id=turno.habitacion_id,
+            puntaje=puntaje,
+            problemas=problemas,
+            resena=texto,
+        )
+    )
     try:
         await db.commit()
     except IntegrityError:

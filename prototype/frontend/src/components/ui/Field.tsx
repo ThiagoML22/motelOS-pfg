@@ -9,10 +9,11 @@ interface FieldProps {
   hint?: string;
   error?: string;
   children: React.ReactNode;
+  className?: string;
 }
 
-const Field: React.FC<FieldProps> = ({ label, htmlFor, hint, error, children }) => (
-  <div>
+const Field: React.FC<FieldProps> = ({ label, htmlFor, hint, error, children, className }) => (
+  <div className={className}>
     <label htmlFor={htmlFor} className="mb-1.5 block text-xs font-medium text-muted">
       {label}
     </label>
