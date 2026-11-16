@@ -1,7 +1,6 @@
-services:
+﻿services:
   db:
-    image: postgres:16
-    container_name: motel_db
+    image: postgres:16.15
     restart: always
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
@@ -9,7 +8,7 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-motel_db}
     ports:
       # Solo desde la propia máquina: la base no se expone a la red.
-      - "127.0.0.1:5432:5432"
+      - "127.0.0.1:${DB_PORT:-5432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
       # Las migraciones se aplican en orden numérico, con el usuario dueño, al crear la base vacía.
@@ -21,10 +20,9 @@ services:
       retries: 5
 
   backend:
-    build: 
+    build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: motel_backend
     restart: always
     environment:
       # La aplicación usa el rol motel_app (db/migraciones), que no es dueño de las tablas ni puede
@@ -36,10 +34,14 @@ services:
       JWT_SECRET: ${JWT_SECRET:?Definir JWT_SECRET en .env}
       COOKIE_SECURE: ${COOKIE_SECURE:-False}
       ENTORNO: ${ENTORNO:-desarrollo}
-      # Fondo de cambio de cada caja, en pesos (acta del 19/10/2026, punto 5).
+      # Fondo de cambio de respaldo (el vigente vive en la base, migración 005).
       FONDO_INICIAL_CAJA: ${FONDO_INICIAL_CAJA:-25000}
+      # Dirección de la ventanilla en la red del motel, para el QR de los comprobantes y del cliente.
+      URL_PUBLICA: ${URL_PUBLICA:-}
+      # Recuento de toallas y sábanas obligatorio al abrir y cerrar una guardia (migración 016).
+      EXIGIR_RECUENTO_ROPA: ${EXIGIR_RECUENTO_ROPA:-True}
     ports:
-      - "127.0.0.1:8000:8000"
+      - "127.0.0.1:${API_PORT:-8000}:8000"
     depends_on:
       db:
         condition: service_healthy
@@ -50,10 +52,9 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: motel_frontend
     restart: always
     ports:
-      - "5173:5173"
+      - "127.0.0.1:${WEB_PORT:-5173}:5173"
     environment:
       VITE_API_URL: ${VITE_API_URL:-http://localhost:8000/api/v1}
       # Docker Desktop en Windows no avisa los cambios de archivos de la carpeta montada: Vite los sondea.
@@ -65,7 +66,7 @@ services:
       - /app/node_modules
 
   # Tareas de administración con el usuario dueño de las tablas (alta de operadores, datos de
-  # demostración). No corre con la aplicación: se invoca con `docker compose run --rm admin ...`.
+  # demostración). No corre con la aplicación: se invoca con `docker compose --profile admin run --rm admin ...`.
   # La API nunca recibe estas credenciales.
   admin:
     build:

@@ -97,6 +97,10 @@ export interface HabitacionConDetalles extends Habitacion {
   turno_activo?: Turno | null;
   // Arreglos sin resolver: la grilla los marca con un ícono.
   arreglos_abiertos?: number;
+  // RF-12: solo En Limpieza. Minutos calculados por el servidor; demora si superan los 30 min.
+  en_limpieza_desde?: string | null;
+  minutos_en_limpieza?: number | null;
+  demora_limpieza?: boolean;
 }
 
 // --- Sesión y caja (prototipo v2) ---
