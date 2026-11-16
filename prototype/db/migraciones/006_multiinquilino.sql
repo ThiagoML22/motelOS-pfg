@@ -1,5 +1,5 @@
 -- db/migraciones/006_multiinquilino.sql
--- Demostracion del Sprint 4 (copia local, no entregada): MotelOS como servicio para varios establecimientos.
+-- Prototipo v3 (Sprint 4, AE4): MotelOS como servicio para varios establecimientos.
 -- Se aplica con el usuario dueno de las tablas, despues de 005_panel_configuracion.sql.
 --
 -- Modelo elegido: una sola base y un solo esquema compartidos, con la columna establecimiento_id en cada tabla

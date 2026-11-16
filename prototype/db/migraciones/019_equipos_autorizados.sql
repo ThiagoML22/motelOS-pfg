@@ -1,5 +1,5 @@
 -- db/migraciones/019_equipos_autorizados.sql
--- Demostracion del Sprint 4 (copia local, no entregada): el conserje entra solo desde equipos que autorizo la gerencia.
+-- Prototipo v3 (Sprint 4, AE4): el conserje entra solo desde equipos que autorizo la gerencia.
 -- Se aplica con el usuario dueno de las tablas, despues de 018_lavanderia_otro_resena.sql.
 --
 -- Filtrar solo por direccion IP no alcanza: dentro del motel, el celular conectado al Wi-Fi tiene una IP de la misma red

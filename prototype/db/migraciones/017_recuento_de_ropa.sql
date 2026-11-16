@@ -1,5 +1,5 @@
 -- db/migraciones/017_recuento_de_ropa.sql
--- Demostracion del Sprint 4 (copia local, no entregada): cada establecimiento elige como cuenta su ropa.
+-- Prototipo v3 (Sprint 4, AE4): cada establecimiento elige como cuenta su ropa.
 -- Se aplica con el usuario dueno de las tablas, despues de 016_operacion_diaria.sql.
 --
 -- Hay moteles que cuentan las toallas y las sabanas separadas en limpias, sucias y en uso, y otros que las cuentan todas

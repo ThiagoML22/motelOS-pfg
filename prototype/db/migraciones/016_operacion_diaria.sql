@@ -1,5 +1,5 @@
 -- db/migraciones/016_operacion_diaria.sql
--- Demostracion del Sprint 4 (copia local, no entregada): operacion diaria.
+-- Prototipo v3 (Sprint 4, AE4): operacion diaria.
 -- Se aplica con el usuario dueno de las tablas, despues de 015_cliente_ampliado.sql.
 --
 -- Traslado de un turno a otra habitacion, arreglos por habitacion, recuento de toallas y sabanas en cada guardia y

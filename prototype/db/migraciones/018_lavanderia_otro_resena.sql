@@ -1,5 +1,5 @@
 -- db/migraciones/018_lavanderia_otro_resena.sql
--- Demostracion del Sprint 4 (copia local, no entregada): lavanderia propia, motivo «Otro» y resena corta del cliente.
+-- Prototipo v3 (Sprint 4, AE4): lavanderia propia, motivo «Otro» y resena corta del cliente.
 -- Se aplica con el usuario dueno de las tablas, despues de 017_recuento_de_ropa.sql.
 --
 -- 1. La mayoria de los moteles lava su propia ropa: entonces la ropa nunca sale del motel y el conserje solo anota lo que

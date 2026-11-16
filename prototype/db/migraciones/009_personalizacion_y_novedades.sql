@@ -1,5 +1,5 @@
 -- db/migraciones/009_personalizacion_y_novedades.sql
--- Demostracion del Sprint 4 (copia local, no entregada): apariencia y avisos de cada establecimiento, y novedades
+-- Prototipo v3 (Sprint 4, AE4): apariencia y avisos de cada establecimiento, y novedades
 -- que se dejan entre guardias. Se aplica con el usuario dueno de las tablas, despues de 008_categorias_y_perfil.sql.
 
 -- ---------------------------------------------------------------------------------------------------

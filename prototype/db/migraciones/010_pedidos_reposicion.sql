@@ -1,5 +1,5 @@
 -- db/migraciones/010_pedidos_reposicion.sql
--- Demostracion del Sprint 4 (copia local, no entregada): pedidos de reposicion a proveedores.
+-- Prototipo v3 (Sprint 4, AE4): pedidos de reposicion a proveedores.
 -- Se aplica con el usuario dueno de las tablas, despues de 009_personalizacion_y_novedades.sql.
 --
 -- La gerencia arma un pedido (por ejemplo, con la reposicion sugerida por la inteligencia) y lo manda al proveedor.

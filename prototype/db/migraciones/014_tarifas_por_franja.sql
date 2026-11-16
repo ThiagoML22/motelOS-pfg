@@ -1,5 +1,5 @@
 -- db/migraciones/014_tarifas_por_franja.sql
--- Demostracion del Sprint 4 (copia local, no entregada): tarifas especiales por dia y franja horaria.
+-- Prototipo v3 (Sprint 4, AE4): tarifas especiales por dia y franja horaria.
 -- Se aplica con el usuario dueno de las tablas, despues de 013_pedidos_del_cliente.sql.
 --
 -- Una categoria sigue teniendo su tarifa general y puede sumar franjas: «viernes y sabado de 20 a 6». La franja dice

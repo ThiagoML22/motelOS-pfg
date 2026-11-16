@@ -1,5 +1,5 @@
 -- db/migraciones/020_qr_fijo_habitacion.sql
--- Demostracion del Sprint 4 (copia local, no entregada): un QR fijo en cada habitacion, sin hablar con la ventanilla.
+-- Prototipo v3 (Sprint 4, AE4): un QR fijo en cada habitacion, sin hablar con la ventanilla.
 -- Se aplica con el usuario dueno de las tablas, despues de 019_equipos_autorizados.sql.
 --
 -- El QR fijo dice que habitacion es (firmado por el servidor, con una version que la gerencia puede cambiar si se

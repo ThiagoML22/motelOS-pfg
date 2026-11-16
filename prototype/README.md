@@ -10,13 +10,13 @@
 * **Asignatura:** Proyecto Final de Grado · Comisión A · Sede Posadas · Universidad de la Cuenca del Plata
 * **Docente titular:** PosDr. Darío Ezequiel Díaz
 * **Autor:** Thiago Martino Leal (proyecto individual)
-* **Actividad y etiqueta:** Actividad de Evaluación N.º 4 (AE4) · prototipo v3 (etiqueta `v3`). Se integró por etapas en la rama `ae4/v3` (solicitudes #22 a #27 y la de entrega). Las etiquetas `v2` (AE3) y `v1.2` (AE2) siguen disponibles.
+* **Actividad y etiqueta:** Actividad de Evaluación N.º 4 (AE4) · prototipo v3 (etiqueta `v3`). Se integró por etapas en la rama `ae4/v3` (solicitudes #22 a #28) y en etapas directas a main (#30 a #34). Las etiquetas `v2` (AE3) y `v1.2` (AE2) siguen disponibles.
 
 ---
 
 ## 2. Qué hace este prototipo
 
-### Lo que agrega el v3 (Sprint 4, migraciones 005 a 017; todo validado con la gerencia en las actas del 27/10 y del 11/11/2026)
+### Lo que agrega el v3 (Sprint 4, migraciones 005 a 020)
 
 | Requisito o función | Qué hace el v3 |
 | :--- | :--- |
@@ -30,6 +30,11 @@
 | Página del cliente | Ticket con QR de enlace firmado, sin cuenta ni datos personales: estadía, pedidos al minibar, pedir la cuenta, calificación anónima |
 | Operación diaria | Traslado de turno, arreglos por habitación, traspaso de guardia y recuento de toallas y sábanas, a ciegas y obligatorio al cerrar |
 | RF-12 | La grilla marca «Demora de limpieza» con los minutos en las habitaciones que pasan más de 30 min En Limpieza. Los minutos los calcula el servidor con el historial de estados (`DEMORA_LIMPIEZA_MIN`) |
+| Mot entiende el habla normal | Muletillas, abreviaturas, lunfardo, preguntas compuestas, comparaciones de períodos y seguimientos («¿por qué?», «¿es mucho?»). Se mide con dos bancos de frases (`test_mot_lenguaje.py`, al menos 95 % en cada uno) |
+| QR fijo en cada habitación | Además del ticket: el primer celular que escanea el QR de la habitación durante una estadía queda vinculado a ella (cookie aleatoria, la base guarda su resumen SHA-256); los demás ven solo la carta. La gerencia invalida un QR filtrado cambiando su versión (migración 020) |
+| Lavandería y reseñas | La gerencia elige lavandería propia o de afuera; el cliente deja una reseña corta, con filtro de insultos y de datos de contacto (migración 018) |
+| Equipos autorizados | Si la gerencia lo activa, el conserje entra solo desde los equipos que ella autorizó (cookie httpOnly propia de cada navegador) y, opcionalmente, solo desde las redes del motel. Viene apagado (migración 019) |
+| Uso desde el celular | La ventanilla, la gerencia y Mi perfil se adaptan al celular |
 
 RNF-06 y el despliegue en la nube quedan en la hoja de ruta. El detalle está en el informe (Capítulos IX, XI y XIII).
 
@@ -151,8 +156,8 @@ docker compose exec db psql -U postgres -d motel_db -c "UPDATE arqueos_caja SET 
 
 * **Backend (Python 3.12 y PostgreSQL 16):**
   * Ruff y `pip-audit` (falla si hay vulnerabilidades publicadas).
-  * Pruebas sobre PostgreSQL con corte de cobertura en 70 % (RNF-07): 633 en el v3, con 96,7 % de cobertura de liquidación y caja.
-  * Las migraciones 001 a 017 y 16 verificaciones SQL con el rol `motel_app` (inmutabilidad, permisos, cierre de caja, panel, aislamiento entre establecimientos, sellos, tarifas especiales, operación y recuento de ropa, entre otras), más la migración desde una base v1.2 con datos.
+  * Pruebas sobre PostgreSQL con corte de cobertura en 70 % (RNF-07): 761 en el v3, con 96,7 % de cobertura de liquidación y caja.
+  * Las migraciones 001 a 020 y 19 verificaciones SQL con el rol `motel_app` (inmutabilidad, permisos, cierre de caja, panel, aislamiento entre establecimientos, sellos, tarifas especiales, operación y recuento de ropa, entre otras), más la migración desde una base v1.2 con datos.
   * Seis recorridos de punta a punta con la API corriendo como `motel_app` sobre el esquema migrado, y la medición de latencia de RNF-02, que se guarda como artefacto de la corrida.
 * **Frontend (Node 20):** `npm audit` de las dependencias de producción, verificación de tipos y compilación.
 
@@ -177,11 +182,11 @@ Conforme al Protocolo de Uso Autorizado de Inteligencia Artificial:
 * **Herramienta:** Claude Code, la única herramienta de asistencia que usa el autor, en todo el código del prototipo.
 * **Trailer en los commits:**
   * Llevan el trailer `Co-Authored-By: Claude Code` los commits de la v1 a la v2, los del panel de configuración (RF-11) y los de integración y entrega del v3.
-  * No lo llevan los 34 commits de la demo del Sprint 4 (02/11 al 10/11/2026, de a8595a1 a 80e5806, integrados en las solicitudes #22 a #27), aunque también se hicieron con Claude Code.
+  * No lo llevan los 44 commits de la demo del Sprint 4 (02/11 al 15/11/2026, de a8595a1 a 4957d2d, integrados en las solicitudes #22 a #27 y #32 a #34), aunque también se hicieron con Claude Code.
   * No se reescribieron, para conservar sus hashes y sus fechas. Su declaración, commit por commit, está en la Bitácora Individual de la AE4.
 * **Uso en el v2:** implementación de la migración 002 y las verificaciones SQL, la autenticación, el servicio de caja y los reportes, las pantallas de ingreso, guardia, cierre de caja y gerencia, las pruebas, los scripts de recorrido y de latencia, y este archivo.
 * **Uso en el v3:**
-  * Migraciones 005 a 017 y sus verificaciones SQL.
+  * Migraciones 005 a 020 y sus verificaciones SQL.
   * Servicios y rutas del panel, del multiinquilino, del registro de actividad, del PDF, de la inteligencia local y del asistente.
   * Página del cliente, operación diaria, pantallas, pruebas, recorridos, el manual de despliegue y este archivo.
 * **Decisiones del autor en el v3:**
@@ -193,8 +198,8 @@ Conforme al Protocolo de Uso Autorizado de Inteligencia Artificial:
   * Las funciones de operación pedidas por el autor a partir del relevamiento.
 * **Decisiones del autor:** el cierre ciego por guardia, la imputación del cobro a la guardia que atiende, los roles, la separación entre el dueño de las tablas y el rol de la aplicación y las preguntas abiertas para la gerencia.
 * **Verificación:**
-  * 633 pruebas automáticas en PostgreSQL 16 (631 en SQLite).
-  * 16 verificaciones SQL con el rol de la aplicación.
+  * 761 pruebas automáticas en PostgreSQL 16 (759 en SQLite).
+  * 19 verificaciones SQL con el rol de la aplicación.
   * Seis recorridos de punta a punta contra la API.
   * La medición de latencia.
   * El recorrido del manual de despliegue sobre un clon limpio, a 1366 × 768.

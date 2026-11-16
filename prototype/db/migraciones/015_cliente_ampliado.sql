@@ -1,5 +1,5 @@
 -- db/migraciones/015_cliente_ampliado.sql
--- Demostracion del Sprint 4 (copia local, no entregada): la pagina del cliente, ampliada.
+-- Prototipo v3 (Sprint 4, AE4): la pagina del cliente, ampliada.
 -- Se aplica con el usuario dueno de las tablas, despues de 014_tarifas_por_franja.sql.
 --
 -- Un carrito es un solo pedido: sus lineas comparten `lote`. Un pedido pasa por recibido, en camino y entregado. El

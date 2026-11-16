@@ -1,5 +1,5 @@
 -- db/migraciones/011_historial_y_clientes_perdidos.sql
--- Demostracion del Sprint 4 (copia local, no entregada): historial de estados de las habitaciones y clientes perdidos.
+-- Prototipo v3 (Sprint 4, AE4): historial de estados de las habitaciones y clientes perdidos.
 -- Se aplica con el usuario dueno de las tablas, despues de 010_pedidos_reposicion.sql.
 --
 -- Hasta aca cada habitacion guardaba solo su estado actual: no se podia saber cuanto tarda una limpieza ni ver una
