@@ -18,7 +18,9 @@ Este manual permite que una persona que no escribió el sistema lo clone, lo lev
 - **Varios establecimientos en una base compartida**, con Row Level Security.
 - Categorías de habitación con su tarifa y tarifas especiales por día y hora.
 - Inteligencia local de la gerencia y asistente (Mot), sin servicios externos.
-- Comprobantes verificables, página del cliente con QR y operación diaria (traslados, arreglos, traspaso de guardia, recuento de ropa).
+- Comprobantes verificables, página del cliente con QR (en el ticket o fijo en cada habitación) y operación diaria (traslados, arreglos, traspaso de guardia, recuento de ropa, lavandería).
+- **Marca de demora de limpieza** (RF-12).
+- Uso desde el celular y equipos autorizados para el ingreso de los conserjes (apagado al instalar).
 
 ---
 
@@ -95,7 +97,7 @@ Al final de `.env.example`, comentados, están los parámetros con valor por def
 
 ## 5. Base de datos
 
-**Crear el esquema.** No hay que ejecutar nada a mano. Al crear la base vacía, PostgreSQL aplica en orden, con el usuario dueño, las migraciones `db/migraciones/001_esquema_v1.sql` a `017_recuento_de_ropa.sql`. Ocurre durante el primer arranque (sección 6).
+**Crear el esquema.** No hay que ejecutar nada a mano. Al crear la base vacía, PostgreSQL aplica en orden, con el usuario dueño, las migraciones `db/migraciones/001_esquema_v1.sql` a `020_qr_fijo_habitacion.sql`. Ocurre durante el primer arranque (sección 6).
 
 **Cargar los datos de demostración:** después del arranque, con la base ya creada.
 
@@ -200,7 +202,7 @@ docker compose run --rm --no-deps backend sh -c "pip install -q -r requirements-
 
 Instala las herramientas de prueba (`requirements-dev.txt`) en un contenedor descartable y corre las pruebas sobre SQLite en memoria.
 
-- **Resultado esperado:** `631 passed, 2 skipped`. Las 2 omitidas son carreras de concurrencia que solo corren sobre PostgreSQL, en el canal.
+- **Resultado esperado:** `759 passed, 2 skipped`. Las 2 omitidas son carreras de concurrencia que solo corren sobre PostgreSQL, en el canal.
 - **Duración:** en Windows con Docker Desktop, unos 11 minutos.
 - **Falla esporádica:** en SQLite, alguna prueba puede fallar muy de vez en cuando porque SQLite lee como número un identificador al azar. Al repetir el comando, pasa.
 
@@ -210,13 +212,13 @@ Instala las herramientas de prueba (`requirements-dev.txt`) en un contenedor des
 powershell -ExecutionPolicy Bypass -File db/verificar_local.ps1
 ```
 
-Aplica las 17 migraciones y corre las 16 verificaciones SQL con el rol `motel_app` (permisos, inmutabilidad, aislamiento entre establecimientos y demás). Termina con «Todas las verificaciones SQL pasaron.».
+Aplica las 20 migraciones y corre las 19 verificaciones SQL con el rol `motel_app` (permisos, inmutabilidad, aislamiento entre establecimientos y demás). Termina con «Todas las verificaciones SQL pasaron.».
 
 **Canal de integración continua (`.github/workflows/ci.yml`):** en cada cambio corre:
 - Ruff y `pip-audit`.
-- Las pruebas sobre PostgreSQL 16 (633 en la v3, con cobertura de liquidación y caja de 96 % y un corte en 70 %).
-- Las 16 verificaciones SQL y la migración desde una base v1.2 con datos.
-- Seis recorridos de punta a punta con la API conectada como `motel_app`, y la medición de latencia de RNF-02 (P95 de unos 50 ms contra un umbral de 800 ms).
+- Las pruebas sobre PostgreSQL 16 (761 en la v3, con cobertura de liquidación y caja de 96 % y un corte en 70 %).
+- Las 19 verificaciones SQL y la migración desde una base v1.2 con datos.
+- Seis recorridos de punta a punta con la API conectada como `motel_app`, y la medición de latencia de RNF-02 (P95 de unos 55 ms contra un umbral de 800 ms).
 - `npm audit`, la verificación de tipos y la compilación de la interfaz.
 
 La última corrida en verde se cita en la entrega.
@@ -234,6 +236,7 @@ La última corrida en verde se cita en la entrega.
 | Errores de esquema después de cambiar de versión | Las migraciones se aplican solo sobre una base vacía: `docker compose down -v` y volver a levantar |
 | El conserje no puede operar: «no hay una guardia abierta» | Abrirla primero (paso 1 de la sección 8) |
 | Otro conserje tiene la guardia abierta | Hay una sola ventanilla: cerrarla con su arqueo, o que la gerencia use el cierre supervisado (Control de caja) |
+| «Este equipo no está autorizado» al ingresar un conserje | La gerencia activó el control de equipos (Configuración → Equipos): debe autorizar ese equipo, que ya figura como pendiente. Con los datos de demostración el control viene apagado |
 | Docker Desktop no arranca en Windows | Cerrarlo desde la bandeja del sistema y volver a abrirlo. No usar «Reset to factory defaults», que borra todas las imágenes |
 | Cambios en el código que no se ven en la interfaz | En Windows, Vite sondea los archivos cada pocos segundos; si no alcanza, `docker compose restart frontend` |
 

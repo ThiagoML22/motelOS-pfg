@@ -1,5 +1,5 @@
 -- db/migraciones/012_sellos_de_arqueo.sql
--- Demostracion del Sprint 4 (copia local, no entregada): comprobantes verificables.
+-- Prototipo v3 (Sprint 4, AE4): comprobantes verificables.
 -- Se aplica con el usuario dueno de las tablas, despues de 011_historial_y_clientes_perdidos.sql.
 --
 -- Cada arqueo recibe una huella (SHA-256) calculada con sus datos, sus cobros y la huella del arqueo anterior: una

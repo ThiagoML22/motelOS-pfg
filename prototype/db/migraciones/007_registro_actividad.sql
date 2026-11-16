@@ -1,5 +1,5 @@
 -- db/migraciones/007_registro_actividad.sql
--- Demostracion del Sprint 4 (copia local, no entregada): registro de actividad para la gerencia.
+-- Prototipo v3 (Sprint 4, AE4): registro de actividad para la gerencia.
 -- Se aplica con el usuario dueno de las tablas, despues de 006_multiinquilino.sql.
 --
 -- Cada cambio de inventario (alta de un articulo, reposicion de stock, precio, baja) y de configuracion (tarifa,

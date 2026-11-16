@@ -1,5 +1,5 @@
 -- db/migraciones/013_pedidos_del_cliente.sql
--- Demostracion del Sprint 4 (copia local, no entregada): pedidos del cliente desde su habitacion.
+-- Prototipo v3 (Sprint 4, AE4): pedidos del cliente desde su habitacion.
 -- Se aplica con el usuario dueno de las tablas, despues de 012_sellos_de_arqueo.sql.
 --
 -- Con el QR de su ticket, el cliente ve su tiempo y su cuenta y pide algo del minibar o avisa algo a la ventanilla, sin

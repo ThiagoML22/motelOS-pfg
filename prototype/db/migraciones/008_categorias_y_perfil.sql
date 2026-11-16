@@ -1,5 +1,5 @@
 -- db/migraciones/008_categorias_y_perfil.sql
--- Demostracion del Sprint 4 (copia local, no entregada): categorias de habitacion con su propia tarifa, y perfil
+-- Prototipo v3 (Sprint 4, AE4): categorias de habitacion con su propia tarifa, y perfil
 -- de cada usuario (nombre visible y clave propia). Se aplica con el usuario dueno de las tablas, despues de la 007.
 --
 -- Categorias: cada establecimiento define las suyas (Simple, Especial, VIP...), con nombre, descripcion y color. Cada
