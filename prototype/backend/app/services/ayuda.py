@@ -356,6 +356,32 @@ TEMAS: tuple[Tema, ...] = (
         "inventario",
     ),
     Tema(
+        "qr_habitacion",
+        "El QR fijo de la habitación",
+        (
+            r"\bqr\b.*\b(habitacion|habitaciones|pieza|fijo|pegado)\b",
+            r"\b(habitacion|pieza)\b.*\bqr\b",
+            r"no (ve|puede ver|veo) (su|la|mi) estadia",
+            r"\bliber\w* (el )?qr\b",
+            # Pesan más que «liberar la habitación» y que imprimir un comprobante: acá se trata del QR.
+            r"\bqr\b.*\bliber|\bliber.*\bqr\b",
+            r"\b(imprim|peg)\w*\b.*\bqr\b",
+            r"\bdesvincul|\bdesconect\w* (los |el )?celular",
+        ),
+        (
+            "Cada habitación tiene un QR pegado. El primer celular que lo escanea durante la estadía se queda con "
+            "ella; desde ese celular se suman los demás (hasta 3).",
+            "Quien lo escanee después, o con una foto de otra visita, ve solo la carta: no sabe si está ocupada.",
+            "Si te llega «no puede ver su estadía con el QR», abrí la habitación y tocá «Liberar el QR»: se cortan "
+            "los celulares conectados y el que escanee primero se queda. Si nadie lo pidió, «Ignorar».",
+            "En «Ticket con QR» ves cuántos celulares entraron y podés desconectarlos.",
+            "La gerencia los imprime en Configuración → «QR de habitaciones», y ahí genera uno nuevo si se daña o se "
+            "filtra.",
+        ),
+        "dashboard",
+        nota="Así el cliente no necesita ticket ni hablar con la ventanilla.",
+    ),
+    Tema(
         "imprimir_ticket",
         "Darle el ticket con QR al cliente",
         (r"ticket", r"\bqr\b.*\bcliente\b", r"\bcliente\b.*\bqr\b"),

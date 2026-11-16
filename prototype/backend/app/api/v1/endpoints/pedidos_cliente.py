@@ -6,8 +6,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import operador_actual
 from app.core.database import get_db
 from app.models.operador import Operador
-from app.models.pedido_cliente import ARTICULO
-from app.services import acceso_cliente
+from app.models.pedido_cliente import ARTICULO, VINCULO
+from app.services import acceso_cliente, qr_habitacion
 from app.services.caja import guardia_del_operador
 from app.services.consumos import cargar_consumo
 
@@ -35,12 +35,15 @@ async def llevar(
 async def atender(
     pedido_id: int, db: AsyncSession = Depends(get_db), operador: Operador = Depends(operador_actual)
 ) -> dict:
-    """Atender un artículo lo carga como consumo, con el control de stock y de guardia de siempre."""
+    """Atender un artículo lo carga como consumo, con el control de stock y de guardia de siempre. Atender el aviso
+    «no veo mi estadía» libera el QR fijo: corta los celulares vinculados (migración 020)."""
     pedido = await acceso_cliente.bloquear_sin_resolver(db, pedido_id)
     if pedido.tipo == ARTICULO:
         await cargar_consumo(db, pedido.turno_id, pedido.articulo_id, pedido.cantidad, operador)
     else:
         await guardia_del_operador(db, operador)
+        if pedido.tipo == VINCULO:
+            await qr_habitacion.desvincular(db, pedido.turno_id, operador)
     acceso_cliente.resolver(pedido, operador.id, atendido=True)
     await db.commit()
     return {"ok": True}

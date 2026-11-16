@@ -19,8 +19,11 @@ import {
   EstablecimientoAlta,
   EstablecimientoDatos,
   EstablecimientoResumen,
+  EntradaQR,
   EstadiaCliente,
   EscenarioGemelo,
+  InvitacionCelular,
+  QRHabitacion,
   FondoCambio,
   Guardia,
   HabitacionConDetalles,
@@ -219,6 +222,26 @@ export const api = {
 
   calificarEstadia: async (token: string, puntaje: number, problemas: number, resena?: string) =>
     (await http.post(`/cliente/${token}/calificacion`, { puntaje, problemas, resena: resena || null })).data,
+
+  // --- QR fijo de la habitación (migración 020): el primer celular que escanea se queda con la estadía ---
+  entrarConQR: async (qr: string): Promise<EntradaQR> =>
+    (await http.post(`/cliente/habitacion/${encodeURIComponent(qr)}/entrar`)).data,
+
+  avisarSinEstadia: async (qr: string) => (await http.post(`/cliente/habitacion/${encodeURIComponent(qr)}/aviso`)).data,
+
+  invitarCelular: async (token: string): Promise<InvitacionCelular> =>
+    (await http.post(`/cliente/${token}/invitacion`)).data,
+
+  sumarCelular: async (invitacion: string): Promise<EntradaQR> =>
+    (await http.post(`/cliente/sumar/${encodeURIComponent(invitacion)}`)).data,
+
+  desvincularCelulares: async (turno_id: string): Promise<{ cortados: number }> =>
+    (await http.post(`/turnos/${turno_id}/desvincular`)).data,
+
+  getQRHabitaciones: async (): Promise<QRHabitacion[]> => (await http.get('/configuracion/qr-habitaciones')).data,
+
+  regenerarQR: async (habitacion_id: number): Promise<QRHabitacion> =>
+    (await http.post(`/configuracion/habitaciones/${habitacion_id}/qr`)).data,
 
   // --- Lo que pide el cliente, en la ventanilla ---
   getTicket: async (turno_id: string): Promise<TicketCliente> => (await http.get(`/turnos/${turno_id}/ticket`)).data,

@@ -33,6 +33,8 @@ class Settings(BaseSettings):
     LOGIN_BLOQUEO_MIN: int = 15
     # Equipos autorizados (migración 019): la marca de cada navegador viaja en esta cookie httpOnly.
     COOKIE_EQUIPO: str = "motelos_equipo"
+    # QR fijo de la habitación (migración 020): la marca del celular del cliente, también httpOnly.
+    COOKIE_CLIENTE: str = "motelos_cliente"
     # Solo si la API está detrás de un proxy propio (por ejemplo, nginx) que agrega X-Forwarded-For: entonces la IP
     # del equipo sale de ese encabezado. Sin proxy debe quedar en False, porque cualquiera podría inventarlo.
     CONFIAR_X_FORWARDED_FOR: bool = False

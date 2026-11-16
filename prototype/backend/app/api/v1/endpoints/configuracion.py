@@ -41,7 +41,7 @@ from app.schemas.configuracion import (
     TarifaCreate,
     TarifaResponse,
 )
-from app.services import actividad, categorias, franjas
+from app.services import actividad, categorias, franjas, qr_habitacion
 from app.services.actividad import pesos, registrar
 from app.services.configuracion import (
     cambiar_fondo,
@@ -295,6 +295,20 @@ async def configurar_articulo(
 
 
 # --- Habitaciones ------------------------------------------------------------------------------------------------
+@router.get("/qr-habitaciones")
+async def qr_de_las_habitaciones(db: AsyncSession = Depends(get_db)) -> list[dict]:
+    """El QR fijo de cada habitación activa, para imprimir y pegar (migración 020)."""
+    return await qr_habitacion.qrs(db)
+
+
+@router.post("/habitaciones/{habitacion_id}/qr")
+async def regenerar_qr(
+    habitacion_id: int, db: AsyncSession = Depends(get_db), operador: Operador = Depends(operador_actual)
+) -> dict:
+    """Un QR nuevo para la habitación: el impreso deja de servir (por ejemplo, si se filtró o se dañó)."""
+    return await qr_habitacion.regenerar(db, habitacion_id, operador)
+
+
 @router.get("/habitaciones", response_model=list[HabitacionConfiguracionResponse])
 async def listar_habitaciones(db: AsyncSession = Depends(get_db)):
     return (await db.execute(select(Habitacion).order_by(Habitacion.numero))).scalars().all()

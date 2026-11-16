@@ -858,6 +858,36 @@ export interface TicketCliente {
   qr: string;
   numero: number;
   hora_inicio: string;
+  // Celulares vinculados con el QR fijo de la habitación (migración 020).
+  vinculados: number;
+}
+
+// QR fijo de la habitación (migración 020). Sin vínculo se ve solo la carta, igual con la habitación libre u ocupada.
+export type EntradaQR =
+  | { estado: 'vinculado' | 'terminada'; token: string }
+  | {
+      estado: 'libre';
+      motel: string;
+      color_marca: string | null;
+      numero: number;
+      categoria: string | null;
+      bienvenida: string | null;
+      articulos: { descripcion: string; precio: number; categoria: string | null }[];
+    };
+
+export interface InvitacionCelular {
+  direccion: string;
+  qr: string;
+  vence: string;
+}
+
+export interface QRHabitacion {
+  id: number;
+  numero: number;
+  categoria: string | null;
+  version: number;
+  direccion: string;
+  qr: string;
 }
 
 // Pedidos de reposición a proveedores (migración 010).

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ArrowRightLeft, BellRing, Banknote, Bike, CalendarClock, Car, CreditCard, ExternalLink, Footprints, Minus, Plus, Printer, QrCode, Receipt } from 'lucide-react';
+import { ArrowRightLeft, BellRing, Banknote, Bike, CalendarClock, Car, CreditCard, ExternalLink, Footprints, Minus, Plus, Printer, QrCode, Receipt, Smartphone } from 'lucide-react';
 import { Articulo, Categoria, HabitacionConDetalles, MedioPago, PedidoVentanilla, TicketCliente, TipoCliente, TurnoResumen } from '../types';
 import { api, getErrorMessage } from '../services/api';
 import { formatDuration, formatMoney, formatRoomNumber } from '../utils/format';
@@ -193,6 +193,21 @@ const RoomDialog: React.FC<RoomDialogProps> = ({
       setVista('ticket');
     } catch (e) {
       toast(getErrorMessage(e, 'No se pudo generar el ticket.'), 'error');
+    }
+  };
+
+  // Corta los celulares que entraron con el QR fijo (migración 020): el primero que vuelva a escanear se queda.
+  const desvincular = async () => {
+    if (!turnoId) return;
+    setEnviando(true);
+    try {
+      const { cortados } = await api.desvincularCelulares(turnoId);
+      toast(cortados === 1 ? 'Se desconectó el celular.' : `Se desconectaron ${cortados} celulares.`, 'success');
+      setTicket(await api.getTicket(turnoId));
+    } catch (e) {
+      toast(getErrorMessage(e, 'No se pudieron desconectar los celulares.'), 'error');
+    } finally {
+      setEnviando(false);
     }
   };
 
@@ -418,6 +433,27 @@ const RoomDialog: React.FC<RoomDialogProps> = ({
         <img src={ticket.qr} alt="Código QR de la estadía" className="h-52 w-52 animate-pop-in rounded-md bg-white p-1" />
         <p className="text-sm text-ink">Escaneá el código para ver tu tiempo y tu cuenta, o pedir algo sin llamar.</p>
         <p className="text-xs text-muted">Sin cuenta ni datos personales. Deja de funcionar cuando te vas.</p>
+        <div data-no-print className="mt-2 w-full rounded-md bg-surface-2 px-3 py-2.5 text-left text-xs text-muted">
+          <p className="flex items-center gap-1.5 text-sm text-ink">
+            <Smartphone className="h-4 w-4 shrink-0" aria-hidden="true" />
+            {ticket.vinculados === 0
+              ? 'Ningún celular entró con el QR de la habitación.'
+              : ticket.vinculados === 1
+                ? 'Un celular entró con el QR de la habitación.'
+                : `${ticket.vinculados} celulares entraron con el QR de la habitación.`}
+          </p>
+          <p className="mt-1">No hace falta imprimir este ticket si la habitación tiene su QR fijo.</p>
+          {ticket.vinculados > 0 && (
+            <button
+              type="button"
+              disabled={enviando}
+              onClick={() => void desvincular()}
+              className="press mt-2 rounded px-1.5 py-0.5 text-xs font-medium text-danger hover:bg-danger-soft"
+            >
+              Desconectar esos celulares
+            </button>
+          )}
+        </div>
       </div>
     );
     footer = (
@@ -486,6 +522,11 @@ const RoomDialog: React.FC<RoomDialogProps> = ({
                     <div className={`flex flex-wrap items-center justify-between gap-2 ${delMinibar ? 'mt-1.5' : ''}`}>
                       {delMinibar ? (
                         <span className="text-xs text-muted">{`${formatMoney(total)}${sinSalir.length ? '' : ' · En camino'}`}</span>
+                      ) : lineas[0].tipo === 'VINCULO' ? (
+                        <span className="min-w-0 text-ink">
+                          {lineas[0].descripcion}
+                          <span className="block text-xs text-muted">Liberarlo corta los celulares conectados; el cliente vuelve a escanearlo.</span>
+                        </span>
                       ) : (
                         <span className="min-w-0 text-ink">{lineas[0].descripcion}</span>
                       )}
@@ -499,6 +540,15 @@ const RoomDialog: React.FC<RoomDialogProps> = ({
                           <Button size="sm" disabled={enviando} onClick={irACobrar}>
                             Cobrar
                           </Button>
+                        ) : lineas[0].tipo === 'VINCULO' ? (
+                          <>
+                            <Button size="sm" variant="secondary" disabled={enviando} onClick={() => void moverPedidos(lineas, api.rechazarPedidoCliente, 'Aviso ignorado.')}>
+                              Ignorar
+                            </Button>
+                            <Button size="sm" disabled={enviando} onClick={() => void moverPedidos(lineas, api.atenderPedidoCliente, 'QR liberado: el primero que lo escanee se queda con la estadía.')}>
+                              Liberar el QR
+                            </Button>
+                          </>
                         ) : (
                           <Button size="sm" disabled={enviando} onClick={() => void moverPedidos(lineas, api.atenderPedidoCliente, delMinibar ? 'Pedido entregado.' : 'Listo.')}>
                             {delMinibar ? 'Entregado' : 'Listo'}

@@ -120,6 +120,12 @@ def _rutas_protegidas() -> list[tuple[str, str]]:
         "/api/v1/cliente/{token}/pedidos",
         "/api/v1/cliente/{token}/carrito",
         "/api/v1/cliente/{token}/calificacion",
+        # QR fijo de la habitación (migración 020): un QR inventado no abre nada y una invitación vencida no suma a
+        # nadie (test_qr_fijo); el enlace de la estadía sirve solo en el celular vinculado.
+        "/api/v1/cliente/habitacion/{qr}/entrar",
+        "/api/v1/cliente/habitacion/{qr}/aviso",
+        "/api/v1/cliente/sumar/{invitacion}",
+        "/api/v1/cliente/{token}/invitacion",
     }
     rutas = []
     for camino, operaciones in sorted(app.openapi()["paths"].items()):

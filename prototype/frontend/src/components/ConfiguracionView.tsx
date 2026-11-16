@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { BedDouble, Building2, Coins, KeyRound, MonitorSmartphone, Package, Palette, Tags, Users, Volume2 } from 'lucide-react';
+import { BedDouble, Building2, Coins, KeyRound, MonitorSmartphone, Package, Palette, QrCode, Tags, Users, Volume2 } from 'lucide-react';
 import { COLORES_SUGERIDOS, aplicarMarca, sonarAviso } from '../utils/marca';
 import { Articulo, Categoria, Establecimiento, FondoCambio, HabitacionConfiguracion, OperadorEstado } from '../types';
 import { api, getErrorMessage } from '../services/api';
@@ -11,14 +11,25 @@ import { useToast } from './ui/Toast';
 import { EsqueletoTabla } from './ui/Carga';
 import SeccionCategorias, { ChipCategoria } from './CategoriasConfig';
 import EquiposConfig from './EquiposConfig';
+import QRHabitacionesConfig from './QRHabitacionesConfig';
 
-export type Seccion = 'tarifa' | 'fondo' | 'articulos' | 'habitaciones' | 'conserjes' | 'equipos' | 'establecimiento' | 'apariencia';
+export type Seccion =
+  | 'tarifa'
+  | 'fondo'
+  | 'articulos'
+  | 'habitaciones'
+  | 'qr'
+  | 'conserjes'
+  | 'equipos'
+  | 'establecimiento'
+  | 'apariencia';
 
 const SECCIONES: { id: Seccion; label: string; icon: React.ElementType }[] = [
   { id: 'tarifa', label: 'Categorías y tarifas', icon: Tags },
   { id: 'fondo', label: 'Fondo de cambio', icon: Coins },
   { id: 'articulos', label: 'Artículos', icon: Package },
   { id: 'habitaciones', label: 'Habitaciones', icon: BedDouble },
+  { id: 'qr', label: 'QR de habitaciones', icon: QrCode },
   { id: 'conserjes', label: 'Conserjes', icon: Users },
   { id: 'equipos', label: 'Equipos', icon: MonitorSmartphone },
   { id: 'establecimiento', label: 'Establecimiento', icon: Building2 },
@@ -175,6 +186,7 @@ const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({ onCambioHabitacio
           {seccion === 'conserjes' && (
             <SeccionConserjes operadores={operadores} ocupado={ocupado} ejecutar={ejecutar} confirmar={setConfirmacion} />
           )}
+          {seccion === 'qr' && <QRHabitacionesConfig motel={establecimiento?.nombre} />}
           {seccion === 'equipos' && <EquiposConfig />}
           {seccion === 'establecimiento' && establecimiento && (
             <SeccionEstablecimiento key={establecimiento.nombre} establecimiento={establecimiento} ocupado={ocupado} ejecutar={ejecutar} />
@@ -455,7 +467,7 @@ const SeccionEstablecimiento: React.FC<{ establecimiento: Establecimiento; ocupa
           />
         </Field>
         <h3 className="pt-2 text-sm font-semibold text-ink">Para el cliente</h3>
-        <p className="-mt-3 text-xs text-muted">Lo ve en su celular, con el QR del ticket, mientras dura su estadía.</p>
+        <p className="-mt-3 text-xs text-muted">Lo ve en su celular, con el QR de la habitación o del ticket, mientras dura su estadía.</p>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Red de Wi-Fi" htmlFor="est_wifi">
             <input id="est_wifi" maxLength={60} className={campo} value={form.wifi_nombre} onChange={set('wifi_nombre')} />

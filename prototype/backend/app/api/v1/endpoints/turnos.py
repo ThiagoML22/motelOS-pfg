@@ -2,7 +2,6 @@ import uuid
 from datetime import UTC, datetime
 from decimal import Decimal
 
-import segno
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -30,7 +29,7 @@ from app.schemas.turno import (
     TurnoResponse,
     TurnoResumen,
 )
-from app.services import acceso_cliente, arreglos, franjas, rotacion
+from app.services import acceso_cliente, arreglos, franjas, qr_habitacion, rotacion
 from app.services.actividad import pesos
 from app.services.caja import guardia_del_operador
 from app.services.consumos import cargar_consumo
@@ -144,10 +143,26 @@ async def ticket(
     habitacion = await db.get(Habitacion, turno.habitacion_id)
     return {
         "direccion": direccion,
-        "qr": segno.make(direccion, error="m", boost_error=False).svg_data_uri(scale=4, border=2),
+        "qr": qr_habitacion.imagen_qr(direccion),
         "numero": habitacion.numero,
         "hora_inicio": turno.hora_inicio,
+        # Celulares vinculados con el QR fijo de la habitación (migración 020).
+        "vinculados": await qr_habitacion.vinculados(db, turno.id),
     }
+
+
+@router.post("/{turno_id}/desvincular")
+async def desvincular(
+    turno_id: uuid.UUID, db: AsyncSession = Depends(get_db), operador: Operador = Depends(operador_actual)
+) -> dict:
+    """Corta los celulares vinculados con el QR fijo: el primero que vuelva a escanear se queda con la estadía."""
+    turno = (await db.execute(select(Turno).where(Turno.id == turno_id))).scalars().first()
+    if not turno or turno.estado != "En Curso":
+        raise HTTPException(status_code=400, detail="Turno no válido o no está en curso")
+    await guardia_del_operador(db, operador)
+    cortados = await qr_habitacion.desvincular(db, turno.id, operador)
+    await db.commit()
+    return {"cortados": cortados}
 
 
 @router.get("/{turno_id}/resumen", response_model=TurnoResumen)

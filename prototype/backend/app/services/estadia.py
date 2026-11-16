@@ -14,6 +14,7 @@ from app.models.operador import Operador
 from app.models.tarifa import Tarifa
 from app.models.turno import Turno
 from app.services.equipos import depurar_intentos
+from app.services.qr_habitacion import depurar_vinculos
 
 logger = logging.getLogger(__name__)
 
@@ -78,6 +79,8 @@ async def depurar_todos(db: AsyncSession) -> int:
         eliminadas += await depurar_patentes(db)
         # Los intentos de acceso de equipos no autorizados se guardan 90 días (migración 019).
         await depurar_intentos(db)
+        # Los celulares vinculados con el QR fijo de la habitación, 30 días (migración 020).
+        await depurar_vinculos(db)
     return eliminadas
 
 

@@ -25,4 +25,5 @@ from app.models import (  # noqa: F401
     sello_arqueo,
     tarifa,
     turno,
+    vinculo_cliente,
 )

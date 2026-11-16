@@ -16,3 +16,5 @@ class Habitacion(DeEstablecimiento, Base):
     activa = Column(Boolean, nullable=False, default=True, server_default=true())
     # Categoría (migración 008): define la tarifa con la que se abre cada turno en esta habitación.
     categoria_id = Column(Integer, ForeignKey("categorias_habitacion.id"), nullable=False)
+    # QR fijo (migración 020): cambiar la versión invalida el QR impreso de la habitación.
+    qr_version = Column(Integer, nullable=False, default=1, server_default="1")
