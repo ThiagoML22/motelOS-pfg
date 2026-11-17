@@ -8,7 +8,7 @@ Este manual permite que una persona que no escribió el sistema lo clone, lo lev
 
 **Sistema:** MotelOS, sistema de procesamiento de transacciones para alojamientos transitorios por hora (caso Motel C.C.). Proyecto Final de Grado de Thiago Martino Leal, UCP, Sede Posadas.
 
-**Versión:** prototipo v3, etiqueta `v3` del repositorio https://github.com/ThiagoML22/motelOS-pfg.
+**Versión:** prototipo v3, etiqueta `v3.0.1` del repositorio https://github.com/ThiagoML22/motelOS-pfg. La v3.0.1 solo agrega a este manual la instalación de los requisitos (sección 2.1); el sistema es el mismo de la etiqueta `v3`.
 
 **Alcance de esta versión:**
 - Lo de las versiones anteriores: turnos, consumos, cobro desglosado, inmutabilidad, cierre de caja ciego por guardia, panel de la gerencia.
@@ -47,6 +47,36 @@ Las versiones del lenguaje y del motor quedan fijadas en los archivos del reposi
 
 Puertos libres en la máquina: 5432, 8000 y 5173. Si alguno está ocupado, ver la sección 4.
 
+También se probó en una máquina limpia con Windows 11 Pro, Docker 29.9.3, Docker Compose v5.7.0 y Git 2.56.0 (16/11/2026).
+
+### 2.1 Instalación de los requisitos (si el equipo no los tiene)
+
+Solo hacen falta Git y Docker. Si `git --version` y `docker compose version` ya responden, pasar a la sección 3.
+
+**Windows 10 u 11.** En una terminal de PowerShell **abierta como administrador**:
+
+```powershell
+wsl --install
+winget install --id Git.Git -e
+winget install --id Docker.DockerDesktop -e
+```
+
+1. `wsl --install` instala WSL 2, que Docker Desktop necesita en Windows. Si ya estaba instalado, avisa y no cambia nada.
+2. **Reiniciar la PC** después de instalar WSL 2.
+3. Abrir **Docker Desktop** desde el menú Inicio, aceptar sus términos de uso en el primer inicio y esperar a que indique que el motor está en marcha (*Engine running*). No hace falta iniciar sesión en Docker.
+4. Abrir una terminal **nueva** (para que tome la ruta de Git) y comprobar:
+
+```powershell
+git --version
+docker compose version
+```
+
+Si `winget` no existe en el equipo, instalar Git desde https://git-scm.com/download/win y Docker Desktop desde https://www.docker.com/products/docker-desktop con las opciones por omisión; los pasos 2 a 4 son los mismos.
+
+**macOS.** Instalar Docker Desktop desde https://www.docker.com/products/docker-desktop, abrirlo y aceptar los términos. Git se instala con `xcode-select --install`.
+
+**Linux (Ubuntu o Debian).** Instalar Git con `sudo apt install git` y Docker Engine con el plugin de Compose según https://docs.docker.com/engine/install/; después, `sudo usermod -aG docker $USER` y cerrar la sesión para usar `docker` sin `sudo`.
+
 ---
 
 ## 3. Obtención del código
@@ -54,11 +84,11 @@ Puertos libres en la máquina: 5432, 8000 y 5173. Si alguno está ocupado, ver l
 ```bash
 git clone https://github.com/ThiagoML22/motelOS-pfg.git
 cd motelOS-pfg
-git checkout v3
+git checkout v3.0.1
 cd prototype
 ```
 
-Para comprobar la etiqueta: `git show --no-patch v3` muestra el commit y su fecha.
+Para comprobar la etiqueta: `git show --no-patch v3.0.1` muestra el commit y su fecha.
 
 ---
 
