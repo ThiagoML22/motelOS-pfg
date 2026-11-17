@@ -16,7 +16,7 @@ Proyecto Final de Grado de Ingeniería en Sistemas de Información, desarrollado
 | AE1 | Definición del proyecto, relevamiento de campo, investigación de mercado y prototipo de interfaz (v0) | Entregada |
 | AE2 | Prototipo v1 ejecutable de punta a punta, con integración continua (etiqueta `v1.2`) | Entregada |
 | AE3 | Prototipo v2: sesión con roles, guardias con un responsable, cierre de caja ciego (RF-08), diferencia de caja (RF-09), cierre supervisado (RF-14) y sus pruebas en el canal (etiqueta `v2`) | Entregada |
-| AE4 | Prototipo v3: panel de configuración (RF-11), comprobante PDF verificable (RF-10), reconexión (RNF-09), varios establecimientos con RLS, categorías y tarifas especiales, inteligencia local y asistente, página del cliente con QR, operación diaria, uso desde el celular y equipos autorizados (etiqueta `v3`) | Entrega del 17/11/2026 |
+| AE4 | Prototipo v3: panel de configuración (RF-11), comprobante PDF verificable (RF-10), reconexión (RNF-09), varios establecimientos con RLS, categorías y tarifas especiales, inteligencia local y asistente, página del cliente con QR, operación diaria, uso desde el celular y equipos autorizados (etiqueta `v3`; `v3.0.1` completa el manual) | Entrega del 17/11/2026 |
 
 El prototipo v1 cubre el circuito completo de un turno: apertura de habitación, registro de consumos con descuento atómico de stock, liquidación y cobro, y cierre inmutable. El v2 agrega la identificación de cada conserje, la caja de cada guardia y el cierre de caja ciego validado con la gerencia el 19/10/2026. El v3 agrega lo que la gerencia aprobó para el Sprint 4 y lo que el autor sumó a partir del relevamiento; el detalle está en [`prototype/README.md`](prototype/README.md).
 
@@ -36,10 +36,10 @@ El prototipo v1 cubre el circuito completo de un turno: apertura de habitación,
 
 ## Ejecución del prototipo
 
-Se requiere Docker y Docker Compose. Desde la raíz del repositorio:
+Se requiere Docker y Docker Compose; cómo instalarlos está en la sección 2.1 del manual de despliegue. Desde la raíz del repositorio:
 
 ```bash
-git checkout v3
+git checkout v3.0.1
 cd prototype
 cp .env.example .env
 docker compose up --build -d

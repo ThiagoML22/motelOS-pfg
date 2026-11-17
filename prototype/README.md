@@ -10,7 +10,7 @@
 * **Asignatura:** Proyecto Final de Grado · Comisión A · Sede Posadas · Universidad de la Cuenca del Plata
 * **Docente titular:** PosDr. Darío Ezequiel Díaz
 * **Autor:** Thiago Martino Leal (proyecto individual)
-* **Actividad y etiqueta:** Actividad de Evaluación N.º 4 (AE4) · prototipo v3 (etiqueta `v3`). Se integró por etapas en la rama `ae4/v3` (solicitudes #22 a #28) y en etapas directas a main (#30 a #34). Las etiquetas `v2` (AE3) y `v1.2` (AE2) siguen disponibles.
+* **Actividad y etiqueta:** Actividad de Evaluación N.º 4 (AE4) · prototipo v3 (etiqueta `v3`; la `v3.0.1` agrega al manual la instalación de los requisitos, después de la prueba en máquina limpia del 16/11/2026). Se integró por etapas en la rama `ae4/v3` (solicitudes #22 a #28) y en etapas directas a main (#30 a #34). Las etiquetas `v2` (AE3) y `v1.2` (AE2) siguen disponibles.
 
 ---
 
@@ -58,7 +58,7 @@ Se mantienen del v1: RNF-01 (inmutabilidad de turnos, pagos y consumos cerrados)
 ---
 
 ## 3. Requisitos previos
-Docker con Compose y Git. Las versiones exactas de referencia y las que fija el repositorio (Python 3.12.16, Node.js 20.20.2, PostgreSQL 16.15) están en el [manual de despliegue](MANUAL_DESPLIEGUE.md), sección 2.
+Docker con Compose y Git; cómo instalarlos está en la sección 2.1 del manual. Las versiones exactas de referencia y las que fija el repositorio (Python 3.12.16, Node.js 20.20.2, PostgreSQL 16.15) están en el [manual de despliegue](MANUAL_DESPLIEGUE.md), sección 2.
 
 ---
 
@@ -66,7 +66,7 @@ Docker con Compose y Git. Las versiones exactas de referencia y las que fija el 
 ```bash
 git clone https://github.com/ThiagoML22/motelOS-pfg.git
 cd motelOS-pfg
-git checkout v3
+git checkout v3.0.1
 cd prototype
 cp .env.example .env
 docker compose up --build -d
